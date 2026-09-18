@@ -41,6 +41,7 @@ import java.io.InputStream
 import java.net.HttpURLConnection
 import java.net.URL
 import java.util.Locale
+import org.json.JSONObject
 
 class MainActivity : AppCompatActivity() {
 
@@ -94,6 +95,23 @@ class MainActivity : AppCompatActivity() {
         } catch (e: Exception) {
             ""
         }
+
+        @JavascriptInterface
+        fun updateNowPlaying(json: String) {
+            try {
+                val o = JSONObject(json)
+                nowPlayingJson = json
+                nowPlayingPlaying = o.optBoolean("playing")
+                TamiPlayerService.syncSessionPos(o.optBoolean("playing"), o.optLong("pos"))
+                if (TamiPlayerService.mode == TamiPlayerService.MODE_ADVERTISE) TamiPlayerService.refreshNotif()
+            } catch (e: Exception) {}
+        }
+
+        @JavascriptInterface
+        fun backgroundActive(): Boolean = TamiPlayerService.mode != TamiPlayerService.MODE_NONE
+
+        @JavascriptInterface
+        fun finishBackground(): String = TamiPlayerService.finishBackground()
 
         @JavascriptInterface
         fun speak(text: String) {
@@ -620,6 +638,7 @@ class MainActivity : AppCompatActivity() {
 
         webView = WebView(this)
         setContentView(webView)
+        webViewRef = webView
 
         webView.settings.apply {
             javaScriptEnabled = true
@@ -684,15 +703,28 @@ class MainActivity : AppCompatActivity() {
     override fun onResume() {
         super.onResume()
         registerCallListener()
+        if (TamiPlayerService.mode == TamiPlayerService.MODE_ADVERTISE) {
+            try { TamiPlayerService.dismissNow(this) } catch (e: Exception) {}
+        }
         val apk = pendingApk
         if (apk != null && Build.VERSION.SDK_INT >= Build.VERSION_CODES.O && packageManager.canRequestPackageInstalls()) {
             installApk(apk)
         }
     }
 
+    override fun onUserLeaveHint() {
+        super.onUserLeaveHint()
+        try {
+            if (nowPlayingPlaying == true && TamiPlayerService.mode == TamiPlayerService.MODE_NONE) {
+                val i = Intent(this, TamiPlayerService::class.java).setAction(TamiPlayerService.ACTION_ADVERTISE)
+                if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.O) startForegroundService(i) else startService(i)
+            }
+        } catch (e: Exception) {}
+    }
+
     override fun onPause() {
         super.onPause()
-        unregisterCallListener()
+        if (nowPlayingPlaying != true) unregisterCallListener()
     }
 
     override fun onSaveInstanceState(outState: Bundle) {
@@ -701,6 +733,31 @@ class MainActivity : AppCompatActivity() {
     }
 
     override fun onDestroy() {
+        try {
+            if (!isChangingConfigurations && nowPlayingPlaying == true && TamiPlayerService.mode != TamiPlayerService.MODE_HANDOFF) {
+                val json = nowPlayingJson
+                if (!json.isNullOrEmpty()) {
+                    val o = JSONObject(json)
+                    val url = o.optString("url")
+                    if (url.isNotEmpty()) {
+                        val i = Intent(this, TamiPlayerService::class.java)
+                            .setAction(TamiPlayerService.ACTION_HANDOFF)
+                            .putExtra(TamiPlayerService.EXTRA_URL, url)
+                            .putExtra(TamiPlayerService.EXTRA_TITLE, o.optString("title"))
+                            .putExtra(TamiPlayerService.EXTRA_ARTIST, o.optString("artist"))
+                            .putExtra(TamiPlayerService.EXTRA_POS, o.optLong("pos"))
+                        TamiPlayerService.handoffPayload = json
+                        try {
+                            if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.O) startForegroundService(i)
+                            else startService(i)
+                        } catch (e: Exception) {
+                            try { startService(i) } catch (e2: Exception) {}
+                        }
+                    }
+                }
+            }
+        } catch (e: Exception) {}
+        webViewRef = null
         super.onDestroy()
         try { if (::tts.isInitialized) tts.shutdown() } catch (e: Exception) {}
     }
@@ -712,5 +769,21 @@ class MainActivity : AppCompatActivity() {
 
     companion object {
         private const val START_URL = "https://appassets.androidplatform.net/assets/index.html"
+
+        @Volatile
+        var nowPlayingJson: String? = null
+
+        @Volatile
+        var nowPlayingPlaying: Boolean? = null
+
+        @Volatile
+        private var webViewRef: WebView? = null
+
+        fun relayControl(cmd: String) {
+            val wv = webViewRef ?: return
+            try {
+                wv.post { try { wv.evaluateJavascript("window.tamiRemote&&window.tamiRemote('$cmd');", null) } catch (e: Exception) {} }
+            } catch (e: Exception) {}
+        }
     }
 }
