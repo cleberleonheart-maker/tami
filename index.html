@@ -562,8 +562,8 @@ function mediaError(ev, reason) {
   if (cur && mediaSkipGuard[cur.id] && now - mediaSkipGuard[cur.id] < 4000) return;
   if (cur) mediaSkipGuard[cur.id] = now;
   try { el.pause(); el.removeAttribute('src'); el.load(); } catch (e) {}
-  if (state.djMode && state.queue.length) { toast('Não consegui tocar essa — pulando pra próxima.'); pjNext(); }
-  else toast('Este arquivo não pode ser reproduzido (formato/codec não suportado).');
+  if (state.djMode && state.queue.length) { toast(L('mediaDjSkip')); pjNext(); }
+  else toast(L('mediaCodec', { name: cur ? (cur.title || cur.name || '') : '' }));
 }
 function safePlay(el) {
   if (!el) return;
@@ -945,6 +945,19 @@ const TAMI_MOODS_ALL = {
     '¡Baila un poquito, es bueno para el corazón!'
   ]
 };
+const I18N_MORE = {
+  mediaCodec: {
+    pt: 'Formato/codec não suportado — {name} não pode ser reproduzido.',
+    en: 'Unsupported format/codec — {name} cannot be played.',
+    es: 'Formato/códec no compatible — {name} no se puede reproducir.'
+  },
+  mediaDjSkip: {
+    pt: 'Não consegui tocar essa — pulando pra próxima.',
+    en: "Couldn't play this one — skipping to next.",
+    es: 'No pude reproducirla — saltando a la siguiente.'
+  }
+};
+Object.assign(I18N, I18N_MORE);
 let REMOTE = '';
 function getRemote() {
   if (REMOTE) return REMOTE;

@@ -29,6 +29,7 @@ import androidx.core.content.ContextCompat
 import androidx.core.content.FileProvider
 import androidx.webkit.WebViewAssetLoader
 import java.io.File
+import java.io.InputStream
 import java.net.HttpURLConnection
 import java.net.URL
 import java.util.Locale
@@ -225,14 +226,18 @@ class MainActivity : AppCompatActivity() {
 
     private fun serveContent(uri: Uri, rangeHeader: String?): WebResourceResponse? {
         return try {
-            val mime = queryDisplayNameMime(uri).ifEmpty {
-                when (val t = contentResolver.getType(uri) ?: "") {
-                    "", "application/octet-stream", "*/*" -> "audio/mpeg"
-                    else -> t
-                }
-            }
             val pfd = contentResolver.openFileDescriptor(uri, "r") ?: return null
             val total = pfd.statSize
+            val sniffed = sniffMime(pfd)
+            val mime = when {
+                sniffed != null -> sniffed
+                else -> queryDisplayNameMime(uri).ifEmpty {
+                    when (val t = contentResolver.getType(uri) ?: "") {
+                        "", "application/octet-stream", "*/*" -> "audio/mpeg"
+                        else -> normalizeMime(t)
+                    }
+                }
+            }
             val stream = ParcelFileDescriptor.AutoCloseInputStream(pfd)
             if (rangeHeader != null && total > 0) {
                 val m = Regex("bytes=(\\d+)-(\\d*)").find(rangeHeader)
@@ -240,8 +245,7 @@ class MainActivity : AppCompatActivity() {
                     val start = m.groupValues[1].toLong()
                     var end = if (m.groupValues[2].isNotEmpty()) m.groupValues[2].toLong() else total - 1
                     if (end >= total) end = total - 1
-                    if (start < total && start <= end) {
-                        stream.skip(start)
+                    if (start < total && start <= end && skipFully(stream, start)) {
                         val len = end - start + 1
                         val headers = mapOf(
                             "Accept-Ranges" to "bytes",
@@ -257,6 +261,58 @@ class MainActivity : AppCompatActivity() {
         } catch (e: Exception) {
             null
         }
+    }
+
+    private fun sniffMime(pfd: ParcelFileDescriptor): String? {
+        return try {
+            pfd.dup().use { dup ->
+                ParcelFileDescriptor.AutoCloseInputStream(dup).use { ins ->
+                    val buf = ByteArray(16)
+                    val n = ins.read(buf, 0, buf.size)
+                    if (n < 12) return null
+                    fun b(i: Int): Int = buf[i].toInt() and 0xFF
+                    fun s(off: Int, len: Int): String = String(buf, off, len, Charsets.ISO_8859_1)
+                    when {
+                        s(0, 3) == "ID3" -> "audio/mpeg"
+                        s(4, 4) == "ftyp" -> "audio/mp4"
+                        s(0, 4) == "OggS" -> "audio/ogg"
+                        s(0, 4) == "fLaC" -> "audio/flac"
+                        s(0, 4) == "RIFF" && s(8, 4) == "WAVE" -> "audio/wav"
+                        s(0, 4) == "#!AM" && b(4) == 'R'.code -> "audio/amr"
+                        b(0) == 0xFF && b(1).and(0xE0) == 0xE0 -> "audio/mpeg"
+                        b(0) == 0xFF && b(1).and(0xF6) == 0xF0 -> "audio/aac"
+                        else -> null
+                    }
+                }
+            }
+        } catch (e: Exception) {
+            null
+        }
+    }
+
+    private fun normalizeMime(t: String): String {
+        return when (t.lowercase()) {
+            "audio/x-m4a", "audio/x-m4b", "audio/x-m4p", "audio/mp4a-latm", "audio/x-mp4a" -> "audio/mp4"
+            "audio/x-flac" -> "audio/flac"
+            "audio/x-wav", "audio/wav" -> "audio/wav"
+            "audio/x-ogg", "audio/vorbis", "audio/x-vorbis" -> "audio/ogg"
+            "audio/x-ms-wma", "audio/x-ape", "audio/x-wavpack" -> t
+            else -> t
+        }
+    }
+
+    private fun skipFully(ins: InputStream, n: Long): Boolean {
+        var remaining = n
+        while (remaining > 0) {
+            val skipped = ins.skip(remaining)
+            if (skipped <= 0) {
+                if (ins.read() == -1) return false
+                remaining -= 1
+            } else {
+                remaining -= skipped
+            }
+        }
+        return true
     }
 
     private fun queryDisplayNameMime(uri: Uri): String {
