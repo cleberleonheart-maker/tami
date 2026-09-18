@@ -2,9 +2,13 @@ package com.tami.app
 
 import android.Manifest
 import android.annotation.SuppressLint
+import android.content.Intent
 import android.content.pm.PackageManager
 import android.net.Uri
+import android.os.Build
 import android.os.Bundle
+import android.provider.Settings
+import android.webkit.JavascriptInterface
 import android.webkit.PermissionRequest
 import android.webkit.ValueCallback
 import android.webkit.WebChromeClient
@@ -13,16 +17,22 @@ import android.webkit.WebResourceResponse
 import android.webkit.WebSettings
 import android.webkit.WebView
 import android.webkit.WebViewClient
+import android.widget.Toast
 import androidx.activity.result.contract.ActivityResultContracts
 import androidx.appcompat.app.AppCompatActivity
 import androidx.core.app.ActivityCompat
 import androidx.core.content.ContextCompat
+import androidx.core.content.FileProvider
 import androidx.webkit.WebViewAssetLoader
+import java.io.File
+import java.net.HttpURLConnection
+import java.net.URL
 
 class MainActivity : AppCompatActivity() {
 
     private lateinit var webView: WebView
     private var filePathCallback: ValueCallback<Array<Uri>>? = null
+    private var pendingApk: File? = null
 
     private val fileChooserLauncher = registerForActivityResult(ActivityResultContracts.StartActivityForResult()) { result ->
         val callback = filePathCallback
@@ -38,6 +48,75 @@ class MainActivity : AppCompatActivity() {
             }
         } else null
         callback.onReceiveValue(results)
+    }
+
+    inner class TamiBridge {
+        @JavascriptInterface
+        fun appVersion(): String = try {
+            packageManager.getPackageInfo(packageName, 0).versionName ?: ""
+        } catch (e: Exception) {
+            ""
+        }
+
+        @JavascriptInterface
+        fun installUpdate(url: String) {
+            if (!url.startsWith("https://") && !url.startsWith("http://")) return
+            runOnUiThread { Toast.makeText(this@MainActivity, "Baixando atualização…", Toast.LENGTH_SHORT).show() }
+            Thread {
+                try {
+                    val dir = File(cacheDir, "updates").apply { mkdirs() }
+                    val apk = File(dir, "tami-update.apk")
+                    val conn = (URL(url).openConnection() as HttpURLConnection).apply {
+                        connectTimeout = 15000
+                        readTimeout = 60000
+                        instanceFollowRedirects = true
+                    }
+                    conn.inputStream.use { input -> apk.outputStream().use { input.copyTo(it) } }
+                    conn.disconnect()
+                    runOnUiThread { installApk(apk) }
+                } catch (e: Exception) {
+                    runOnUiThread { Toast.makeText(this@MainActivity, "Falha ao baixar: ${e.message}", Toast.LENGTH_LONG).show() }
+                }
+            }.start()
+        }
+
+        @JavascriptInterface
+        fun openExternal(url: String) {
+            runOnUiThread {
+                try {
+                    startActivity(Intent(Intent.ACTION_VIEW, Uri.parse(url)).addFlags(Intent.FLAG_ACTIVITY_NEW_TASK))
+                } catch (e: Exception) {
+                    Toast.makeText(this@MainActivity, "Não foi possível abrir o link.", Toast.LENGTH_SHORT).show()
+                }
+            }
+        }
+    }
+
+    private fun installApk(apk: File) {
+        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.O && !packageManager.canRequestPackageInstalls()) {
+            pendingApk = apk
+            Toast.makeText(this, "Permita instalar apps desconhecidos para atualizar a TAMI.", Toast.LENGTH_LONG).show()
+            try {
+                startActivity(
+                    Intent(Settings.ACTION_MANAGE_UNKNOWN_APP_SOURCES, Uri.parse("package:$packageName"))
+                        .addFlags(Intent.FLAG_ACTIVITY_NEW_TASK)
+                )
+            } catch (e: Exception) {
+                Toast.makeText(this, "Ative a permissão de instalar apps e toque em atualizar novamente.", Toast.LENGTH_LONG).show()
+            }
+            return
+        }
+        pendingApk = null
+        try {
+            val uri = FileProvider.getUriForFile(this, "$packageName.fileprovider", apk)
+            val intent = Intent(Intent.ACTION_VIEW).apply {
+                setDataAndType(uri, "application/vnd.android.package-archive")
+                addFlags(Intent.FLAG_ACTIVITY_NEW_TASK or Intent.FLAG_GRANT_READ_URI_PERMISSION)
+            }
+            startActivity(intent)
+        } catch (e: Exception) {
+            Toast.makeText(this, "Não foi possível abrir o instalador.", Toast.LENGTH_LONG).show()
+        }
     }
 
     @SuppressLint("SetJavaScriptEnabled")
@@ -64,9 +143,24 @@ class MainActivity : AppCompatActivity() {
             cacheMode = WebSettings.LOAD_DEFAULT
         }
 
+        webView.addJavascriptInterface(TamiBridge(), "TamiNative")
+
         webView.webViewClient = object : WebViewClient() {
             override fun shouldInterceptRequest(view: WebView, request: WebResourceRequest): WebResourceResponse? {
                 return assetLoader.shouldInterceptRequest(request.url)
+            }
+
+            override fun shouldOverrideUrlLoading(view: WebView, request: WebResourceRequest): Boolean {
+                val url = request.url
+                return if (url.host == "appassets.androidplatform.net") {
+                    false
+                } else {
+                    try {
+                        startActivity(Intent(Intent.ACTION_VIEW, url).addFlags(Intent.FLAG_ACTIVITY_NEW_TASK))
+                    } catch (e: Exception) {
+                    }
+                    true
+                }
             }
         }
 
@@ -93,6 +187,14 @@ class MainActivity : AppCompatActivity() {
             webView.loadUrl(START_URL)
         } else {
             webView.restoreState(savedInstanceState)
+        }
+    }
+
+    override fun onResume() {
+        super.onResume()
+        val apk = pendingApk
+        if (apk != null && Build.VERSION.SDK_INT >= Build.VERSION_CODES.O && packageManager.canRequestPackageInstalls()) {
+            installApk(apk)
         }
     }
 

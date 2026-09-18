@@ -485,6 +485,7 @@ const state = {
   queue: [], queueIndex: -1, current: null,
   shuffle: false, repeat: 0, favs: new Set(), nick: '', theme: 'dark', visStyle: 'hearts',
   djMode: false, djVoice: true, djMic: false, learn: {},
+  radio: false, djLocutor: false,
   amb: { id: null, vol: 0.4, playing: false },
   sleep: 0, sleepId: null,
   phone: { dev: '', online: false, state: null, songs: null, syncing: false },
@@ -495,6 +496,7 @@ const $ = (id) => document.getElementById(id);
 const audio = $('audio'), video = $('video');
 const UNKNOWN = 'Desconhecido';
 const REMOTE = (location.protocol.startsWith('http') ? location.origin : '') || 'http://192.168.100.7:8081';
+const VERSION_URL = 'https://cleberleonheart-maker.github.io/tami/version';
 
 // ---------- IndexedDB ----------
 function openDB() {
@@ -1250,6 +1252,7 @@ function djMarkDislike() { if (!state.current) return; djLearnSet(state.current.
 function pjNext() { if (state.djMode) djMarkSkip(); next(true); }
 function djExit() {
   state.djMode = false;
+  state.radio = false;
   if (state.djPrevRepeat !== undefined) { state.repeat = state.djPrevRepeat; state.djPrevRepeat = undefined; }
   $('p-dj').style.color = 'var(--text)';
   renderVirgin();
@@ -1456,12 +1459,69 @@ function tamiSleep(min) {
       state.sleep = 0; state.sleepId = null;
       renderVirgin();
     }, next * 60000);
+    if (next > 2) {
+      setTimeout(() => {
+        if (state.sleep === next) djSpeak('Faltam dois minutos para eu desligar tudo. Se quiser continuar, é só cancelar o timer.');
+      }, (next - 2) * 60000);
+    }
     djSpeak('Beleza! Vou desligar a música daqui a ' + next + ' minutos. Boa noite já adiantada.');
   } else {
     clearTimeout(state.sleepId);
     djSpeak('Ok! Cancelei o timer. A festa continua.');
   }
   renderVirgin();
+}
+function tamiStats() {
+  const byId = new Map(state.songs.map((s) => [s.id, s]));
+  const entries = Object.keys(state.learn)
+    .map((id) => ({ id, ...state.learn[id] }))
+    .filter((e) => byId.has(e.id) && ((e.plays || 0) + (e.skips || 0)) > 0);
+  entries.sort((a, b) => ((b.plays || 0) + (b.skips || 0) * 2) - ((a.plays || 0) + (a.skips || 0) * 2));
+  const totalPlays = entries.reduce((n, e) => n + (e.plays || 0), 0);
+  const list = $('modal');
+  let html = `<h3>📊 Estatísticas</h3>
+    <div class="section">${state.songs.length} músicas · ${state.favs.size} favoritas · ${state.playlists.length} playlists · ${totalPlays} plays</div>`;
+  if (!entries.length) {
+    html += `<div class="empty"><div class="big">📈</div>Sem dados ainda.<br>Toque, favoritize e pule músicas que a TAMI monta seu ranking.</div>`;
+  } else {
+    html += `<div class="section">Mais tocadas</div>`;
+    for (const e of entries.slice(0, 10)) {
+      const s = byId.get(e.id);
+      const fav = state.favs.has(e.id) ? '♥ ' : '';
+      html += `<div class="item" onclick="closeModal()"><div class="art ${grad(seedHash(e.id) % 5)}">${cuteIcon(s.title)}</div><div class="mid"><div class="it-title">${fav}${esc(s.title)}</div><div class="it-sub">${esc(s.artist)} · ${e.plays || 0} plays${(e.skips || 0) ? ' · ' + (e.skips || 0) + ' puladas' : ''}</div></div></div>`;
+    }
+  }
+  html += `<div id="modal-actions"><button class="btn secondary" onclick="closeModal()">Fechar</button></div>`;
+  list.innerHTML = html;
+  $('modal-wrap').classList.add('show');
+}
+function tamiRadio() {
+  if (!state.songs.length) { toast('Importe músicas para a Rádio TAMI tocar.'); return; }
+  if (state.radio) {
+    state.radio = false;
+    if (state.djLocutor) tamiLocutorToggle();
+    if (state.djMode) djExit();
+    toast('Rádio desligada.');
+    renderVirgin();
+    return;
+  }
+  state.radio = true;
+  state.djMode = true;
+  state.djVoice = true;
+  state.shuffle = true;
+  state.djPrevRepeat = state.repeat;
+  state.repeat = 1;
+  if (!state.djLocutor) tamiLocutorToggle();
+  const q = state.songs.filter((s) => !s.type || s.type !== 'video').slice().sort(() => Math.random() - 0.5);
+  state.queue = q;
+  state.queueIndex = 0;
+  djEntered = true;
+  djAnnounced = new Set();
+  playCurrent();
+  openPlayer();
+  $('p-dj').style.color = 'var(--primary)';
+  renderVirgin();
+  djSpeak('Você está ouvindo a Rádio TAMI F.M., tocando ' + q.length + ' músicas de todos os estilos!');
 }
 function pjMicToggle() {
   const SR = window.SpeechRecognition || window.webkitSpeechRecognition;
@@ -2089,6 +2149,8 @@ function renderVirgin() {
       <div class="v-card ${state.djMic ? 'on' : ''}" onclick="pjMicToggle()"><div class="v-ic">🎙</div><div class="v-l">Microfone</div><div class="v-s">${state.djMic ? 'Ouvindo…' : 'Comandos de voz'}</div></div>
       <div class="v-card ${state.sleep ? 'on' : ''}" onclick="tamiSleep()"><div class="v-ic">💤</div><div class="v-l">Sono</div><div class="v-s">${state.sleep ? 'Desliga em ' + state.sleep + 'min' : 'Timer de sono'}</div></div>
       <div class="v-card" onclick="tamiPiada()"><div class="v-ic">😄</div><div class="v-l">Piada</div><div class="v-s">TAMI conta uma</div></div>
+      <div class="v-card ${state.radio ? 'on' : ''}" onclick="tamiRadio()"><div class="v-ic">📻</div><div class="v-l">Rádio</div><div class="v-s">${state.radio ? 'No ar' : 'TAMI FM'}</div></div>
+      <div class="v-card" onclick="tamiStats()"><div class="v-ic">📊</div><div class="v-l">Estatísticas</div><div class="v-s">Seu ranking</div></div>
       <div class="v-card" onclick="tamiRecomenda()"><div class="v-ic">🎯</div><div class="v-l">Recomenda</div><div class="v-s">Escolhas da TAMI</div></div>
     </div>`;
   if (!hasSongs) {
@@ -2136,18 +2198,51 @@ function showProfile() {
     <div class="mrow" id="apk-row" onclick="downloadApk()" style="margin-top:6px"><span class="art grad-e">🤖</span><div class="mid"><div class="it-title">TAMI para Android</div><div class="it-sub" id="apk-ver">Verificando…</div></div><span style="color:var(--primary);font-size:20px">⤓</span></div>
     <div id="modal-actions"><button class="btn secondary" onclick="closeModal()">Fechar</button><button class="btn" onclick="saveNick()">Salvar</button></div>`;
   $('modal-wrap').classList.add('show');
-  loadApkInfo().then(() => { const v = $('apk-ver'); if (v && APK_INFO.url) v.textContent = 'Android · versão ' + APK_INFO.ver + ' · tocar para baixar'; });
+  loadApkInfo().then(() => {
+    const v = $('apk-ver'); if (!v) return;
+    const inst = installedVersion();
+    if (updateAvailable()) v.textContent = 'Atualização disponível: ' + APK_INFO.ver + ' · tocar para instalar';
+    else if (APK_INFO.url) v.textContent = 'Android · versão ' + (inst || APK_INFO.ver) + ' · tocar para baixar';
+  });
 }
 let APK_INFO = { build: '', ver: '', url: '' };
+function installedVersion() {
+  try { if (window.TamiNative && TamiNative.appVersion) return String(TamiNative.appVersion()); } catch (e) {}
+  return '';
+}
+function versionNewer(a, b) {
+  const pa = String(a || '').split(/[.\-+]/).map((n) => parseInt(n, 10) || 0);
+  const pb = String(b || '').split(/[.\-+]/).map((n) => parseInt(n, 10) || 0);
+  for (let i = 0; i < Math.max(pa.length, pb.length); i++) {
+    const x = pa[i] || 0, y = pb[i] || 0;
+    if (x !== y) return x > y;
+  }
+  return false;
+}
 async function loadApkInfo() {
+  const parse = (t) => {
+    const p = String(t).trim().split('|');
+    return p.length >= 3 ? { build: p[0], ver: p[1], url: p[2] } : null;
+  };
+  try {
+    const t = await (await fetch(VERSION_URL, { cache: 'no-store' })).text();
+    const remote = parse(t);
+    if (remote) { APK_INFO = remote; return APK_INFO; }
+  } catch (e) {}
   try {
     const t = await (await fetch('./version')).text();
-    const parts = String(t).trim().split('|');
-    if (parts.length >= 3) APK_INFO = { build: parts[0], ver: parts[1], url: parts[2] };
+    const local = parse(t);
+    if (local) APK_INFO = local;
   } catch (e) { APK_INFO.url = ''; }
+  return APK_INFO;
+}
+function updateAvailable() {
+  const inst = installedVersion();
+  return !!(inst && APK_INFO && APK_INFO.ver && versionNewer(APK_INFO.ver, inst));
 }
 function downloadApk() {
   if (!APK_INFO.url) { toast('URL do APK indisponível.'); return; }
+  if (window.TamiNative && TamiNative.installUpdate) { TamiNative.installUpdate(APK_INFO.url); return; }
   window.location.href = APK_INFO.url;
 }
 function applyTheme() { document.documentElement.classList.toggle('light', (state.theme || 'dark') === 'light'); }
@@ -2222,15 +2317,18 @@ async function pickNovidades() {
 async function checkNovidades() {
   toast('Buscando novidades de versão…');
   try {
-    const t = await (await fetch('./version')).text();
-    const [build, ver, url] = String(t).trim().split('|');
-    if (build && ver && url) APK_INFO = { build, ver, url };
+    await loadApkInfo();
+    const { build, ver, url } = APK_INFO;
+    if (!ver || !url) throw new Error('sem versão');
     const last = await getKV('lastNotified');
     if (!last || last !== ver) {
       putKV('lastNotified', ver);
+      const inst = installedVersion();
+      const upd = updateAvailable() ? '<div class="it-sub">Atualização disponível no GitHub · tocar para instalar</div>' : '<div class="it-sub">Versão mais recente no GitHub</div>';
       const list = $('modal');
       list.innerHTML = `<h3>Novidades!</h3>
-        <div class="mrow" onclick="closeModal();downloadApk()"><span class="art grad-e">🤖</span><div class="mid"><div class="it-title">TAMI Android ${esc(ver)}</div><div class="it-sub">Atualização disponível no GitHub</div></div><span style="color:var(--primary);font-size:20px">⤓</span></div>
+        <div class="mrow" onclick="closeModal();downloadApk()"><span class="art grad-e">🤖</span><div class="mid"><div class="it-title">TAMI Android ${esc(ver)}</div>${upd}</div><span style="color:var(--primary);font-size:20px">⤓</span></div>
+        ${inst ? `<div class="section">Instalada: ${esc(inst)}</div>` : ''}
         <div id="modal-actions"><button class="btn secondary" onclick="closeModal()">Fechar</button></div>`;
       $('modal-wrap').classList.add('show');
     } else {
@@ -2539,6 +2637,11 @@ async function init() {
   }, { once: true, passive: true });
   document.addEventListener('pointerdown', () => { ensureVis(); }, { passive: true });
   startVis();
+  if (window.TamiNative) {
+    loadApkInfo().then(() => {
+      if (updateAvailable()) toast('Atualização da TAMI ' + APK_INFO.ver + ' disponível! (Perfil → TAMI para Android)');
+    });
+  }
 }
 function registerTabs() {
   $('fileSongs').onchange = (e) => { if (e.target.files.length) importFiles([...e.target.files], 'song'); e.target.value = ''; };
