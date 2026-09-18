@@ -149,14 +149,19 @@ input[type="range"] { touch-action: none; }
 
 /* Bottom nav */
 nav {
-  display: flex; justify-content: space-around;
+  display: flex; overflow-x: auto; justify-content: flex-start;
+  -webkit-overflow-scrolling: touch; touch-action: pan-x;
+  scroll-snap-type: x proximity;
   background: var(--surface); border-top: 1px solid var(--divider);
   padding-bottom: env(safe-area-inset-bottom, 0px);
+  scrollbar-width: none;
 }
+nav::-webkit-scrollbar { display: none; }
 nav button {
-  flex: 1; background: none; border: none; color: var(--text2);
-  font-size: 11px; padding: 8px 4px 10px; cursor: pointer;
+  flex: 0 0 auto; min-width: 72px; background: none; border: none; color: var(--text2);
+  font-size: 11px; padding: 8px 6px 10px; cursor: pointer;
   display: flex; flex-direction: column; align-items: center; gap: 3px;
+  scroll-snap-align: center;
 }
 nav button .ic { font-size: 20px; line-height: 1; }
 nav button.active { color: var(--primary); }
@@ -1169,6 +1174,9 @@ function selectTab(tab, updateDetail) {
   state.tab = tab;
   state.detail = null;
   document.querySelectorAll('nav button').forEach((b) => b.classList.toggle('active', b.dataset.tab === tab));
+  const navEl = $('nav');
+  const activeBtn = navEl.querySelector('button.active');
+  if (activeBtn) navEl.scrollLeft = Math.max(0, activeBtn.offsetLeft - (navEl.clientWidth - activeBtn.offsetWidth) / 2);
   document.querySelectorAll('.tab').forEach((t) => t.classList.remove('active'));
   $('tab-' + tab).classList.add('active');
   $('addPlaylistBtn').classList.toggle('hidden', tab !== 'playlists');
