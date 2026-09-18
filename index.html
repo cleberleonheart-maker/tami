@@ -87,9 +87,7 @@ main { flex: 1; overflow-y: auto; padding-bottom: 8px; }
   padding: 10px 8px; border-radius: 12px; cursor: pointer;
 }
 .item:hover { background: var(--surface); }
-#radio-list .item.active { background: var(--surface-v); border: 1px solid var(--divider); }
 #amb-list .item.active { background: var(--surface-v); border: 1px solid var(--divider); }
-.radio-live { color: var(--primary); font-weight: 700; }
 .art {
   width: 48px; height: 48px; border-radius: 10px; flex-shrink: 0;
   display: flex; align-items: center; justify-content: center;
@@ -171,6 +169,10 @@ nav button.active { color: var(--primary); }
 .p-title { font-size: 21px; font-weight: 700; text-align: center; }
 .p-sub { font-size: 14px; color: var(--text2); text-align: center; margin-top: 6px; }
 .p-seek { padding: 8px 22px 0; }
+.p-vis { padding: 6px 24px 0; position: relative; }
+.vis-btn { position: absolute; right: 26px; top: 8px; background: rgba(20,26,58,.45); border: 1px solid var(--divider); color: var(--primary); font-size: 13px; cursor: pointer; padding: 2px 8px; border-radius: 10px; line-height: 1.4; }
+.vis-btn:hover { border-color: var(--primary); }
+#vis { width: 100%; height: 46px; display: block; opacity: .85; filter: drop-shadow(0 0 10px rgba(0,229,255,.25)); }
 .p-time { display: flex; justify-content: space-between; font-size: 11.5px; color: var(--text2); padding: 4px 2px 0; }
 input[type=range] { width: 100%; -webkit-appearance: none; appearance: none; height: 4px; border-radius: 2px; background: var(--surface-v); outline: none; }
 input[type=range]::-webkit-slider-thumb { -webkit-appearance: none; width: 14px; height: 14px; border-radius: 50%; background: var(--primary); cursor: pointer; }
@@ -233,6 +235,38 @@ html.light #drop-overlay { background: rgba(124,77,255,.15); color: var(--primar
 .grad-e { background: linear-gradient(135deg,#B388FF,#7C4DFF); }
 .v-hero { text-align: center; padding: 26px 16px 8px; }
 .v-logo { font-size: 72px; line-height: 1; filter: drop-shadow(0 8px 22px rgba(255,110,199,.4)); }
+.v-avatar {
+  width: 108px; height: 108px; margin: 0 auto; position: relative; cursor: pointer;
+  border-radius: 50%;
+  background: radial-gradient(circle at 35% 28%, #FFE3F2, #FF8AD0 48%, #B388FF 100%);
+  box-shadow: 0 0 34px rgba(255,110,199,.55), inset 0 -10px 20px rgba(124,77,255,.35), inset 0 6px 12px rgba(255,255,255,.5);
+  animation: tami-bob 3.2s ease-in-out infinite;
+  transition: transform .2s;
+}
+.v-avatar:active { transform: scale(.95); }
+.v-avatar .v-bow { position: absolute; top: -8px; right: 4px; font-size: 30px; filter: drop-shadow(0 3px 6px rgba(255,110,199,.6)); transform: rotate(12deg); }
+.v-avatar .face { position: absolute; inset: 0; }
+.v-avatar .eye {
+  position: absolute; top: 42%; width: 13px; height: 16px; border-radius: 50%;
+  background: #33113A; animation: tami-blink 4.2s infinite;
+}
+.v-avatar .eye.l { left: 28%; } .v-avatar .eye.r { right: 28%; animation-delay: .06s; }
+.v-avatar .eye::after { content: ''; position: absolute; top: 3px; left: 4px; width: 5px; height: 5px; border-radius: 50%; background: #fff; opacity: .95; }
+.v-avatar .blush { position: absolute; top: 58%; width: 18px; height: 10px; border-radius: 50%; background: rgba(255,55,140,.55); filter: blur(1.5px); }
+.v-avatar .blush.l { left: 16%; } .v-avatar .blush.r { right: 16%; }
+.v-avatar .mouth {
+  position: absolute; left: 50%; top: 60%; width: 20px; height: 9px;
+  transform: translateX(-50%); border-bottom: 3px solid #33113A;
+  border-radius: 0 0 14px 14px;
+}
+.v-avatar.playing { animation: tami-dance .55s ease-in-out infinite; }
+.v-avatar.playing .mouth { height: 14px; border-radius: 0 0 16px 16px; }
+.v-avatar.sleep { animation: tami-bob 4.6s ease-in-out infinite; filter: saturate(.65); }
+.v-avatar.sleep .eye { animation: none; height: 3px; border-radius: 2px; }
+.v-avatar.sleep .eye::after { display: none; }
+@keyframes tami-blink { 0%, 92%, 100% { transform: scaleY(1); } 95% { transform: scaleY(.1); } }
+@keyframes tami-bob { 0%, 100% { transform: translateY(0); } 50% { transform: translateY(-5px); } }
+@keyframes tami-dance { 0%, 100% { transform: translateY(0) rotate(-4deg); } 50% { transform: translateY(-6px) rotate(4deg); } }
 .v-name { font-size: 30px; font-weight: 800; margin-top: 8px; background: linear-gradient(90deg,#FF6EC7,#B388FF); -webkit-background-clip: text; background-clip: text; color: transparent; }
 .v-status { font-size: 13px; color: var(--text2); margin-top: 6px; }
 .v-status.on { color: var(--primary); font-weight: 700; }
@@ -365,9 +399,6 @@ body::after {
     <section class="tab" id="tab-videos">
       <div class="list" id="videos-list"></div>
     </section>
-    <section class="tab" id="tab-radio">
-      <div class="list" id="radio-list"></div>
-    </section>
     <section class="tab" id="tab-amb">
       <div class="list" id="amb-list"></div>
     </section>
@@ -378,7 +409,7 @@ body::after {
       <div class="list" id="detail-list"></div>
     </section>
   </main>
-  <div id="mini" onclick="state.radioActive ? selectTab('radio') : openPlayer()">
+  <div id="mini" onclick="openPlayer()">
     <div class="art small" id="mini-art">♪</div>
     <div class="mid">
       <div class="it-title" id="mini-title">—</div>
@@ -395,7 +426,6 @@ body::after {
     <button data-tab="playlists" onclick="selectTab('playlists')"><span class="ic">☰</span>Playlists</button>
     <button data-tab="favs" onclick="selectTab('favs')"><span class="ic">♥</span>Favoritas</button>
     <button data-tab="videos" onclick="selectTab('videos')"><span class="ic">▷</span>Vídeos</button>
-    <button data-tab="radio" onclick="selectTab('radio')"><span class="ic">📻</span>Rádio</button>
     <button data-tab="amb" onclick="selectTab('amb')"><span class="ic">🌿</span>Som</button>
     <button data-tab="phone" onclick="selectTab('phone')"><span class="ic">📱</span>Celular</button>
   </nav>
@@ -416,6 +446,7 @@ body::after {
     <input type="range" id="seek" min="0" value="0" step="0.1" disabled>
     <div class="p-time"><span id="time-cur">0:00</span><span id="time-dur">0:00</span></div>
   </div>
+  <div class="p-vis" id="vis-wrap" style="display:none"><canvas id="vis"></canvas><button id="vis-style" class="vis-btn" title="Estilo do visualizador" onclick="visCycle()">♥</button></div>
   <div class="p-controls">
     <button class="pc" id="p-shuffle" onclick="toggleShuffle()">🔀</button>
     <button class="pc" onclick="prev()">⏮</button>
@@ -444,7 +475,6 @@ body::after {
 
 <audio id="audio" style="display:none"></audio>
 <video id="video" playsinline controls style="display:none"></video>
-<audio id="radioAudio" style="display:none"></audio>
 
 <script>
 'use strict';
@@ -453,9 +483,8 @@ const state = {
   songs: [], videos: [], playlists: [],
   tab: 'songs', detail: null, // {type:'album'|'artist'|'playlist', ...}
   queue: [], queueIndex: -1, current: null,
-  shuffle: false, repeat: 0, favs: new Set(), nick: '', theme: 'dark',
+  shuffle: false, repeat: 0, favs: new Set(), nick: '', theme: 'dark', visStyle: 'hearts',
   djMode: false, djVoice: true, djMic: false, learn: {},
-  radioActive: null, radioStatus: 'stopped',
   amb: { id: null, vol: 0.4, playing: false },
   sleep: 0, sleepId: null,
   phone: { dev: '', online: false, state: null, songs: null, syncing: false },
@@ -464,31 +493,8 @@ const state = {
 
 const $ = (id) => document.getElementById(id);
 const audio = $('audio'), video = $('video');
-const radioAudio = $('radioAudio');
 const UNKNOWN = 'Desconhecido';
 const REMOTE = (location.protocol.startsWith('http') ? location.origin : '') || 'http://192.168.100.7:8081';
-
-const RADIO_STATIONS = [
-  { name: 'Itaramã FM 97.1', genre: 'Hits / Litoral Gaúcho', url: 'https://player.voxhd.com.br/proxy/7716' },
-  { name: 'Rádio Pampa FM 97.5', genre: 'Notícias', url: 'http://cast4.audiostream.com.br:8653/aac' },
-  { name: 'Rádio Grenal 95.9', genre: 'Esportes', url: 'https://grenal.audiostream.com.br:20000/aac' },
-  { name: 'Rádio Campeira FM', genre: 'Gaúcha / Sertanejo', url: 'https://servidor34-3.brlogic.com:8164/live?source=website' },
-  { name: 'Rádio Nativa', genre: 'Sertanejo', url: 'http://centova17.ciclanohost.com.br:8085/stream.mp3' },
-  { name: 'Mix FM Porto Alegre', genre: 'Pop / Hits', url: 'https://playerservices.streamtheworld.com/api/livestream-redirect/MIXFM_POAAAC.aac' },
-  { name: 'Antena 1 Porto Alegre', genre: 'Smooth Jazz', url: 'https://antenaone.crossradio.com.br/stream/1' },
-  { name: 'Caiçara (Porto Alegre)', genre: 'MPB', url: 'http://cast4.audiostream.com.br:8654/mp3' },
-  { name: '104 FM (Porto Alegre)', genre: 'Pop / MPB', url: 'http://cast4.audiostream.com.br:8651/mp3' },
-  { name: 'Torres FM 101.1', genre: 'Pop / Litoral', url: 'https://cast4.audiostream.com.br:2661/mp3' },
-  { name: 'Eldorado FM', genre: 'Pop / Contemporânea', url: 'https://cast4.audiostream.com.br:2652/mp3' },
-  { name: 'Antena 1 São Paulo 94.7', genre: 'Pop / Smooth Jazz', url: 'http://antena1.newradio.it/stream?ext=.mp3' },
-  { name: '89 FM A Rádio Rock', genre: 'Rock', url: 'https://playerservices.streamtheworld.com/api/livestream-redirect/RADIO_89FM_ADP.aac?dist=site-89fm' },
-  { name: 'Nova Brasil FM', genre: 'MPB', url: 'https://playerservices.streamtheworld.com/api/livestream-redirect/NOVABRASIL_SPAAC.aac' },
-  { name: 'Bossa Nova Brazil', genre: 'Bossa Nova', url: 'http://54.38.43.201:8009/stream-128kmp3-BossaNovaBrazil' },
-  { name: 'Rádio Cidade 102.9', genre: 'Rock Clássico', url: 'https://playerservices.streamtheworld.com/api/livestream-redirect/RADIOCIDADEAAC.aac' },
-  { name: 'Alpha FM 101.7', genre: 'Light / Adult', url: 'https://playerservices.streamtheworld.com/api/livestream-redirect/RADIO_ALPHAFM_ADP.aac' },
-  { name: 'Bossa Jazz Brasil', genre: 'Jazz / MPB', url: 'https://centova5.transmissaodigital.com:20104/live' },
-  { name: 'Rádio Itatiaia 95.7', genre: 'Notícias / Esportes', url: 'https://8903.brasilstream.com.br/stream' }
-];
 
 // ---------- IndexedDB ----------
 function openDB() {
@@ -722,6 +728,9 @@ function buildAlbums() {
 function urlOfSong(s) { return URL.createObjectURL(s.blob); }
 
 // ---------- Render ----------
+const CUTE_ICONS = ['🌸', '💖', '⭐', '🌙', '🦋', '🎀', '🌷', '✨', '🌺', '💫', '🍓', '🌼'];
+function seedHash(str) { let h = 0; for (const c of String(str || '?')) h = (h * 31 + c.charCodeAt(0)) >>> 0; return h; }
+function cuteIcon(seed) { return CUTE_ICONS[seedHash(seed) % CUTE_ICONS.length]; }
 function renderArt(art, s, size) {
   art.className = 'art ' + (size || '');
   art.textContent = '';
@@ -734,9 +743,9 @@ function renderArt(art, s, size) {
     img.src = URL.createObjectURL(s.cover);
     art.appendChild(img);
   } else {
-    const c = (s.album === UNKNOWN ? '♪' : initials(s.album));
-    art.textContent = c;
-    art.classList.add(grad(Number(s.album.split('').reduce((a, cc) => a + cc.charCodeAt(0), 0))));
+    const seed = s.album === UNKNOWN ? (s.title || s.artist) : s.album;
+    art.textContent = cuteIcon(seed);
+    art.classList.add(grad(seedHash(seed) % 5));
   }
 }
 function renderSongs(list, container, favOnly) {
@@ -847,93 +856,10 @@ function renderAll() {
   renderArtists($('artists-list'));
   renderPlaylists($('playlists-list'));
   renderVideos($('videos-list'));
-  renderRadio();
   renderAmb();
   renderVirgin();
   if (state.detail) renderDetail();
 }
-
-// ---------- Rádio ----------
-function radioStatusLabel() {
-  if (state.radioStatus === 'connecting') return '<span class="radio-live">Conectando…</span>';
-  if (state.radioStatus === 'live') return '<span class="radio-live">Ao vivo</span>';
-  if (state.radioStatus === 'error') return 'Erro';
-  return 'Parada';
-}
-function renderRadio() {
-  const list = $('radio-list');
-  list.innerHTML = `<div class="section">Rádios ao vivo</div>`;
-  const stations = searchQ ? RADIO_STATIONS.filter((st) => matched(st.name, st.genre)) : RADIO_STATIONS;
-  for (let i = 0; i < stations.length; i++) {
-    const st = stations[i];
-    const idx = RADIO_STATIONS.indexOf(st);
-    const active = state.radioActive === st.url;
-    const playing = active && (state.radioStatus === 'live' || state.radioStatus === 'connecting');
-    const row = document.createElement('div');
-    row.className = 'item' + (active ? ' active' : '');
-    row.onclick = () => toggleRadio(idx);
-    row.innerHTML = `<div class="art grad-e">📻</div>
-      <div class="mid"><div class="it-title">${esc(st.name)}</div><div class="it-sub">${esc(st.genre)}${active ? ' · ' + radioStatusLabel() : ''}</div></div>
-      <button class="like ${playing ? 'fav' : ''}">${playing ? '⏸' : '▶'}</button>`;
-    list.appendChild(row);
-  }
-}
-function toggleRadio(idx) {
-  const st = RADIO_STATIONS[idx];
-  if (state.radioActive === st.url && (state.radioStatus === 'live' || state.radioStatus === 'connecting')) {
-    stopRadio();
-    return;
-  }
-  startRadio(st);
-}
-function startRadio(st) {
-  audio.pause();
-  video.pause();
-  state.radioActive = st.url;
-  state.radioStatus = 'connecting';
-  radioAudio.src = st.url;
-  renderRadio();
-  syncMini();
-  try { radioAudio.play().catch(() => {}); } catch (e) {}
-}
-function stopRadio(silent) {
-  state.radioActive = null;
-  state.radioStatus = 'stopped';
-  try { radioAudio.pause(); radioAudio.removeAttribute('src'); radioAudio.load(); } catch (e) {}
-  renderRadio();
-  syncMini();
-}
-radioAudio.addEventListener('playing', () => {
-  if (!state.radioActive) return;
-  state.radioStatus = 'live';
-  renderRadio();
-  syncMini();
-  if ('mediaSession' in navigator) {
-    const st = RADIO_STATIONS.find((x) => x.url === state.radioActive);
-    try {
-      navigator.mediaSession.metadata = new MediaMetadata({ title: st.name, artist: 'TAMI Rádio', album: 'Ao vivo' });
-      navigator.mediaSession.playbackState = 'playing';
-      navigator.mediaSession.setActionHandler('play', () => radioAudio.play());
-      navigator.mediaSession.setActionHandler('pause', () => { radioAudio.pause(); state.radioStatus = 'paused'; renderRadio(); syncMini(); });
-    } catch (e) {}
-  }
-});
-radioAudio.addEventListener('pause', () => {
-  if (!state.radioActive || state.radioStatus === 'connecting') return;
-  if (state.radioStatus === 'live') {
-    state.radioStatus = 'paused';
-    renderRadio();
-    syncMini();
-  }
-});
-radioAudio.addEventListener('error', () => {
-  if (!state.radioActive) return;
-  state.radioActive = null;
-  state.radioStatus = 'stopped';
-  renderRadio();
-  syncMini();
-  toast('Não foi possível tocar esta rádio. Verifique sua conexão.');
-});
 
 // ---------- Som de fundo (ambiente) ----------
 let ambCtx = null, ambBus = null, ambNodes = [];
@@ -1177,7 +1103,7 @@ function selectTab(tab, updateDetail) {
   $('tab-' + tab).classList.add('active');
   $('addPlaylistBtn').classList.toggle('hidden', tab !== 'playlists');
   $('back').classList.remove('show');
-  $('title').textContent = { virgin: 'TAMI', songs: 'Músicas', albums: 'Álbuns', artists: 'Artistas', playlists: 'Playlists', favs: 'Favoritas', videos: 'Vídeos', radio: 'Rádio', amb: 'Som de fundo', phone: 'Celular' }[tab];
+  $('title').textContent = { virgin: 'TAMI', songs: 'Músicas', albums: 'Álbuns', artists: 'Artistas', playlists: 'Playlists', favs: 'Favoritas', videos: 'Vídeos', amb: 'Som de fundo', phone: 'Celular' }[tab];
 }
 let detailBackStack = null;
 function openDetail(d) {
@@ -1412,7 +1338,6 @@ function djMix(vibe) {
   } else if (vibe === 'relaxar') {
     msg = 'Relaxa que eu cuido da trilha sonora. Vou deixar um clima leve pra você.';
   }
-  stopRadio(true);
   state.djMode = true;
   state.shuffle = false;
   state.djPrevRepeat = state.repeat;
@@ -1509,9 +1434,7 @@ function tamiSleep(min) {
     state.sleepId = setTimeout(() => {
       try { audio.pause(); } catch (e) {}
       try { video.pause(); } catch (e) {}
-      try { radioAudio.pause(); } catch (e) {}
       ambStop();
-      state.radioActive = null; state.radioStatus = 'stopped';
       syncMini();
       renderAll();
       djSpeak('Boa noite! Desliguei tudo por aqui. Até amanhã.');
@@ -1581,6 +1504,7 @@ function djCommand(raw) {
     : /toca|toque|continua|play|roda/.test(norm) ? 'play'
     : /favorit|curti|gostei|amei/.test(norm) ? 'fav'
     : /qual|essa|tocando|nome/.test(norm) ? 'info'
+    : /recomend|suger|sugest|indica|dica/.test(norm) ? 'recomenda'
     : /obrigad|valeu|thanks/.test(norm) ? 'thanks'
     : /oi|ola|hello/.test(norm) ? 'hello'
     : null;
@@ -1604,6 +1528,7 @@ function djCommand(raw) {
       break;
     }
     case 'mix': djSpeak('Claro! Preparando um mix novo para você.'); setTimeout(djMix, 1500); break;
+    case 'recomenda': djSpeak('Deixa eu pensar aqui...'); setTimeout(tamiRecomenda, 800); break;
     case 'dislike':
       djMarkDislike();
       djSpeak('Entendido! Não vou tocar essa por um tempo.');
@@ -1644,9 +1569,91 @@ function djCommand(raw) {
   }
 }
 
+// ---------- Recomendações ----------
+function learnArtistPref() {
+  const pref = {};
+  for (const s of state.songs) {
+    const k = s.artist || UNKNOWN;
+    if (!pref[k]) pref[k] = { artist: k, n: 0, plays: 0, likes: 0, skips: 0 };
+    pref[k].n++;
+    const l = djLearnGet(s.id);
+    pref[k].plays += l.plays;
+    pref[k].likes += l.liked ? 1 : 0;
+    pref[k].skips += l.skips;
+    if (state.favs.has(s.id)) pref[k].likes++;
+  }
+  return pref;
+}
+function songRecScore(s, pref) {
+  const l = djLearnGet(s.id);
+  if (l.skips >= 3) return -Infinity;
+  const p = pref[s.artist] || { n: 0, plays: 0, likes: 0, skips: 0 };
+  const known = p.plays > 0 || p.likes > 0;
+  let score = 0;
+  score += Math.min(p.plays * 0.6, 6);      // artistas que você mais ouve
+  score += Math.min(p.likes * 2.2, 8);      // artistas com favoritas
+  score += (l.liked ? 6 : 0) + (state.favs.has(s.id) ? 5 : 0);
+  score += Math.min(l.plays, 3) * 0.4;      // músicas que você repete
+  score -= l.skips * 1.5;                   // as que você pula
+  score += known ? 2 : 0.5;                 // descoberta de artistas novos (leve)
+  return score;
+}
+function recReason(s, pref) {
+  const l = djLearnGet(s.id);
+  if (state.favs.has(s.id) || l.liked) return 'Você curtiu ♥';
+  const p = pref[s.artist];
+  if (p && p.plays > 0) return 'Do artista que você mais ouve';
+  if (p && p.likes > 0) return 'Você favoritou músicas dele';
+  return 'Descoberta nova ✨';
+}
+function recommendTop(n) {
+  const pref = learnArtistPref();
+  return state.songs
+    .filter(s => !s.type || s.type !== 'video')
+    .map(s => ({ song: s, score: songRecScore(s, pref) }))
+    .filter(x => x.score !== -Infinity)
+    .sort((a, b) => b.score - a.score)
+    .slice(0, n)
+    .map(x => ({ song: x.song, reason: recReason(x.song, pref) }));
+}
+function tamiRecomenda() {
+  const recs = recommendTop(10);
+  if (!recs.length) {
+    djSpeak('Ainda não tenho dados suficientes para recomendar. Toque e favorite músicas que eu aprendo.');
+    toast('Toque e favorite músicas para eu aprender 🎧');
+    return;
+  }
+  const list = $('modal');
+  list.innerHTML = `<h3>🎯 Recomendadas pela TAMI</h3>
+    <div class="list" style="max-height:58vh;overflow-y:auto;padding:0">` +
+    recs.map((r, i) => `<div class="mrow" data-rec="${i}">
+      <span class="art small ${grad(i)}">${esc(initials((r.song.album === UNKNOWN ? r.song.title : r.song.album) || '?'))}</span>
+      <div class="mid"><div class="it-title">${esc(r.song.title)}</div><div class="it-sub">${esc(r.song.artist)} · ${esc(r.reason)}</div></div>
+      <span style="color:var(--primary);font-size:15px">▶</span>
+    </div>`).join('') +
+    `</div>
+    <div id="modal-actions">
+      <button class="btn secondary" onclick="closeModal()">Fechar</button>
+      <button class="btn" id="rec-play-all">▶ Tocar todas</button>
+    </div>`;
+  $('modal-wrap').classList.add('show');
+  list.querySelectorAll('[data-rec]').forEach((row) => {
+    row.onclick = () => {
+      const r = recs[+row.dataset.rec];
+      playList(recs.map(x => x.song), r.song);
+      closeModal();
+    };
+  });
+  $('rec-play-all').onclick = () => {
+    const songs = recs.map(r => r.song);
+    playList(songs, songs[0]);
+    closeModal();
+  };
+  djSpeak(`Separei ${recs.length} músicas para você. As melhores por aqui.`);
+}
+
 function playList(list, song) {
   if (!song || !list.length) return;
-  stopRadio(true);
   djExit();
   state.queue = list;
   state.queueIndex = list.indexOf(song);
@@ -1655,7 +1662,6 @@ function playList(list, song) {
   openPlayer();
 }
 function playVideo(v) {
-  stopRadio(true);
   djExit();
   audio.pause();
   if (state.videoUrl) URL.revokeObjectURL(state.videoUrl);
@@ -1713,18 +1719,145 @@ function updateMediaSession() {
     navigator.mediaSession.setActionHandler('nexttrack', next);
   } catch (e) {}
 }
-function togglePlay() {
-  if (state.radioActive) {
-    if (state.radioStatus === 'paused') {
-      state.radioStatus = 'connecting';
-      renderRadio();
-      syncMini();
-      radioAudio.play().catch(() => {});
-    } else {
-      stopRadio();
-    }
-    return;
+
+// ---------- Visualizador ----------
+let visCtx = null, visAnalyser = null, visData = null;
+function ensureVis() {
+  const AC = window.AudioContext || window.webkitAudioContext;
+  if (!AC) return false;
+  if (!visCtx) {
+    try {
+      visCtx = new AC();
+      visAnalyser = visCtx.createAnalyser();
+      visAnalyser.fftSize = 256;
+      visAnalyser.smoothingTimeConstant = 0.82;
+      visData = new Uint8Array(visAnalyser.frequencyBinCount);
+      const asrc = visCtx.createMediaElementSource(audio);
+      asrc.connect(visAnalyser);
+      visAnalyser.connect(visCtx.destination);
+      const vAnalyser = visCtx.createAnalyser();
+      vAnalyser.fftSize = 256;
+      vAnalyser.smoothingTimeConstant = 0.82;
+      const vsrc = visCtx.createMediaElementSource(video);
+      vsrc.connect(vAnalyser);
+      vAnalyser.connect(visCtx.destination);
+      video._visAnalyser = vAnalyser;
+      $('vis-wrap').style.display = 'flex';
+    } catch (e) { visCtx = null; return false; }
   }
+  if (visCtx.state === 'suspended') visCtx.resume().catch(() => {});
+  return true;
+}
+function visAnalyserOf() {
+  if (!visCtx) return null;
+  return state.current && state.current.type === 'video' ? (video._visAnalyser || visAnalyser) : visAnalyser;
+}
+function visPlaying() {
+  if (!state.current) return false;
+  const el = state.current.type === 'video' ? video : audio;
+  return !!(el.src && !el.paused);
+}
+function rr(g, x, y, w, h, r) {
+  g.beginPath();
+  g.moveTo(x + r, y);
+  g.arcTo(x + w, y, x + w, y + h, r);
+  g.arcTo(x + w, y + h, x, y + h, r);
+  g.arcTo(x, y + h, x, y, r);
+  g.arcTo(x, y, x + w, y, r);
+  g.closePath();
+}
+function visHeart(g, cx, cy, s, color) {
+  g.save(); g.translate(cx, cy); g.scale(s, s);
+  g.beginPath();
+  g.moveTo(0, 0.35);
+  g.bezierCurveTo(0, 0.1, -0.38, 0.1, -0.38, 0.35);
+  g.bezierCurveTo(-0.38, 0.58, 0, 0.8, 0, 1);
+  g.bezierCurveTo(0, 0.8, 0.38, 0.58, 0.38, 0.35);
+  g.bezierCurveTo(0.38, 0.1, 0, 0.1, 0, 0.35);
+  g.fillStyle = color; g.fill();
+  g.restore();
+}
+function visStar(g, cx, cy, s, color) {
+  g.save(); g.translate(cx, cy); g.beginPath();
+  for (let k = 0; k < 10; k++) {
+    const rad = k % 2 ? s * 0.42 : s;
+    const a = (k / 10) * Math.PI * 2 - Math.PI / 2;
+    const px = Math.cos(a) * rad, py = Math.sin(a) * rad;
+    if (k) g.lineTo(px, py); else g.moveTo(px, py);
+  }
+  g.closePath(); g.fillStyle = color; g.fill(); g.restore();
+}
+function visFlower(g, cx, cy, s, hue) {
+  g.save(); g.translate(cx, cy);
+  for (let p = 0; p < 5; p++) {
+    const a = (p / 5) * Math.PI * 2 - Math.PI / 2;
+    g.beginPath();
+    g.arc(Math.cos(a) * s * 0.5, Math.sin(a) * s * 0.5, s * 0.42, 0, Math.PI * 2);
+    g.fillStyle = 'hsl(' + hue + ',95%,72%)'; g.fill();
+  }
+  g.beginPath(); g.arc(0, 0, s * 0.3, 0, Math.PI * 2);
+  g.fillStyle = 'hsl(50,100%,72%)'; g.fill();
+  g.restore();
+}
+const VIS_STYLES = ['hearts', 'flowers', 'stars', 'bars'];
+const VIS_ICONS = { hearts: '♥', flowers: '✿', stars: '★', bars: '▮' };
+function visCycle() {
+  const i = VIS_STYLES.indexOf(state.visStyle);
+  state.visStyle = VIS_STYLES[(i + 1) % VIS_STYLES.length];
+  const b = $('vis-style');
+  if (b) b.textContent = VIS_ICONS[state.visStyle];
+  if (state.db) putKV('visStyle', state.visStyle);
+  toast('Visualizador: ' + ({ hearts: 'corações', flowers: 'flores', stars: 'estrelas', bars: 'barras' }[state.visStyle]));
+}
+function drawVis() {
+  const cv = $('vis');
+  if (cv && $('player').classList.contains('show') && visCtx && visAnalyser) {
+    const dpr = window.devicePixelRatio || 1;
+    const W = cv.clientWidth, H = cv.clientHeight;
+    if (W) {
+      cv.width = W * dpr; cv.height = H * dpr;
+      const g = cv.getContext('2d');
+      const analyser = visAnalyserOf();
+      g.clearRect(0, 0, cv.width, cv.height);
+      if (analyser) analyser.getByteFrequencyData(visData);
+      const active = visPlaying();
+      const mode = state.visStyle || 'hearts';
+      if (mode === 'bars') {
+        const n = 32, bw = cv.width / n, t = Date.now() / 600;
+        for (let i = 0; i < n; i++) {
+          const raw = visData[Math.floor((i / n) * visData.length)] / 255;
+          const v = active ? raw : 0.06 + 0.04 * Math.sin(i * 0.5 + t);
+          const bh = Math.max(3, v * (cv.height - 6));
+          const x = i * bw + bw * 0.18, y = (cv.height - bh) / 2;
+          g.fillStyle = 'hsla(' + (187 + (i / n) * 70) + ',100%,' + Math.round(50 + v * 30) + '%,.85)';
+          rr(g, x, y, bw * 0.64, bh, Math.min(bw * 0.32, 5));
+          g.fill();
+        }
+      } else {
+        const n = 18, t = Date.now() / 1000;
+        for (let i = 0; i < n; i++) {
+          const raw = visData[Math.floor((i / n) * visData.length)] / 255;
+          const v = active ? raw : 0.15 + 0.08 * Math.sin(i + t * 2);
+          const x = (i + 0.5) * (cv.width / n);
+          const size = cv.height * (0.22 + v * 0.62);
+          const float = (t * 0.3 + i * 0.13) % 1;
+          const y = cv.height - cv.height * 0.12 - float * (cv.height * 0.82);
+          g.globalAlpha = active ? 0.4 + v * 0.6 : 0.3;
+          if (mode === 'stars') visStar(g, x, y, size * 0.55, 'hsl(' + (45 + i * 3) + ',100%,72%)');
+          else if (mode === 'flowers') visFlower(g, x, y, size * 0.5, 325 - i * 4);
+          else visHeart(g, x, y, size * 0.6, 'hsl(' + (330 - i * 5) + ',100%,66%)');
+        }
+        g.globalAlpha = 1;
+      }
+    }
+  }
+  requestAnimationFrame(drawVis);
+}
+function startVis() { requestAnimationFrame(drawVis); }
+audio.addEventListener('play', () => { if (visCtx && visCtx.state === 'suspended') visCtx.resume().catch(() => {}); });
+video.addEventListener('play', () => { if (visCtx && visCtx.state === 'suspended') visCtx.resume().catch(() => {}); });
+
+function togglePlay() {
   if (!state.current) return;
   const el = state.current.type === 'video' ? video : audio;
   if (el.src) {
@@ -1761,11 +1894,11 @@ function prev() {
 }
 audio.addEventListener('ended', () => { if (state.repeat === 1 || state.queueIndex < state.queue.length - 1) next(); });
 audio.addEventListener('timeupdate', updateProgress);
-audio.addEventListener('play', () => { renderPlayer(); if ('mediaSession' in navigator) navigator.mediaSession.playbackState = 'playing'; });
-audio.addEventListener('pause', () => { renderPlayer(); if ('mediaSession' in navigator) navigator.mediaSession.playbackState = 'paused'; });
+audio.addEventListener('play', () => { renderPlayer(); if ('mediaSession' in navigator) navigator.mediaSession.playbackState = 'playing'; updateAvatarMood(); });
+audio.addEventListener('pause', () => { renderPlayer(); if ('mediaSession' in navigator) navigator.mediaSession.playbackState = 'paused'; updateAvatarMood(); });
 video.addEventListener('timeupdate', updateProgress);
-video.addEventListener('play', renderPlayer);
-video.addEventListener('pause', renderPlayer);
+video.addEventListener('play', () => { renderPlayer(); updateAvatarMood(); });
+video.addEventListener('pause', () => { renderPlayer(); updateAvatarMood(); });
 video.addEventListener('ended', () => {
   if (state.current && state.current.type === 'video') { closePlayer(); return; }
   if (state.queue.length) next();
@@ -1833,7 +1966,8 @@ function renderPlayer() {
     img.src = URL.createObjectURL(s.cover);
     art.appendChild(img);
   } else {
-    art.innerHTML = `<div class="ph">${esc(initials(s.album === UNKNOWN ? s.title : s.album))}</div>`;
+    const seed = s.album === UNKNOWN ? s.title : s.album;
+    art.innerHTML = `<div class="ph">${cuteIcon(seed)}</div>`;
   }
   const el = audio;
   const playing = !el.paused;
@@ -1850,19 +1984,6 @@ function renderPlayer() {
   syncMini();
 }
 function syncMini() {
-  if (state.radioActive) {
-    const st = RADIO_STATIONS.find((x) => x.url === state.radioActive);
-    const playing = state.radioStatus === 'live' || state.radioStatus === 'connecting';
-    $('mini').classList.add('show');
-    $('mini-title').textContent = st ? st.name : 'Rádio';
-    $('mini-sub').textContent = '📻 Rádio · ' + (playing ? 'Ao vivo' : 'Parada');
-    $('mini-art').innerHTML = '';
-    $('mini-art').className = 'art small grad-e';
-    $('mini-art').textContent = '📻';
-    $('mini-play').textContent = playing ? '⏸' : '▶';
-    $('mini-shuffle').style.color = 'var(--text2)';
-    return;
-  }
   const s = state.current;
   if (!s) {
     $('mini').classList.remove('show');
@@ -1898,7 +2019,14 @@ function renderVirgin() {
     ? 'Tocando agora'
     : (hasSongs ? 'Pronta para mixar' : 'Sem músicas ainda');
   let html = `<div class="v-hero">
-      <div class="v-logo">🎧</div>
+      <div class="v-avatar" id="tami-avatar" onclick="tamiSpeakMood()" title="Falar com a TAMI">
+        <span class="v-bow">🎀</span>
+        <div class="face">
+          <div class="eye l"></div><div class="eye r"></div>
+          <div class="blush l"></div><div class="blush r"></div>
+          <div class="mouth"></div>
+        </div>
+      </div>
       <div class="v-name">TAMI</div>
       <div class="v-status ${state.djMode ? 'on' : ''}">${state.djMode ? '●' : '○'} ${esc(status)}</div>
     </div>`;
@@ -1932,12 +2060,39 @@ function renderVirgin() {
       <div class="v-card ${state.djMic ? 'on' : ''}" onclick="pjMicToggle()"><div class="v-ic">🎙</div><div class="v-l">Microfone</div><div class="v-s">${state.djMic ? 'Ouvindo…' : 'Comandos de voz'}</div></div>
       <div class="v-card ${state.sleep ? 'on' : ''}" onclick="tamiSleep()"><div class="v-ic">💤</div><div class="v-l">Sono</div><div class="v-s">${state.sleep ? 'Desliga em ' + state.sleep + 'min' : 'Timer de sono'}</div></div>
       <div class="v-card" onclick="tamiPiada()"><div class="v-ic">😄</div><div class="v-l">Piada</div><div class="v-s">TAMI conta uma</div></div>
+      <div class="v-card" onclick="tamiRecomenda()"><div class="v-ic">🎯</div><div class="v-l">Recomenda</div><div class="v-s">Escolhas da TAMI</div></div>
     </div>`;
   if (!hasSongs) {
     html += `<div class="empty"><div class="big">🎧</div>A TAMI precisa de músicas para tocar.<br><button class="btn" onclick="$('fileSongs').click()">＋ Importar músicas</button></div>`;
   }
   list.innerHTML = html;
   if (now) renderArt($('vnow-art'), now, '');
+  updateAvatarMood();
+}
+
+// ---------- Avatar da TAMI ----------
+const TAMI_PHRASES = [
+  'Oi, linda! Bora ouvir uma boa música?',
+  'Você está incrível hoje, viu?',
+  'Já escolheu suas favoritas? Eu adoro um coraçãozinho.',
+  'Respira fundo. A música cuida do resto.',
+  'Bora deixar o dia mais bonito!',
+  'Eu acredito em você. Sempre.',
+  'Um bom som resolve quase tudo.',
+  'Dance um pouquinho, faz bem pro coração!'
+];
+function tamiSpeakMood() {
+  const p = TAMI_PHRASES[Math.floor(Math.random() * TAMI_PHRASES.length)];
+  djSpeak(p); toast(p);
+}
+function updateAvatarMood() {
+  const av = $('tami-avatar');
+  if (!av) return;
+  const now = state.current;
+  const el = now && (now.type === 'video' ? video : audio);
+  const playing = !!(now && el && el.src && !el.paused);
+  av.classList.toggle('playing', playing);
+  av.classList.toggle('sleep', !!state.sleep && !playing);
 }
 
 // ---------- Modal ----------
@@ -1976,7 +2131,7 @@ function toggleTheme() {
 function cycleSpeed() {
   speedIdx = (speedIdx + 1) % SPEEDS.length;
   const s = SPEEDS[speedIdx];
-  audio.playbackRate = s; video.playbackRate = s; radioAudio.playbackRate = s;
+  audio.playbackRate = s; video.playbackRate = s;
   $('p-speed').textContent = s + 'x';
 }
 async function saveNick() {
@@ -2321,6 +2476,11 @@ async function init() {
   if (nick) { state.nick = nick; $('profile-avatar').textContent = initials(nick); }
   const theme = await getKV('theme');
   if (theme) { state.theme = theme; applyTheme(); }
+  const visStyle = await getKV('visStyle');
+  if (visStyle && VIS_STYLES.includes(visStyle)) {
+    state.visStyle = visStyle;
+    const vb = $('vis-style'); if (vb) vb.textContent = VIS_ICONS[visStyle];
+  }
   const amb = await getKV('amb');
   if (amb) { state.amb = Object.assign(state.amb, amb); state.amb.playing = false; }
   const idx = await getKV('lastSong');
@@ -2337,12 +2497,14 @@ async function init() {
   document.addEventListener('pointerdown', function djWelcome() {
     if (state.djVoice) djSpeak('Bem-vindo(a)! Eu sou a TAMI, sua DJ virtual.');
   }, { once: true, passive: true });
+  document.addEventListener('pointerdown', () => { ensureVis(); }, { passive: true });
+  startVis();
 }
 function registerTabs() {
   $('fileSongs').onchange = (e) => { if (e.target.files.length) importFiles([...e.target.files], 'song'); e.target.value = ''; };
   $('fileVideos').onchange = (e) => { if (e.target.files.length) importFiles([...e.target.files], 'video'); e.target.value = ''; };
   $('search').oninput = () => { searchQ = $('search').value.trim().toLowerCase(); renderAll(); if (state.detail) { state.detail = null; selectTab(state.tab); } };
-  $('vol').oninput = () => { const v = +$('vol').value; audio.volume = v; video.volume = v; radioAudio.volume = v; };
+  $('vol').oninput = () => { const v = +$('vol').value; audio.volume = v; video.volume = v; };
   $('p-speed').onclick = cycleSpeed;
   let dragDepth = 0;
   document.addEventListener('dragenter', (e) => { e.preventDefault(); dragDepth++; $('drop-overlay').classList.add('show'); });
