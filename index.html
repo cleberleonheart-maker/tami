@@ -3223,6 +3223,11 @@ const CHANGELOG = {
     pt: ['Janela "Novidades" ao abrir o app depois de atualizar — mostra só o que mudou nesta versão', 'O aviso de atualização agora lista o que muda na nova versão'],
     en: ['"What\'s new" dialog after updating — shows only this version\'s changes', 'The update notice now lists what changed in the new version'],
     es: ['Diálogo "Novedades" al abrir tras actualizar — muestra solo lo de esta versión', 'El aviso de actualización ahora lista qué cambió en la nueva versión']
+  },
+  '1.21': {
+    pt: ['Corrige a janela de "Novidades", que não estava abrindo sozinha — agora ela aparece ao abrir o app'],
+    en: ['Fixes the "What\'s new" dialog not showing on its own — it now appears when you open the app'],
+    es: ['Corrige el diálogo de "Novedades" que no abría solo — ahora aparece al abrir la app']
   }
 };
 function changelogList(ver) {
@@ -3773,6 +3778,7 @@ async function init() {
   document.addEventListener('pointerdown', () => { ensureVis(); }, { passive: true });
   try { startVis(); } catch (e) {}
   try { checkBackgroundHandoff(); } catch (e) {}
+  try { maybeShowWhatsNew(); } catch (e) {}
   if (window.TamiNative) {
     loadApkInfo().then(() => {
       if (updateAvailable()) {
