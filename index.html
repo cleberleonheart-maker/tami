@@ -513,15 +513,19 @@ function openDB() {
 }
 function tx(store, mode) { return state.db.transaction(store, mode).objectStore(store); }
 function getAll(store) {
+  if (!state.db) return Promise.resolve([]);
   return new Promise((res, rej) => { const r = tx(store).getAll(); r.onsuccess = () => res(r.result || []); r.onerror = () => rej(r.error); });
 }
 function putKV(k, v) {
+  if (!state.db) return Promise.resolve();
   return new Promise((res, rej) => { const r = tx('kv', 'readwrite').put(v, k); r.onsuccess = () => res(); r.onerror = () => rej(r.error); });
 }
 function getKV(k) {
+  if (!state.db) return Promise.resolve(undefined);
   return new Promise((res) => { const r = tx('kv').get(k); r.onsuccess = () => res(r.result); r.onerror = () => res(undefined); });
 }
 function clearStore(store) {
+  if (!state.db) return Promise.resolve();
   return new Promise((res, rej) => { const r = tx(store, 'readwrite').clear(); r.onsuccess = () => res(); r.onerror = () => rej(r.error); });
 }
 
@@ -535,7 +539,7 @@ function initials(name) {
   const parts = String(name || '?').trim().split(/\s+/);
   return (parts[0][0] || '?') + (parts.length > 1 ? parts[parts.length - 1][0] : '').toUpperCase();
 }
-function esc(s) { return String(s || '').replace(/[&<>"]/g, (c) => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;' }[c])); }
+function esc(s) { return String(s || '').replace(/[&<>"']/g, (c) => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[c])); }
 let searchQ = '';
 function matched(...vals) { return vals.some((v) => String(v || '').toLowerCase().includes(searchQ)); }
 function toast(msg) {
@@ -674,6 +678,7 @@ async function importFiles(fileList, kind) {
   }
   let added = 0, skipped = 0;
   toast(`Importando ${fileList.length} arquivos…`);
+  if (!state.db) { toast('Armazenamento indisponível: não é possível importar músicas.'); return; }
   for (const file of fileList) {
     const key = (file.lastModified || 0) + '|' + file.size + '|' + file.name;
     if (existing.has(key)) { skipped++; continue; }
@@ -740,7 +745,7 @@ function renderArt(art, s, size) {
     art.appendChild(img);
   } else if (s.cover) {
     const img = document.createElement('img');
-    img.src = URL.createObjectURL(s.cover);
+    img.src = coverUrl(s);
     art.appendChild(img);
   } else {
     const seed = s.album === UNKNOWN ? (s.title || s.artist) : s.album;
@@ -1216,10 +1221,20 @@ function importPrompt() { $('fileSongs').click(); }
 
 // ---------- Player ----------
 let objectUrlCache = new Map();
+let coverUrlCache = new Map();
 function objUrl(s) {
   if (s.url) return s.url;
   if (!objectUrlCache.has(s.id)) objectUrlCache.set(s.id, URL.createObjectURL(s.blob));
   return objectUrlCache.get(s.id);
+}
+function coverUrl(s) {
+  if (!s || !s.cover) return null;
+  if (s.coverUrl) return s.coverUrl;
+  if (!coverUrlCache.has(s.id)) coverUrlCache.set(s.id, URL.createObjectURL(s.cover));
+  return coverUrlCache.get(s.id);
+}
+function revokeCover(id) {
+  if (coverUrlCache.has(id)) { URL.revokeObjectURL(coverUrlCache.get(id)); coverUrlCache.delete(id); }
 }
 
 // ---------- DJ TAMI ----------
@@ -1232,7 +1247,7 @@ function djLearnSet(id, patch) {
 }
 function djMarkSkip() { if (!state.djMode || !state.current) return; djLearnSet(state.current.id, { skips: djLearnGet(state.current.id).skips + 1 }); }
 function djMarkDislike() { if (!state.current) return; djLearnSet(state.current.id, { skips: djLearnGet(state.current.id).skips + 5, liked: false }); }
-function pjNext() { if (state.djMode) djMarkSkip(); next(); }
+function pjNext() { if (state.djMode) djMarkSkip(); next(true); }
 function djExit() {
   state.djMode = false;
   if (state.djPrevRepeat !== undefined) { state.repeat = state.djPrevRepeat; state.djPrevRepeat = undefined; }
@@ -1492,6 +1507,8 @@ function djCommand(raw) {
   const hasWake = /tami|tammi|tammy|tani/.test(norm);
   const action = /bombar|festa|balada|anima/.test(norm) ? 'bombar'
     : /relaxa|calma|calm|tranquil|light/.test(norm) ? 'relaxar'
+    : /curiosidade|fato curioso|sabia|curios/.test(norm) ? 'curiosidade'
+    : /locutor|radio\b|apresenta/.test(norm) ? 'locutor'
     : /piada|zoeira|conta|engracad|sorri/.test(norm) ? 'piada'
     : /timer|dormi|dormir|sleep|deslig|apaga.*(min|minuto)/.test(norm) ? 'timer'
     : /mix|mistura|mixa/.test(norm) ? 'mix'
@@ -1532,7 +1549,7 @@ function djCommand(raw) {
     case 'dislike':
       djMarkDislike();
       djSpeak('Entendido! Não vou tocar essa por um tempo.');
-      if (state.queue.length) next();
+      if (state.queue.length) next(true);
       break;
     case 'dupes':
       removeDuplicates();
@@ -1540,12 +1557,12 @@ function djCommand(raw) {
     case 'skip':
       djMarkSkip();
       djSpeak('Pulada!');
-      if (state.queue.length) next();
+      if (state.queue.length) next(true);
       break;
     case 'next':
       djMarkSkip();
       djSpeak('Próxima!');
-      if (state.queue.length) next();
+      if (state.queue.length) next(true);
       break;
     case 'prev': djSpeak('Voltando!'); prev(); break;
     case 'pause': {
@@ -1687,6 +1704,7 @@ function playCurrent() {
   video.style.display = 'none';
   audio.src = objUrl(s);
   audio.play().then(() => updateMediaSession()).catch(() => {});
+  if (state.db) putKV('lastSong', { id: s.id });
   if (state.djMode) {
     if (s.id !== djLastId) { djLearnSet(s.id, { plays: djLearnGet(s.id).plays + 1 }); djLastId = s.id; }
     if (djEntered) djEntered = false;
@@ -1698,7 +1716,7 @@ function playCurrent() {
       try {
         navigator.mediaSession.metadata = new MediaMetadata({
           title: s.title, artist: s.artist, album: s.album,
-          artwork: [{ src: URL.createObjectURL(s.cover), sizes: '512x512' }]
+          artwork: coverUrl(s) ? [{ src: coverUrl(s), sizes: '512x512' }] : []
         });
       } catch (e) {}
     }
@@ -1711,7 +1729,7 @@ function updateMediaSession() {
   try {
     navigator.mediaSession.metadata = new MediaMetadata({
       title: s.title, artist: s.artist, album: s.album,
-      artwork: s.cover ? [{ src: URL.createObjectURL(s.cover), sizes: '512x512' }] : []
+      artwork: coverUrl(s) ? [{ src: coverUrl(s), sizes: '512x512' }] : []
     });
     navigator.mediaSession.setActionHandler('play', togglePlay);
     navigator.mediaSession.setActionHandler('pause', togglePlay);
@@ -1892,7 +1910,10 @@ function prev() {
   state.queueIndex = (state.queueIndex - 1 + state.queue.length) % state.queue.length;
   playCurrent();
 }
-audio.addEventListener('ended', () => { if (state.repeat === 1 || state.queueIndex < state.queue.length - 1) next(); });
+audio.addEventListener('ended', () => {
+  if (state.repeat === 2) { if (audio.currentTime) { audio.currentTime = 0; } audio.play(); return; }
+  if (state.repeat === 1 || state.queueIndex < state.queue.length - 1) next();
+});
 audio.addEventListener('timeupdate', updateProgress);
 audio.addEventListener('play', () => { renderPlayer(); if ('mediaSession' in navigator) navigator.mediaSession.playbackState = 'playing'; updateAvatarMood(); });
 audio.addEventListener('pause', () => { renderPlayer(); if ('mediaSession' in navigator) navigator.mediaSession.playbackState = 'paused'; updateAvatarMood(); });
@@ -1900,8 +1921,14 @@ video.addEventListener('timeupdate', updateProgress);
 video.addEventListener('play', () => { renderPlayer(); updateAvatarMood(); });
 video.addEventListener('pause', () => { renderPlayer(); updateAvatarMood(); });
 video.addEventListener('ended', () => {
-  if (state.current && state.current.type === 'video') { closePlayer(); return; }
-  if (state.queue.length) next();
+  if (state.current && state.current.type === 'video') {
+    if (state.repeat === 2) { video.currentTime = 0; video.play().catch(() => {}); return; }
+    if (state.queue.length > 1 && state.queueIndex < state.queue.length - 1) { next(); return; }
+    closePlayer();
+    return;
+  }
+  if (state.repeat === 2) next();
+  else if (state.repeat === 1 || state.queueIndex < state.queue.length - 1) next();
   else closePlayer();
 });
 function updateProgress() {
@@ -1961,9 +1988,9 @@ function renderPlayer() {
   video.pause();
   video.style.display = 'none';
   art.innerHTML = '';
-  if (s.cover) {
+  if (coverUrl(s)) {
     const img = document.createElement('img');
-    img.src = URL.createObjectURL(s.cover);
+    img.src = coverUrl(s);
     art.appendChild(img);
   } else {
     const seed = s.album === UNKNOWN ? s.title : s.album;
@@ -1995,10 +2022,12 @@ function syncMini() {
   const art = $('mini-art');
   art.innerHTML = '';
   art.className = 'art small';
-  if (s.cover) {
+  if (coverUrl(s)) {
     const img = document.createElement('img');
-    img.src = URL.createObjectURL(s.cover);
+    img.src = coverUrl(s);
     art.appendChild(img);
+  } else if (s.cover) {
+    art.appendChild(Object.assign(document.createElement('img'), { src: coverUrl(s) }));
   } else {
     art.textContent = s.type === 'video' ? '▷' : '♪';
     art.classList.add(grad(1));
@@ -2281,6 +2310,7 @@ async function deleteDupes(idsArg) {
     state.favs.delete(id);
     if (state.learn[id]) { delete state.learn[id]; }
     if (objectUrlCache.has(id)) { URL.revokeObjectURL(objectUrlCache.get(id)); objectUrlCache.delete(id); }
+    revokeCover(id);
     for (const p of state.playlists) {
       if (p.songIds && p.songIds.includes(id)) { p.songIds = p.songIds.filter((x) => x !== id); await putPlaylist(p); }
     }
@@ -2309,6 +2339,7 @@ async function delSong(id) {
   await putKV('favs', [...state.favs]);
   if (state.learn[id]) { delete state.learn[id]; await putKV('learn', state.learn); }
   if (objectUrlCache.has(id)) { URL.revokeObjectURL(objectUrlCache.get(id)); objectUrlCache.delete(id); }
+  revokeCover(id);
   for (const p of state.playlists) {
     if (p.songIds && p.songIds.includes(id)) { p.songIds = p.songIds.filter((x) => x !== id); await putPlaylist(p); }
   }
@@ -2466,7 +2497,13 @@ async function reloadAll() {
 }
 async function init() {
   registerTabs();
-  state.db = await openDB();
+  try {
+    state.db = await openDB();
+  } catch (e) {
+    console.warn('IndexedDB indisponível:', e);
+    state.db = null;
+    if (!$('toast').classList.contains('show')) toast('Armazenamento indisponível — não será possível salvar músicas.');
+  }
   await reloadAll();
   const favs = await getKV('favs');
   if (favs) state.favs = new Set(favs);
@@ -2485,9 +2522,12 @@ async function init() {
   if (amb) { state.amb = Object.assign(state.amb, amb); state.amb.playing = false; }
   const idx = await getKV('lastSong');
   if (idx && state.songs.length) {
-    state.queue = state.songs;
     const i = state.songs.findIndex((s) => s.id === idx.id);
-    if (i >= 0) { state.queueIndex = i; playCurrent(); syncMini(); }
+    if (i >= 0) {
+      state.queue = state.songs.slice(i).concat(state.songs.slice(0, i));
+      state.queueIndex = 0;
+      playCurrent(); syncMini();
+    }
   }
   renderAll();
   startPhonePoll();
