@@ -3183,12 +3183,86 @@ function dismissUpdate() {
   try { localStorage.setItem('tami-update-seen', APK_INFO.ver); } catch (e) {}
   closeModal();
 }
+const CHANGELOG = {
+  '1.13': {
+    pt: ['Playlist "Animes" criada sozinha com suas músicas de anime', 'Atualização baixa o APK novo e guarda uma cópia na pasta Downloads', 'Compartilhar o app (APK) direto pelo menu'],
+    en: ['Auto "Anime" playlist from your anime songs', 'Update downloads the APK and saves a copy to Downloads', 'Share the app (APK) from the menu'],
+    es: ['Lista "Animes" creada sola con tus canciones de anime', 'La actualización baja el APK y guarda una copia en Descargas', 'Compartir la app (APK) desde el menú']
+  },
+  '1.14': {
+    pt: ['Notificação na barra avisando quando o APK novo foi salvo'],
+    en: ['Notification when the new APK is ready'],
+    es: ['Notificación cuando el nuevo APK está listo']
+  },
+  '1.15': {
+    pt: ['Música pausa sozinha quando chega ligação ou áudio de WhatsApp', 'TAMI fala o nome da música que está tocando'],
+    en: ['Music pauses on incoming calls/WhatsApp audio', 'TAMI speaks the name of the playing track'],
+    es: ['La música pausa en llamadas/audio de WhatsApp', 'TAMI dice el nombre de la canción que suena']
+  },
+  '1.16': {
+    pt: ['Curiosidades de verdade sobre as bandas/artistas na voz da TAMI', 'Card "Fato do momento" na aba da TAMI'],
+    en: ['Real facts about bands/artists in TAMI\'s voice', '"Fact of the moment" card on the TAMI tab'],
+    es: ['Datos reales de las bandas/artistas en la voz de TAMI', 'Tarjeta "Dato del momento" en la pestaña de TAMI']
+  },
+  '1.17': {
+    pt: ['Corrige o "Armazenamento indisponível" — músicas voltam a carregar', 'Varredura mais confiável do celular'],
+    en: ['Fixes "Storage unavailable" — songs load again', 'More reliable phone scanning'],
+    es: ['Corrige "Almacenamiento no disponible" — las canciones vuelven a cargar', 'Escaneo del celular más fiable']
+  },
+  '1.18': {
+    pt: ['Corrige a música que pausava sozinha depois de 3 segundos', 'Pausa em ligação agora via estado da chamada do telefone'],
+    en: ['Fixes music that auto-paused after 3 seconds', 'Call pause now via phone call state'],
+    es: ['Corrige la música que pausaba sola a los 3 segundos', 'Pausa en llamadas ahora por el estado de la llamada']
+  },
+  '1.19': {
+    pt: ['🎧 A música continua tocando ao fechar o app (até tirando da lista de apps)', 'Controles de play/pausa/próxima na notificação e na tela bloqueada', 'Ao reabrir o app, ele retoma de onde parou', 'Músicas do registro de mídia que o Android não tocava'],
+    en: ['🎧 Music keeps playing when you close the app (even from recents)', 'Play/pause/next controls on the notification and lock screen', 'Reopening resumes where it stopped'],
+    es: ['🎧 La música sigue sonando al cerrar la app (incluso desde recientes)', 'Controles play/pausa/siguiente en la notificación y bloqueo', 'Al reabrir retoma donde paró']
+  },
+  '1.20': {
+    pt: ['Janela "Novidades" ao abrir o app depois de atualizar — mostra só o que mudou nesta versão', 'O aviso de atualização agora lista o que muda na nova versão'],
+    en: ['"What\'s new" dialog after updating — shows only this version\'s changes', 'The update notice now lists what changed in the new version'],
+    es: ['Diálogo "Novedades" al abrir tras actualizar — muestra solo lo de esta versión', 'El aviso de actualización ahora lista qué cambió en la nueva versión']
+  }
+};
+function changelogList(ver) {
+  const c = CHANGELOG[String(ver)];
+  if (!c) return [];
+  const arr = c[state.lang] || c.pt;
+  return Array.isArray(arr) ? arr : [];
+}
+function changelogHtml(ver) {
+  const list = changelogList(ver);
+  if (!list.length) return '';
+  return `<div class="section">✨ Novidades</div>` +
+    list.map((x) => `<div class="mrow" style="gap:10px;align-items:flex-start;padding:6px 0"><span style="color:var(--primary)">▶</span><div style="flex:1">${esc(x)}</div></div>`).join('');
+}
+function openWhatsNew(ver) {
+  const list = changelogList(ver);
+  $('modal').innerHTML = `<h3>✨ Novidades da TAMI ${esc(ver)}</h3>
+    <div class="section">${list.length ? list.map((x) => `<div class="mrow" style="gap:10px;align-items:flex-start;padding:8px 0"><span style="color:var(--primary)">▶</span><div style="flex:1">${esc(x)}</div></div>`).join('') : 'Sem detalhes para esta versão.'}</div>
+    <div id="modal-actions"><button class="btn" onclick="closeModal()">OK</button></div>`;
+  $('modal-wrap').classList.add('show');
+}
+async function maybeShowWhatsNew() {
+  try {
+    if (updateAvailable()) return;
+    const inst = installedVersion();
+    if (!inst) return;
+    let seen = '';
+    try { seen = (await getKV('lastSeenVer')) || ''; } catch (e) {}
+    if (!versionNewer(inst, seen)) return;
+    try { await putKV('lastSeenVer', inst); } catch (e) {}
+    if (changelogList(inst).length) openWhatsNew(inst);
+  } catch (e) {}
+}
 function showUpdateDialog() {
   if (!APK_INFO || !APK_INFO.ver || !APK_INFO.url || !updateAvailable()) return;
   try { if (localStorage.getItem('tami-update-seen') === APK_INFO.ver) return; } catch (e) {}
   const inst = installedVersion();
   $('modal').innerHTML = `<h3>🚀 Atualização disponível</h3>
     <div class="section">Saiu a TAMI <b>${esc(APK_INFO.ver)}</b> e a sua é a ${esc(inst || '?')}. Quer baixar e instalar agora?</div>
+    ${changelogHtml(APK_INFO.ver)}
     <div id="modal-actions">
       <button class="btn secondary" onclick="dismissUpdate()">Agora não</button>
       <button class="btn" onclick="closeModal();downloadApk()">⬇ Baixar e instalar</button>
