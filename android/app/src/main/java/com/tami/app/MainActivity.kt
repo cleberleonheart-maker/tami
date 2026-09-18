@@ -2,6 +2,10 @@ package com.tami.app
 
 import android.Manifest
 import android.annotation.SuppressLint
+import android.app.Notification
+import android.app.NotificationChannel
+import android.app.NotificationManager
+import android.app.PendingIntent
 import android.content.ContentUris
 import android.content.ContentValues
 import android.content.Intent
@@ -43,6 +47,14 @@ class MainActivity : AppCompatActivity() {
     private var pendingTtsLang: Locale? = null
     private var filePathCallback: ValueCallback<Array<Uri>>? = null
     private var pendingApk: File? = null
+    private var pendingNotifApk: File? = null
+
+    private val notifPermLauncher = registerForActivityResult(ActivityResultContracts.RequestPermission()) { granted ->
+        if (granted) {
+            pendingNotifApk?.let { notifyApkReady(it, null, false) }
+            pendingNotifApk = null
+        }
+    }
 
     private val fileChooserLauncher = registerForActivityResult(ActivityResultContracts.StartActivityForResult()) { result ->
         val callback = filePathCallback
@@ -225,8 +237,9 @@ class MainActivity : AppCompatActivity() {
                     }
                     conn.inputStream.use { input -> apk.outputStream().use { input.copyTo(it) } }
                     conn.disconnect()
-                    try { copyApkToDownloads(apk) } catch (e: Exception) {}
-                    runOnUiThread { installApk(apk) }
+                    var copyUri: Uri? = null
+                    try { copyUri = copyApkToDownloads(apk) } catch (e: Exception) {}
+                    runOnUiThread { installApk(apk); notifyApkReady(apk, copyUri) }
                 } catch (e: Exception) {
                     runOnUiThread { Toast.makeText(this@MainActivity, "Falha ao baixar: ${e.message}", Toast.LENGTH_LONG).show() }
                 }
@@ -260,6 +273,7 @@ class MainActivity : AppCompatActivity() {
                     addFlags(Intent.FLAG_GRANT_READ_URI_PERMISSION)
                 }
                 startActivity(Intent.createChooser(intent, "Compartilhar TAMI"))
+                runOnUiThread { notifyApkReady(src, uri, false) }
                 "ok"
             } catch (e: Exception) {
                 runOnUiThread { Toast.makeText(this@MainActivity, "Não foi possível abrir o compartilhamento.", Toast.LENGTH_SHORT).show() }
@@ -308,6 +322,54 @@ class MainActivity : AppCompatActivity() {
         } catch (e: Exception) {
             null
         }
+    }
+
+    @SuppressLint("MissingPermission")
+    private fun notifyApkReady(apk: File, contentUri: Uri? = null, requestPerm: Boolean = true) {
+        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.TIRAMISU) {
+            if (ContextCompat.checkSelfPermission(this, Manifest.permission.POST_NOTIFICATIONS) != PackageManager.PERMISSION_GRANTED) {
+                if (!requestPerm) return
+                pendingNotifApk = apk
+                notifPermLauncher.launch(Manifest.permission.POST_NOTIFICATIONS)
+                return
+            }
+        }
+        try {
+            val nm = getSystemService(NOTIFICATION_SERVICE) as NotificationManager
+            val chanId = "tami_apk"
+            if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.O) {
+                nm.createNotificationChannel(
+                    NotificationChannel(chanId, "Atualizações TAMI", NotificationManager.IMPORTANCE_HIGH)
+                        .apply { description = "Avisos sobre o APK da TAMI" }
+                )
+            }
+            val version = packageManager.getPackageInfo(packageName, 0).versionName
+            val install = Intent(Intent.ACTION_VIEW).apply {
+                setDataAndType(FileProvider.getUriForFile(this@MainActivity, "$packageName.fileprovider", apk), "application/vnd.android.package-archive")
+                addFlags(Intent.FLAG_ACTIVITY_NEW_TASK or Intent.FLAG_GRANT_READ_URI_PERMISSION)
+            }
+            val openPi = PendingIntent.getActivity(this, 0, install, PendingIntent.FLAG_IMMUTABLE or PendingIntent.FLAG_UPDATE_CURRENT)
+            val builder = if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.O) {
+                Notification.Builder(this, chanId)
+            } else {
+                @Suppress("DEPRECATION")
+                Notification.Builder(this)
+            }
+            builder.setSmallIcon(android.R.drawable.sym_def_app_icon)
+                .setContentTitle("TAMI v$version")
+                .setContentText("APK pronto — toque para instalar")
+                .setContentIntent(openPi)
+                .setAutoCancel(true)
+            val sharedUri = contentUri ?: FileProvider.getUriForFile(this@MainActivity, "$packageName.fileprovider", apk)
+            val shareIntent = Intent(Intent.ACTION_SEND).apply {
+                type = "application/vnd.android.package-archive"
+                putExtra(Intent.EXTRA_STREAM, sharedUri)
+                addFlags(Intent.FLAG_GRANT_READ_URI_PERMISSION)
+            }
+            val sharePi = PendingIntent.getActivity(this, 1, Intent.createChooser(shareIntent, "Compartilhar TAMI"), PendingIntent.FLAG_IMMUTABLE or PendingIntent.FLAG_UPDATE_CURRENT)
+            builder.addAction(android.R.drawable.sym_def_app_icon, "Compartilhar", sharePi)
+            nm.notify(201, builder.build())
+        } catch (e: Exception) {}
     }
 
     private fun installApk(apk: File) {
