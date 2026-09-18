@@ -54,7 +54,7 @@
   --blur: blur(18px) saturate(130%);
 }
 * { box-sizing: border-box; -webkit-tap-highlight-color: transparent; }
-html, body { margin: 0; padding: 0; height: 100%; }
+html, body { margin: 0; padding: 0; height: 100%; overflow-x: hidden; overscroll-behavior-x: none; }
 body {
   background:
     radial-gradient(1200px 600px at 12% -8%, rgba(0,229,255,.16), transparent 60%),
@@ -94,7 +94,8 @@ header {
 .tbtn:hover { color: var(--text); background: var(--surface-v); }
 
 /* Tabs */
-main { flex: 1; overflow-y: auto; padding-bottom: 8px; }
+main { flex: 1; overflow-y: auto; padding-bottom: 8px; overscroll-behavior-y: contain; touch-action: pan-y pinch-zoom; }
+input[type="range"] { touch-action: none; }
 .tab { display: none; }
 .tab.active { display: block; }
 
@@ -519,7 +520,14 @@ const state = {
 const $ = (id) => document.getElementById(id);
 const audio = $('audio'), video = $('video');
 const UNKNOWN = 'Desconhecido';
-const REMOTE = (location.protocol.startsWith('http') ? location.origin : '') || 'http://192.168.100.7:8081';
+let REMOTE = '';
+function getRemote() {
+  if (REMOTE) return REMOTE;
+  let saved = (() => { try { return localStorage.getItem('tami-remote') || ''; } catch (e) { return ''; } })().trim().replace(/\/+$/, '');
+  if (saved) return (REMOTE = /^https?:\/\//i.test(saved) ? saved : 'http://' + saved);
+  if (window.__COMPANION__) return (REMOTE = location.origin);
+  return (REMOTE = 'http://192.168.100.7:8081');
+}
 const VERSION_URL = 'https://cleberleonheart-maker.github.io/tami/version';
 
 // ---------- IndexedDB ----------
@@ -2543,7 +2551,7 @@ function phonePlaying() {
 }
 async function pollRemote() {
   try {
-    const r = await fetch(REMOTE + '/remote', { cache: 'no-store' });
+    const r = await fetch(getRemote() + '/remote', { cache: 'no-store' });
     if (!r.ok) throw new Error('!ok');
     const d = await r.json();
     state.phone.dev = d.dev || '';
@@ -2558,10 +2566,74 @@ async function pollRemote() {
 }
 async function sendCmd(cmd, value) {
   try {
-    await fetch(REMOTE + '/cmd', {
+    await fetch(getRemote() + '/cmd', {
       method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ cmd, value })
     });
   } catch (e) { toast('Sem conexão com o servidor do celular.'); }
+}
+function companionExec(cmd, value) {
+  try {
+    switch (cmd) {
+      case 'toggle': togglePlay(); break;
+      case 'next': pjNext(); break;
+      case 'prev': prev(); break;
+      case 'seek': {
+        const t = Math.max(0, (+value || 0) / 1000);
+        if (state.current && state.current.type === 'video') video.currentTime = t;
+        else audio.currentTime = t;
+        break;
+      }
+      case 'volume': {
+        const v = Math.min(100, Math.max(0, +value || 0)) / 100;
+        audio.volume = v; video.volume = v;
+        break;
+      }
+    }
+  } catch (e) {}
+}
+function companionState() {
+  const el = state.current && state.current.type === 'video' ? video : audio;
+  const cur = state.current ? {
+    id: state.current.id, title: state.current.title, artist: state.current.artist,
+    album: state.current.album, durationMs: state.current.durationMs
+  } : null;
+  return {
+    ts: Date.now() / 1000,
+    app: installedVersion() || '',
+    playing: !!(el && el.src && !el.paused),
+    current: cur,
+    positionMs: el && el.src ? Math.round((el.currentTime || 0) * 1000) : 0,
+    durationMs: el && el.src && el.duration ? Math.round(el.duration * 1000) : ((cur && cur.durationMs) || 0),
+    volume: Math.round((el && el.volume != null ? el.volume : 1) * 100),
+    queue: (state.queue || []).slice(0, 50).map((s) => ({ id: s.id, title: s.title, artist: s.artist, durationMs: s.durationMs }))
+  };
+}
+function publishState() {
+  if (!state.db) return;
+  try { fetch('/api/state', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ dev: state.nick || navigator.platform || 'PC', state: companionState() }) }).catch(() => {}); } catch (e) {}
+}
+async function probeCompanion() {
+  try {
+    const r = await fetch('/__companion__', { cache: 'no-store' });
+    if (!r.ok) return;
+    await r.json();
+    window.__COMPANION__ = true;
+    toast('Modo acompanhante ativo — aba Celular conectada.');
+    const es = new EventSource('/api/events');
+    es.onmessage = (ev) => { try { const m = JSON.parse(ev.data); if (m && m.cmd) companionExec(m.cmd, m.value); } catch (e) {} };
+    setInterval(publishState, 2500);
+    setTimeout(publishState, 1000);
+  } catch (e) {}
+}
+function phoneSet() {
+  let v = ($('phone-addr').value || '').trim().replace(/\/+$/, '');
+  if (!v) { toast('Digite o endereço do servidor.'); return; }
+  if (!/^https?:\/\//i.test(v)) v = 'http://' + v;
+  REMOTE = v;
+  try { localStorage.setItem('tami-remote', v); } catch (e) {}
+  toast('Servidor definido: ' + v);
+  $('phone-addr').value = v;
+  pollRemote();
 }
 function phonePlay() { sendCmd('toggle'); }
 function phonePrev() { sendCmd('prev'); }
@@ -2580,7 +2652,12 @@ function renderPhone() {
   const q = s.queue && s.queue.length ? s.queue : [];
   const songs = p.songs || [];
   let html = `<div class="phone-card">
-    <div class="phone-status">${phoneStatusLine()}</div>`;
+    <div class="phone-status">${phoneStatusLine()}</div>
+    <div style="display:flex;gap:6px;margin:10px 2px 6px">
+      <input id="phone-addr" value="${esc(getRemote())}" placeholder="http://seu-pc:8081" style="flex:1;min-width:0;padding:8px 10px;border:1px solid var(--border,#333);border-radius:10px;background:var(--bg2,#16161d);color:var(--text,#eee);font-size:13px">
+      <button class="btn" onclick="phoneSet()" style="flex:0">Conectar</button>
+    </div>
+    <div style="font-size:11px;color:var(--text2,#999);margin:-2px 2px 4px">Endereço do PC com o servidor acompanhante — ex.: <b>192.168.1.10:8081</b></div>`;
 
   if (cur) {
     const playing = phonePlaying();
@@ -2798,6 +2875,7 @@ function createFab() {
   };
   document.body.appendChild(fab);
 }
+probeCompanion();
 init();
 </script>
 </body>
