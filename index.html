@@ -2088,7 +2088,7 @@ function addLyrStyles() {
   const css = `#lyr-scroll{max-height:52vh;overflow-y:auto;padding:4px 2px;scroll-behavior:smooth}
   .lyr-col{display:flex;flex-direction:column;gap:2px}
   .lyr-line{padding:5px 10px;border-radius:10px;transition:all .25s;border-left:3px solid transparent}
-  .lyr-o{font-size:15px;line-height:1.4}.lyr-t{font-size:13px;opacity:.95;margin-top:2px;color:var(--primary,#22c55e);color:color-mix(in srgb,var(--primary,#22c55e) 62%,var(--text,#EAF6FF))}
+  .lyr-o{font-size:15px;line-height:1.4}.lyr-t{font-size:13px;opacity:.95;margin-top:2px;color:var(--text2,#9DB4D5)}
   .lyr-line.lyr-now{background:rgba(127,127,127,.16);background:color-mix(in srgb,var(--primary,#22c55e) 16%,transparent);border-left-color:var(--primary,#22c55e)}
   .lyr-line.lyr-now .lyr-o{font-weight:700;font-size:16px}`;
   const st = document.createElement('style'); st.id = 'lyr-css'; st.textContent = css; document.head.appendChild(st);
@@ -3859,6 +3859,11 @@ const CHANGELOG = {
     pt: ['Corrige a tradução das letras que ficava ilegível sobre o destaque azul: agora o destaque é azul clarinho e a tradução aparece num tom mais claro'],
     en: ['Fixes lyric translation being unreadable over the blue highlight: the highlight is now light blue and the translation shows in a lighter tone'],
     es: ['Corrige la traducción de letras ilegible sobre el resaltado azul: ahora el resaltado es azul claro y la traducción aparece en un tono más claro']
+  },
+  '1.27': {
+    pt: ['Tradução das letras agora num tom claro que sempre aparece, inclusive na linha destacada'],
+    en: ['Lyric translation now uses a light tone that always shows, even on the highlighted line'],
+    es: ['La traducción de letras ahora usa un tono claro que siempre se ve, incluso en la línea resaltada']
   }
 };
 function changelogList(ver) {
