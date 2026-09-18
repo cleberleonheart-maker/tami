@@ -1,0 +1,63 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="920" height="340" viewBox="0 0 920 340" font-family="Arial">
+  <rect width="920" height="340" fill="#150A24"/>
+  <defs>
+    <linearGradient id="grad" x1="0" y1="0" x2="1" y2="1">
+      <stop offset="0" stop-color="#FF6EC7"/>
+      <stop offset="1" stop-color="#7C4DFF"/>
+    </linearGradient>
+  </defs>
+
+  <text x="460" y="38" text-anchor="middle" fill="#ffd7f0" font-size="24" font-weight="bold">Escolha o ícone da TAMI</text>
+  <text x="460" y="62" text-anchor="middle" fill="#e9c8f5" font-size="16">Me diga "1", "2" ou "3" e eu transformo em ícone do APK + rebuild.</text>
+
+  <!-- OPÇÃO 1: mascote garota com fone e laço -->
+  <g transform="translate(24,78)">
+    <rect width="216" height="216" rx="46" fill="url(#grad)"/>
+    <circle cx="108" cy="114" r="40" fill="#FFF1FA"/>
+    <path d="M62 99 A50 50 0 0 1 154 99" fill="none" stroke="#2A0E33" stroke-width="12" stroke-linecap="round"/>
+    <circle cx="63" cy="118" r="16" fill="#2A0E33"/>
+    <circle cx="153" cy="118" r="16" fill="#2A0E33"/>
+    <circle cx="63" cy="118" r="7" fill="#FF6EC7"/>
+    <circle cx="153" cy="118" r="7" fill="#FF6EC7"/>
+    <ellipse cx="93" cy="112" rx="5.6" ry="7.6" fill="#2A0E33"/>
+    <ellipse cx="123" cy="112" rx="5.6" ry="7.6" fill="#2A0E33"/>
+    <circle cx="90" cy="109" r="2" fill="#fff"/>
+    <circle cx="120" cy="109" r="2" fill="#fff"/>
+    <ellipse cx="82" cy="123" rx="7" ry="4" fill="#FF77C2" opacity=".85"/>
+    <ellipse cx="134" cy="123" rx="7" ry="4" fill="#FF77C2" opacity=".85"/>
+    <path d="M98 127 C103 132 106 134 108 134 C110 134 113 132 118 127" fill="none" stroke="#2A0E33" stroke-width="3.4" stroke-linecap="round"/>
+    <path d="M115 66 L102 57 L102 75 Z" fill="#FF3FA4"/>
+    <path d="M115 66 L128 57 L128 75 Z" fill="#FF3FA4"/>
+    <circle cx="115" cy="66" r="5.6" fill="#FF1F8F"/>
+    <text x="108" y="242" text-anchor="middle" fill="#ffd7f0" font-size="17" font-weight="bold">1 — Mascote TAMI</text>
+  </g>
+
+  <!-- OPÇÃO 2: headphone com nota e laço -->
+  <g transform="translate(340,78)">
+    <rect width="216" height="216" rx="46" fill="url(#grad)"/>
+    <path d="M34.7 184 A78 78 0 1 1 181.3 184 L34.7 184 Z" fill="none"/>
+    <path d="M34.7 104 A78 78 0 1 1 181.3 104" fill="none" stroke="#2A0E33" stroke-width="30" stroke-linecap="round"/>
+    <circle cx="67" cy="54" r="26" fill="#2A0E33"/>
+    <circle cx="149" cy="54" r="26" fill="#2A0E33"/>
+    <circle cx="67" cy="54" r="12" fill="#FF6EC7"/>
+    <circle cx="149" cy="54" r="12" fill="#FF6EC7"/>
+    <ellipse cx="128" cy="178" rx="16" ry="11" fill="#fff" transform="rotate(-20 128 178)"/>
+    <path d="M134 172 L134 104" stroke="#fff" stroke-width="9" stroke-linecap="round"/>
+    <path d="M134 104 C150 112 152 128 143 138" fill="none" stroke="#fff" stroke-width="9" stroke-linecap="round"/>
+    <path d="M108 226 L94 214 L94 232 Z" fill="#FF3FA4"/>
+    <path d="M108 226 L122 214 L122 232 Z" fill="#FF3FA4"/>
+    <circle cx="108" cy="226" r="5.8" fill="#FF1F8F"/>
+    <text x="108" y="252" text-anchor="middle" fill="#ffd7f0" font-size="17" font-weight="bold">2 — Fone com nota</text>
+  </g>
+
+  <!-- OPÇÃO 3: refinado a partir do atual -->
+  <g transform="translate(656,78)">
+    <rect width="216" height="216" rx="46" fill="url(#grad)"/>
+    <rect x="34" y="34" width="148" height="148" rx="44" fill="#2A0E33"/>
+    <rect x="88" y="60" width="40" height="96" rx="20" fill="#fff"/>
+    <rect x="60" y="88" width="96" height="40" rx="20" fill="#fff"/>
+    <circle cx="133" cy="181" r="24" fill="#2A0E33"/>
+    <circle cx="133" cy="181" r="8" fill="#FF6EC7"/>
+    <text x="108" y="252" text-anchor="middle" fill="#ffd7f0" font-size="17" font-weight="bold">3 — Refinado</text>
+  </g>
+</svg>
