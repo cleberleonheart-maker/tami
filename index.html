@@ -13,19 +13,30 @@
 <link rel="apple-touch-icon" href="icon.svg">
 <style>
 :root {
-  --bg: #121212;
-  --surface: #1E1E1E;
-  --surface-v: #2A2A2A;
-  --primary: #B388FF;
-  --primary-dark: #7C4DFF;
-  --text: #E8E8E8;
-  --text2: #9E9E9E;
-  --divider: #2E2E2E;
+  --bg: #0B0F2A;
+  --surface: rgba(20,26,58,.55);
+  --surface-v: rgba(28,35,74,.35);
+  --surface-solid: #141A3A;
+  --primary: #00E5FF;
+  --primary-dark: #0088CC;
+  --secondary: #FF2FD6;
+  --tertiary: #B388FF;
+  --text: #EAF6FF;
+  --text2: #9DB4D5;
+  --divider: rgba(0,229,255,.14);
+  --glass-b: rgba(255,255,255,.06);
+  --glow: 0 0 14px rgba(0,229,255,.55);
+  --glow-soft: 0 0 8px rgba(0,229,255,.28);
+  --blur: blur(18px) saturate(130%);
 }
 * { box-sizing: border-box; -webkit-tap-highlight-color: transparent; }
 html, body { margin: 0; padding: 0; height: 100%; }
 body {
-  background: var(--bg);
+  background:
+    radial-gradient(1200px 600px at 12% -8%, rgba(0,229,255,.16), transparent 60%),
+    radial-gradient(1100px 700px at 108% 16%, rgba(255,47,214,.15), transparent 60%),
+    radial-gradient(900px 620px at 48% 108%, rgba(179,136,255,.14), transparent 62%),
+    var(--bg);
   color: var(--text);
   font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif;
   overflow: hidden;
@@ -269,6 +280,57 @@ html.light #drop-overlay { background: rgba(124,77,255,.15); color: var(--primar
   color: var(--primary); cursor: pointer; font-size: 13px; font-weight: 700;
   padding: 6px; display: inline-flex; align-items: center; gap: 6px;
 }
+</style>
+<style id="redesign-futuro">
+/* Futurista sci-fi: fundo em grade neon animado + glassmorphism neon em todos os painéis Virgin Virgin */
+:root {
+  --redesign-glow: #00E5FF;
+  --redesign-glow2: #FF2FD6;
+}
+body::before {
+  content: ''; position: fixed; inset: 0; z-index: -1; pointer-events: none;
+  background:
+    radial-gradient(1200px 800px at 110% -10%, rgba(0,229,255,.18), transparent 55%),
+    radial-gradient(1000px 700px at -10% 110%, rgba(255,47,214,.16), transparent 55%),
+    radial-gradient(700px 500px at 60% 6%, rgba(179,136,255,.12), transparent 60%);
+}
+body::after {
+  content: ''; position: fixed; inset: 0; z-index: -1; pointer-events: none;
+  background-image:
+    linear-gradient(rgba(0,229,255,.05) 1px, transparent 1px),
+    linear-gradient(90deg, rgba(0,229,255,.05) 1px, transparent 1px);
+  background-size: 38px 38px; mask-image: radial-gradient(ellipse at center, #000 30%, transparent 78%);
+}
+.v-grid, .list, .alb-grid, .grid {
+  backdrop-filter: blur(10px) saturate(140%);
+}
+.v-card, .item, .mrow, .empty, .section {
+  background: rgba(20,26,58,.5) !important;
+  border: 1px solid rgba(0,229,255,.14) !important;
+  backdrop-filter: blur(12px) saturate(150%);
+}
+.v-card {
+  transition: transform .18s ease, box-shadow .2s ease, border-color .2s ease;
+}
+.v-card:hover, .item:hover, .mrow:hover {
+  border-color: rgba(0,229,255,.55) !important;
+  box-shadow: 0 0 24px rgba(0,229,255,.25), inset 0 0 12px rgba(0,229,255,.08);
+  transform: translateY(-2px);
+}
+.v-card.on { border-color: #FF2FD6 !important; box-shadow: 0 0 26px rgba(255,47,214,.4); }
+.grad-a { background: linear-gradient(135deg,#FF2FD6,#7C4DFF) !important; }
+.grad-b { background: linear-gradient(135deg,#00E5FF,#0088FF) !important; }
+.grad-c { background: linear-gradient(135deg,#30FFC0,#00B8D9) !important; }
+.grad-d { background: linear-gradient(135deg,#FF9E2C,#FF2FD6) !important; }
+.grad-e { background: linear-gradient(135deg,#B388FF,#FF2FD6) !important; }
+.v-ic { filter: drop-shadow(0 0 10px rgba(0,229,255,.5)); }
+.it-title, .v-l, .it-title { text-shadow: 0 0 16px rgba(0,229,255,.35); }
+.empty .big { text-shadow: 0 0 40px rgba(0,229,255,.7); }
+@keyframes redes-futuro-flut {
+  0%,100% { transform: translateY(0) rotate(0deg); }
+  50% { transform: translateY(-3px) rotate(1.5deg); }
+}
+.v-ic { animation: redes-futuro-flut 3.5s ease-in-out infinite; }
 </style>
 </head>
 <body>
