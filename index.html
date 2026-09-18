@@ -828,6 +828,8 @@ const I18N = {
   novLatest: { pt: 'Versão mais recente no GitHub', en: 'Latest version on GitHub', es: 'Versión más reciente en GitHub' },
   novInstalled: { pt: 'Instalada: {v}', en: 'Installed: {v}', es: 'Instalada: {v}' },
   novNone: { pt: 'Nada de novo por aqui 😊', en: 'Nothing new here 😊', es: 'Nada nuevo por aquí 😊' },
+  novLatestTitle: { pt: 'Você já está na última versão 🎉', en: "You're already on the latest version 🎉", es: 'Ya tienes la última versión 🎉' },
+  novLatestSub: { pt: 'A TAMI está toda atualizada — não há nada novo para baixar.', en: 'TAMI is fully up to date — nothing new to download.', es: 'TAMI está totalmente actualizada — no hay nada nuevo que descargar.' },
   novProgress: { pt: 'Buscando novidades de versão…', en: 'Checking for updates…', es: 'Buscando novedades de versión…' },
   noGitHub: { pt: 'Sem conexão com o GitHub', en: 'No connection to GitHub', es: 'Sin conexión con GitHub' },
   recTitle: { pt: '🎯 Recomendadas pela TAMI', en: '🎯 Recommended by TAMI', es: '🎯 Recomendadas por TAMI' },
@@ -4063,7 +4065,13 @@ async function checkNovidades() {
         <div id="modal-actions"><button class="btn secondary" onclick="closeModal()">Fechar</button></div>`;
       $('modal-wrap').classList.add('show');
     } else {
-      toast('Nada de novo por aqui 😊');
+      const inst = installedVersion() || APK_INFO.ver;
+      const list = $('modal');
+      list.innerHTML = `<h3>✅ ${L('novLatestTitle')}</h3>
+        <div class="section">${L('novLatestSub')}</div>
+        <div class="mrow"><span class="art grad-c">🎉</span><div class="mid"><div class="it-title">${esc(inst)}</div><div class="it-sub">${L('novLatest')}</div></div></div>
+        <div id="modal-actions"><button class="btn secondary" onclick="closeModal()">${L('btnClose')}</button></div>`;
+      $('modal-wrap').classList.add('show');
     }
   } catch (e) { toast('Sem conexão com o GitHub'); }
 }
