@@ -2,12 +2,16 @@ package com.tami.app
 
 import android.Manifest
 import android.annotation.SuppressLint
+import android.content.ContentUris
 import android.content.Intent
 import android.content.pm.PackageManager
 import android.net.Uri
 import android.os.Build
 import android.os.Bundle
+import android.os.ParcelFileDescriptor
+import android.provider.MediaStore
 import android.provider.Settings
+import android.speech.tts.TextToSpeech
 import android.webkit.JavascriptInterface
 import android.webkit.PermissionRequest
 import android.webkit.ValueCallback
@@ -27,10 +31,12 @@ import androidx.webkit.WebViewAssetLoader
 import java.io.File
 import java.net.HttpURLConnection
 import java.net.URL
+import java.util.Locale
 
 class MainActivity : AppCompatActivity() {
 
     private lateinit var webView: WebView
+    private lateinit var tts: TextToSpeech
     private var filePathCallback: ValueCallback<Array<Uri>>? = null
     private var pendingApk: File? = null
 
@@ -56,6 +62,77 @@ class MainActivity : AppCompatActivity() {
             packageManager.getPackageInfo(packageName, 0).versionName ?: ""
         } catch (e: Exception) {
             ""
+        }
+
+        @JavascriptInterface
+        fun speak(text: String) {
+            runOnUiThread {
+                try {
+                    if (!::tts.isInitialized || tts.isSpeaking) tts.stop()
+                    tts.speak(text, TextToSpeech.QUEUE_FLUSH, null, "tami")
+                } catch (e: Exception) {}
+            }
+        }
+
+        @JavascriptInterface
+        fun stopSpeaking() {
+            runOnUiThread { try { if (::tts.isInitialized) tts.stop() } catch (e: Exception) {} }
+        }
+
+        @JavascriptInterface
+        fun scanMusic(): String {
+            if (!hasReadPermission()) {
+                runOnUiThread { requestReadPermission() }
+                return "[]"
+            }
+            return try {
+                val out = StringBuilder("[")
+                var first = true
+                val projection = arrayOf(
+                    MediaStore.Audio.Media._ID,
+                    MediaStore.Audio.Media.TITLE,
+                    MediaStore.Audio.Media.ARTIST,
+                    MediaStore.Audio.Media.ALBUM,
+                    MediaStore.Audio.Media.DURATION
+                )
+                val sort = MediaStore.Audio.Media.TITLE + " COLLATE NOCASE ASC"
+                contentResolver.query(MediaStore.Audio.Media.EXTERNAL_CONTENT_URI, projection, null, null, sort)
+                    ?.use { cur ->
+                        val idC = cur.getColumnIndexOrThrow(MediaStore.Audio.Media._ID)
+                        val tC = cur.getColumnIndexOrThrow(MediaStore.Audio.Media.TITLE)
+                        val aC = cur.getColumnIndexOrThrow(MediaStore.Audio.Media.ARTIST)
+                        val bC = cur.getColumnIndexOrThrow(MediaStore.Audio.Media.ALBUM)
+                        val dC = cur.getColumnIndexOrThrow(MediaStore.Audio.Media.DURATION)
+                        while (cur.moveToNext()) {
+                            val id = cur.getLong(idC)
+                            val uri = ContentUris.withAppendedId(MediaStore.Audio.Media.EXTERNAL_CONTENT_URI, id).toString()
+                            val n = jsEsc(cur.getString(tC) ?: "")
+                            val a = jsEsc(cur.getString(aC) ?: "")
+                            val b = jsEsc(cur.getString(bC) ?: "")
+                            val d = cur.getLong(dC)
+                            if (!first) out.append(",")
+                            first = false
+                            out.append("{\"n\":$n,\"a\":$a,\"b\":$b,\"d\":$d,\"u\":\"$uri\"}")
+                        }
+                    }
+                out.append("]")
+                out.toString()
+            } catch (e: Exception) { "[]" }
+        }
+
+        private fun jsEsc(s: String): String {
+            val sb = StringBuilder("\"")
+            for (c in s) {
+                when (c) {
+                    '"' -> sb.append("\\\"")
+                    '\\' -> sb.append("\\\\")
+                    '\n' -> sb.append("\\n")
+                    '\r' -> sb.append("\\r")
+                    '\t' -> sb.append("\\t")
+                    else -> if (c.code < 0x20) sb.append("\\u%04x".format(c.code)) else sb.append(c)
+                }
+            }
+            return sb.append("\"").toString()
         }
 
         @JavascriptInterface
@@ -119,9 +196,60 @@ class MainActivity : AppCompatActivity() {
         }
     }
 
+    private fun hasReadPermission(): Boolean = if (Build.VERSION.SDK_INT >= 33) {
+        ContextCompat.checkSelfPermission(this, Manifest.permission.READ_MEDIA_AUDIO) == PackageManager.PERMISSION_GRANTED
+    } else {
+        ContextCompat.checkSelfPermission(this, Manifest.permission.READ_EXTERNAL_STORAGE) == PackageManager.PERMISSION_GRANTED
+    }
+
+    private fun requestReadPermission() {
+        val perm = if (Build.VERSION.SDK_INT >= 33) Manifest.permission.READ_MEDIA_AUDIO else Manifest.permission.READ_EXTERNAL_STORAGE
+        ActivityCompat.requestPermissions(this, arrayOf(perm), 2)
+    }
+
+    private fun serveContent(uri: Uri, rangeHeader: String?): WebResourceResponse? {
+        return try {
+            val mime = contentResolver.getType(uri) ?: "application/octet-stream"
+            val pfd = contentResolver.openFileDescriptor(uri, "r") ?: return null
+            val total = pfd.statSize
+            val stream = ParcelFileDescriptor.AutoCloseInputStream(pfd)
+            if (rangeHeader != null && total > 0) {
+                val m = Regex("bytes=(\\d+)-(\\d*)").find(rangeHeader)
+                if (m != null) {
+                    val start = m.groupValues[1].toLong()
+                    var end = if (m.groupValues[2].isNotEmpty()) m.groupValues[2].toLong() else total - 1
+                    if (end >= total) end = total - 1
+                    if (start < total && start <= end) {
+                        stream.skip(start)
+                        val len = end - start + 1
+                        val headers = mapOf(
+                            "Accept-Ranges" to "bytes",
+                            "Content-Range" to "bytes $start-$end/$total",
+                            "Content-Length" to len.toString()
+                        )
+                        return WebResourceResponse(mime, "utf-8", 206, "Partial Content", headers, stream)
+                    }
+                }
+            }
+            val headers = mapOf("Accept-Ranges" to "bytes", "Content-Length" to total.toString())
+            WebResourceResponse(mime, "utf-8", 200, "OK", headers, stream)
+        } catch (e: Exception) {
+            null
+        }
+    }
+
     @SuppressLint("SetJavaScriptEnabled")
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
+
+        tts = TextToSpeech(this) { status ->
+            if (status == TextToSpeech.SUCCESS) {
+                val res = tts.setLanguage(Locale("pt", "BR"))
+                if (res == TextToSpeech.LANG_MISSING_DATA || res == TextToSpeech.LANG_NOT_SUPPORTED) {
+                    tts.setLanguage(Locale.getDefault())
+                }
+            }
+        }
 
         if (ContextCompat.checkSelfPermission(this, Manifest.permission.RECORD_AUDIO) != PackageManager.PERMISSION_GRANTED) {
             ActivityCompat.requestPermissions(this, arrayOf(Manifest.permission.RECORD_AUDIO), 1)
@@ -147,7 +275,11 @@ class MainActivity : AppCompatActivity() {
 
         webView.webViewClient = object : WebViewClient() {
             override fun shouldInterceptRequest(view: WebView, request: WebResourceRequest): WebResourceResponse? {
-                return assetLoader.shouldInterceptRequest(request.url)
+                val url = request.url
+                if (url.scheme == "content") {
+                    return serveContent(url, request.requestHeaders?.get("Range"))
+                }
+                return assetLoader.shouldInterceptRequest(url)
             }
 
             override fun shouldOverrideUrlLoading(view: WebView, request: WebResourceRequest): Boolean {
@@ -201,6 +333,11 @@ class MainActivity : AppCompatActivity() {
     override fun onSaveInstanceState(outState: Bundle) {
         super.onSaveInstanceState(outState)
         webView.saveState(outState)
+    }
+
+    override fun onDestroy() {
+        super.onDestroy()
+        try { if (::tts.isInitialized) tts.shutdown() } catch (e: Exception) {}
     }
 
     @Deprecated("Deprecated in Java")

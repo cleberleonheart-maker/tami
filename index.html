@@ -11,6 +11,30 @@
 <link rel="manifest" href="manifest.json">
 <link rel="icon" href="icon.svg" type="image/svg+xml">
 <link rel="apple-touch-icon" href="icon.svg">
+<script>
+(function(){
+  function show(msg){
+    try{
+      var d=document.createElement('div');
+      d.setAttribute('id','boot-err');
+      d.style.cssText='position:fixed;left:0;right:0;top:0;z-index:9999;background:#7a0a0a;color:#fff;padding:8px 12px;font:11px monospace;white-space:pre-wrap;word-break:break-all';
+      d.textContent=msg;
+      (document.body||document.documentElement).appendChild(d);
+    }catch(e){}
+  }
+  window.addEventListener('error',function(ev){
+    show('TAMI erro: '+(ev.message||'?')+(ev.filename?(' @ '+(ev.filename.split('/').pop())+' '+(ev.lineno||'?')+':'+(ev.colno||'?')):''));
+  });
+  window.addEventListener('unhandledrejection',function(ev){
+    var r=ev.reason; show('TAMI promessa: '+(r&&r.message?r.message:String(r)));
+  });
+  window.addEventListener('DOMContentLoaded',function(){
+    setTimeout(function(){
+      try{ if(window.__tamiBooted) return; show('TAMI: app nao terminou de carregar. WebView: '+(navigator.userAgent||'?')); }catch(e){}
+    },8000);
+  });
+})();
+</script>
 <style>
 :root {
   --bg: #0B0F2A;
@@ -501,34 +525,65 @@ const VERSION_URL = 'https://cleberleonheart-maker.github.io/tami/version';
 // ---------- IndexedDB ----------
 function openDB() {
   return new Promise((resolve, reject) => {
-    const req = indexedDB.open('tami-app', 1);
-    req.onupgradeneeded = (e) => {
-      const db = e.target.result;
-      if (!db.objectStoreNames.contains('songs')) db.createObjectStore('songs', { keyPath: 'id' });
-      if (!db.objectStoreNames.contains('videos')) db.createObjectStore('videos', { keyPath: 'id' });
-      if (!db.objectStoreNames.contains('playlists')) db.createObjectStore('playlists', { keyPath: 'id' });
-      if (!db.objectStoreNames.contains('kv')) db.createObjectStore('kv');
-    };
-    req.onsuccess = () => resolve(req.result);
-    req.onerror = () => reject(req.error);
+    const t = setTimeout(() => resolve(null), 3000);
+    try {
+      const req = indexedDB.open('tami-app', 1);
+      req.onupgradeneeded = (e) => {
+        const db = e.target.result;
+        if (!db.objectStoreNames.contains('songs')) db.createObjectStore('songs', { keyPath: 'id' });
+        if (!db.objectStoreNames.contains('videos')) db.createObjectStore('videos', { keyPath: 'id' });
+        if (!db.objectStoreNames.contains('playlists')) db.createObjectStore('playlists', { keyPath: 'id' });
+        if (!db.objectStoreNames.contains('kv')) db.createObjectStore('kv');
+      };
+      req.onsuccess = () => { clearTimeout(t); resolve(req.result); };
+      req.onerror = () => { clearTimeout(t); reject(req.error); };
+    } catch (e) { clearTimeout(t); reject(e); }
   });
 }
 function tx(store, mode) { return state.db.transaction(store, mode).objectStore(store); }
 function getAll(store) {
   if (!state.db) return Promise.resolve([]);
-  return new Promise((res, rej) => { const r = tx(store).getAll(); r.onsuccess = () => res(r.result || []); r.onerror = () => rej(r.error); });
+  return new Promise((res, rej) => {
+    const t = setTimeout(() => res([]), 3000);
+    try {
+      const r = tx(store).getAll();
+      r.onsuccess = () => { clearTimeout(t); res(r.result || []); };
+      r.onerror = () => { clearTimeout(t); rej(r.error); };
+    } catch (e) { clearTimeout(t); rej(e); }
+  });
 }
 function putKV(k, v) {
   if (!state.db) return Promise.resolve();
-  return new Promise((res, rej) => { const r = tx('kv', 'readwrite').put(v, k); r.onsuccess = () => res(); r.onerror = () => rej(r.error); });
+  return new Promise((res, rej) => {
+    const t = setTimeout(() => res(), 3000);
+    try {
+      const r = tx('kv', 'readwrite').put(v, k);
+      r.onsuccess = () => { clearTimeout(t); res(); };
+      r.onerror = () => { clearTimeout(t); rej(r.error); };
+    } catch (e) { clearTimeout(t); rej(e); }
+  });
 }
 function getKV(k) {
   if (!state.db) return Promise.resolve(undefined);
-  return new Promise((res) => { const r = tx('kv').get(k); r.onsuccess = () => res(r.result); r.onerror = () => res(undefined); });
+  return new Promise((res) => {
+    const t = setTimeout(() => res(undefined), 3000);
+    try {
+      const r = tx('kv').get(k);
+      r.onsuccess = () => { clearTimeout(t); res(r.result); };
+      r.onerror = () => { clearTimeout(t); res(undefined); };
+    } catch (e) { clearTimeout(t); res(undefined); }
+  });
 }
 function clearStore(store) {
   if (!state.db) return Promise.resolve();
-  return new Promise((res, rej) => { const r = tx(store, 'readwrite').clear(); r.onsuccess = () => res(); r.onerror = () => rej(r.error); });
+  return new Promise((res, rej) => {
+    const t = setTimeout(() => res(), 3000);
+    try {
+      const r = tx(store, 'readwrite').clear();
+      r.onsuccess = () => { clearTimeout(t); res(); };
+      r.onerror = () => { clearTimeout(t); rej(r.error); };
+    } catch (e) { clearTimeout(t); rej(e); }
+  });
 }
 
 // ---------- Util ----------
@@ -1271,7 +1326,11 @@ function pickDjVoice(u) {
   if (pick) { u.voice = pick; u.lang = pick.lang; }
 }
 async function djSpeak(text) {
-  if (!state.djVoice || !('speechSynthesis' in window) || !text) return;
+  if (!state.djVoice || !text) return;
+  try {
+    if (window.TamiNative && window.TamiNative.speak) { window.TamiNative.speak(text); return; }
+  } catch (e) {}
+  if (!('speechSynthesis' in window)) return;
   try {
     await djWaitVoices();
     speechSynthesis.cancel();
@@ -2152,6 +2211,7 @@ function renderVirgin() {
       <div class="v-card ${state.radio ? 'on' : ''}" onclick="tamiRadio()"><div class="v-ic">📻</div><div class="v-l">Rádio</div><div class="v-s">${state.radio ? 'No ar' : 'TAMI FM'}</div></div>
       <div class="v-card" onclick="tamiStats()"><div class="v-ic">📊</div><div class="v-l">Estatísticas</div><div class="v-s">Seu ranking</div></div>
       <div class="v-card" onclick="tamiRecomenda()"><div class="v-ic">🎯</div><div class="v-l">Recomenda</div><div class="v-s">Escolhas da TAMI</div></div>
+      <div class="v-card" onclick="scanDeviceMusic()"><div class="v-ic">📂</div><div class="v-l">Localizar</div><div class="v-s">Músicas do aparelho</div></div>
     </div>`;
   if (!hasSongs) {
     html += `<div class="empty"><div class="big">🎧</div>A TAMI precisa de músicas para tocar.<br><button class="btn" onclick="$('fileSongs').click()">＋ Importar músicas</button></div>`;
@@ -2603,14 +2663,14 @@ function startPhonePoll() {
 
 // ---------- Boot ----------
 async function reloadAll() {
-  state.songs = await getAll('songs');
-  state.videos = await getAll('videos');
-  state.playlists = await getAll('playlists');
+  try { state.songs = await getAll('songs'); } catch (e) { state.songs = []; }
+  try { state.videos = await getAll('videos'); } catch (e) { state.videos = []; }
+  try { state.playlists = await getAll('playlists'); } catch (e) { state.playlists = []; }
   buildAlbums();
   renderAll();
 }
 async function init() {
-  registerTabs();
+  try { registerTabs(); } catch (e) { console.warn('tabs', e); }
   try {
     state.db = await openDB();
   } catch (e) {
@@ -2619,48 +2679,54 @@ async function init() {
     if (!$('toast').classList.contains('show')) toast('Armazenamento indisponível — não será possível salvar músicas.');
   }
   await reloadAll();
-  const favs = await getKV('favs');
-  if (favs) state.favs = new Set(favs);
-  const learn = await getKV('learn');
-  if (learn) state.learn = learn;
-  const nick = await getKV('nick');
-  if (nick) { state.nick = nick; $('profile-avatar').textContent = initials(nick); }
-  const theme = await getKV('theme');
-  if (theme) { state.theme = theme; applyTheme(); }
-  const visStyle = await getKV('visStyle');
-  if (visStyle && VIS_STYLES.includes(visStyle)) {
-    state.visStyle = visStyle;
-    const vb = $('vis-style'); if (vb) vb.textContent = VIS_ICONS[visStyle];
-  }
-  const amb = await getKV('amb');
-  if (amb) { state.amb = Object.assign(state.amb, amb); state.amb.playing = false; }
-  const idx = await getKV('lastSong');
-  if (idx && state.songs.length) {
-    const i = state.songs.findIndex((s) => s.id === idx.id);
-    if (i >= 0) {
-      state.queue = state.songs.slice(i).concat(state.songs.slice(0, i));
-      state.queueIndex = 0;
-      playCurrent(); syncMini();
+  try {
+    const favs = await getKV('favs');
+    if (favs) state.favs = new Set(favs);
+    const learn = await getKV('learn');
+    if (learn) state.learn = learn;
+    const nick = await getKV('nick');
+    if (nick) { state.nick = nick; $('profile-avatar').textContent = initials(nick); }
+    const theme = await getKV('theme');
+    if (theme) { state.theme = theme; applyTheme(); }
+    const visStyle = await getKV('visStyle');
+    if (visStyle && VIS_STYLES.includes(visStyle)) {
+      state.visStyle = visStyle;
+      const vb = $('vis-style'); if (vb) vb.textContent = VIS_ICONS[visStyle];
     }
-  }
-  renderAll();
-  startPhonePoll();
-  if (navigator.serviceWorker && navigator.serviceWorker.register) {
-    navigator.serviceWorker.register('sw.js').catch(() => {});
-  }
+    const amb = await getKV('amb');
+    if (amb) { state.amb = Object.assign(state.amb, amb); state.amb.playing = false; }
+    const idx = await getKV('lastSong');
+    if (idx && state.songs.length) {
+      const i = state.songs.findIndex((s) => s.id === idx.id);
+      if (i >= 0) {
+        state.queue = state.songs.slice(i).concat(state.songs.slice(0, i));
+        state.queueIndex = 0;
+        playCurrent(); syncMini();
+      }
+    }
+  } catch (e) { console.warn('restore', e); }
+  try { renderAll(); } catch (e) { console.warn('render', e); }
+  try { startPhonePoll(); } catch (e) {}
+  try {
+    if (navigator.serviceWorker && navigator.serviceWorker.register) {
+      navigator.serviceWorker.register('sw.js').catch(() => {});
+    }
+  } catch (e) {}
   document.addEventListener('pointerdown', function djWelcome() {
     if (state.djVoice) djSpeak('Bem-vindo(a)! Eu sou a TAMI, sua DJ virtual.');
   }, { once: true, passive: true });
   document.addEventListener('pointerdown', () => { ensureVis(); }, { passive: true });
-  startVis();
+  try { startVis(); } catch (e) {}
   if (window.TamiNative) {
     loadApkInfo().then(() => {
       if (updateAvailable()) {
         toast('Atualização da TAMI ' + APK_INFO.ver + ' disponível!');
         setTimeout(showUpdateDialog, 1500);
       }
-    });
+    }).catch(() => {});
   }
+  window.__tamiBooted = true;
+  renderVirgin();
 }
 function registerTabs() {
   $('fileSongs').onchange = (e) => { if (e.target.files.length) importFiles([...e.target.files], 'song'); e.target.value = ''; };
@@ -2685,6 +2751,33 @@ function registerTabs() {
   // Bus topology: um único botão de importação flutuante
   createFab();
 }
+async function scanDeviceMusic() {
+  if (!(window.TamiNative && window.TamiNative.scanMusic)) { toast('Localização automática disponível no app Android.'); return; }
+  if (!state.db) { toast('Armazenamento indisponível.'); return; }
+  toast('Lendo músicas do aparelho…');
+  let list;
+  try { list = JSON.parse(window.TamiNative.scanMusic()) || []; } catch (e) { list = []; }
+  if (!list.length) { toast('Nenhuma música encontrada — se o app pediu permissão, permita e toque de novo.'); return; }
+  const existing = new Set(state.songs.map((s) => s.url).filter(Boolean));
+  let added = 0;
+  for (const m of list) {
+    if (existing.has(m.u)) continue;
+    existing.add(m.u);
+    try {
+      await putSong({
+        id: 'l' + seedHash(m.u).toString(36) + '-' + Math.random().toString(36).slice(2, 8),
+        title: m.n || 'Música', artist: m.a || 'Artista desconhecido',
+        album: m.b || UNKNOWN, year: new Date().getFullYear(),
+        durationMs: m.d || 0, type: 'song', url: m.u,
+        name: (m.n || 'Música') + '.mp3', createdAt: Date.now()
+      });
+      added++;
+    } catch (e) { console.warn('scan', e); }
+  }
+  await reloadAll();
+  if (added) buildAlbums();
+  toast(added ? `Localizadas ${added} músicas no aparelho.` : 'Músicas do aparelho já estão todas aqui.');
+}
 function createFab() {
   const fab = document.createElement('button');
   fab.id = 'fab';
@@ -2694,6 +2787,7 @@ function createFab() {
     const list = $('modal');
     list.innerHTML = `<h3>Importar mídia</h3>
       <div class="mrow" onclick="importPrompt()"><span class="art grad-e">♪</span><div class="mid"><div class="it-title">Músicas</div><div class="it-sub">Selecionar arquivos de áudio</div></div></div>
+      <div class="mrow" onclick="scanDeviceMusic()"><span class="art grad-d">📂</span><div class="mid"><div class="it-title">Músicas do aparelho</div><div class="it-sub">Ler tudo automaticamente (Android)</div></div></div>
       <div class="mrow" onclick="$('fileVideos').click()"><span class="art grad-c">▷</span><div class="mid"><div class="it-title">Vídeos</div><div class="it-sub">Selecionar arquivos de vídeo</div></div></div>
       <div class="mrow" onclick="pickFolder()"><span class="art grad-b">📁</span><div class="mid"><div class="it-title">Pasta inteira</div><div class="it-sub">Chrome/Edge no Windows</div></div></div>
       <div class="mrow" onclick="pickNovidades()"><span class="art grad-b">🔎</span><div class="mid"><div class="it-title">Buscar novidades na pasta</div><div class="it-sub">Reler a pasta e importar só o que é novo</div></div></div>
