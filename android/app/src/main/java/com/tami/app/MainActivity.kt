@@ -28,6 +28,9 @@ import android.webkit.WebSettings
 import android.webkit.WebView
 import android.webkit.WebViewClient
 import android.widget.Toast
+import android.media.AudioAttributes
+import android.media.AudioFocusRequest
+import android.media.AudioManager
 import androidx.activity.result.contract.ActivityResultContracts
 import androidx.appcompat.app.AppCompatActivity
 import androidx.core.app.ActivityCompat
@@ -48,6 +51,23 @@ class MainActivity : AppCompatActivity() {
     private var filePathCallback: ValueCallback<Array<Uri>>? = null
     private var pendingApk: File? = null
     private var pendingNotifApk: File? = null
+    private var audioFocusRequest: AudioFocusRequest? = null
+    private var interruptedByFocus = false
+    private val audioManager by lazy { getSystemService(AUDIO_SERVICE) as AudioManager }
+    private val focusListener = AudioManager.OnAudioFocusChangeListener { change ->
+        when (change) {
+            AudioManager.AUDIOFOCUS_LOSS, AudioManager.AUDIOFOCUS_LOSS_TRANSIENT -> {
+                interruptedByFocus = true
+                runOnUiThread { try { webView.evaluateJavascript("window.pauseForInterruption&&window.pauseForInterruption();", null) } catch (e: Exception) {} }
+            }
+            AudioManager.AUDIOFOCUS_GAIN -> {
+                if (interruptedByFocus) {
+                    interruptedByFocus = false
+                    runOnUiThread { try { webView.evaluateJavascript("window.resumeFromInterruption&&window.resumeFromInterruption();", null) } catch (e: Exception) {} }
+                }
+            }
+        }
+    }
 
     private val notifPermLauncher = registerForActivityResult(ActivityResultContracts.RequestPermission()) { granted ->
         if (granted) {
@@ -280,6 +300,11 @@ class MainActivity : AppCompatActivity() {
                 "error"
             }
         }
+
+        @JavascriptInterface
+        fun audioFocus(mode: String) {
+            if (mode == "play") requestMusicFocus() else abandonMusicFocus()
+        }
     }
 
     private fun copyApkToDownloads(src: File): Uri? {
@@ -322,6 +347,38 @@ class MainActivity : AppCompatActivity() {
         } catch (e: Exception) {
             null
         }
+    }
+
+    private fun requestMusicFocus() {
+        try {
+            if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.O) {
+                val req = audioFocusRequest ?: AudioFocusRequest.Builder(AudioManager.AUDIOFOCUS_GAIN)
+                    .setAudioAttributes(
+                        AudioAttributes.Builder()
+                            .setUsage(AudioAttributes.USAGE_MEDIA)
+                            .setContentType(AudioAttributes.CONTENT_TYPE_MUSIC)
+                            .build()
+                    )
+                    .setOnAudioFocusChangeListener(focusListener)
+                    .build()
+                    .also { audioFocusRequest = it }
+                audioManager.requestAudioFocus(req)
+            } else {
+                @Suppress("DEPRECATION")
+                audioManager.requestAudioFocus(focusListener, AudioManager.STREAM_MUSIC, AudioManager.AUDIOFOCUS_GAIN)
+            }
+        } catch (e: Exception) {}
+    }
+
+    private fun abandonMusicFocus() {
+        try {
+            if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.O) {
+                audioFocusRequest?.let { audioManager.abandonAudioFocusRequest(it) }
+            } else {
+                @Suppress("DEPRECATION")
+                audioManager.abandonAudioFocus(focusListener)
+            }
+        } catch (e: Exception) {}
     }
 
     @SuppressLint("MissingPermission")
