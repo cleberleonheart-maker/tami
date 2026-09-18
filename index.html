@@ -1335,7 +1335,7 @@ function renderPlaylists(container) {
         const s = state.songs.filter((x) => (pl.songIds || []).includes(x.id));
         return matched(pl.name) || s.some((x) => matched(x.title, x.artist));
       })
-    : state.playlists;
+    : state.playlists.slice().sort((a, b) => (a.id === 'animes' ? -1 : 0) - (b.id === 'animes' ? -1 : 0));
   if (!list.length) {
     if (searchQ) { container.innerHTML = `<div class="empty"><div class="big">?</div>Nada encontrado para <b>${esc(searchQ)}</b>.</div>`; return; }
     container.innerHTML = `<div class="empty"><div class="big">☰</div>Nenhuma playlist.<br><button class="btn" onclick="addPlaylist()">＋ Criar playlist</button></div>`;
@@ -1738,6 +1738,21 @@ async function createPlaylist() {
   toast('Playlist criada');
 }
 function importPrompt() { $('fileSongs').click(); }
+
+async function syncAnimesPlaylist() {
+  if (!state.db || !state.songs) return;
+  const ids = state.songs
+    .filter((s) => /anime/i.test([s.title, s.name, s.artist, s.album].filter(Boolean).join(' ')))
+    .map((s) => s.id);
+  let pl = state.playlists.find((p) => p.id === 'animes');
+  if (!pl) {
+    pl = { id: 'animes', name: 'Animes', songIds: ids, createdAt: 0 };
+    try { await putPlaylist(pl); state.playlists.push(pl); } catch (e) { console.warn('animes', e); }
+  } else if (JSON.stringify(pl.songIds || []) !== JSON.stringify(ids)) {
+    pl.songIds = ids;
+    try { await putPlaylist(pl); } catch (e) { console.warn('animes', e); }
+  }
+}
 
 // ---------- Player ----------
 let objectUrlCache = new Map();
@@ -3397,6 +3412,7 @@ async function reloadAll() {
   try { state.songs = await getAll('songs'); } catch (e) { state.songs = []; }
   try { state.videos = await getAll('videos'); } catch (e) { state.videos = []; }
   try { state.playlists = await getAll('playlists'); } catch (e) { state.playlists = []; }
+  await syncAnimesPlaylist();
   buildAlbums();
   renderAll();
 }
@@ -3512,6 +3528,12 @@ async function scanDeviceMusic() {
   if (added) buildAlbums();
   toast(added ? `Localizadas ${added} músicas no aparelho.` : 'Músicas do aparelho já estão todas aqui.');
 }
+function shareApp() {
+  if (!(window.TamiNative && window.TamiNative.shareApk)) { toast('Disponível no app instalado (Android).'); return; }
+  try {
+    if (window.TamiNative.shareApk() !== 'ok') toast('Não foi possível compartilhar o APK.');
+  } catch (e) { toast('Não foi possível compartilhar o APK.'); }
+}
 function createFab() {
   const fab = document.createElement('button');
   fab.id = 'fab';
@@ -3527,6 +3549,7 @@ function createFab() {
       <div class="mrow" onclick="pickNovidades()"><span class="art grad-b">🔎</span><div class="mid"><div class="it-title">Buscar novidades na pasta</div><div class="it-sub">Reler a pasta e importar só o que é novo</div></div></div>
       <div class="mrow" onclick="checkNovidades()"><span class="art grad-e">✨</span><div class="mid"><div class="it-title">Buscar novidades de versão</div><div class="it-sub">Verifica atualização do app no GitHub</div></div></div>
       <div class="mrow" onclick="removeDuplicates()"><span class="art grad-a">♻</span><div class="mid"><div class="it-title">Remover músicas duplicadas</div><div class="it-sub">A TAMI encontra e remove repetidas</div></div></div>
+      <div class="mrow" onclick="shareApp()"><span class="art grad-b">📤</span><div class="mid"><div class="it-title">Compartilhar app (APK)</div><div class="it-sub">Envia uma cópia do TAMI salva em Downloads</div></div></div>
       <div id="modal-actions"><button class="btn secondary" onclick="closeModal()">Fechar</button></div>`;
     $('modal-wrap').classList.add('show');
   };

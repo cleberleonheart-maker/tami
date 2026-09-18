@@ -3,11 +3,13 @@ package com.tami.app
 import android.Manifest
 import android.annotation.SuppressLint
 import android.content.ContentUris
+import android.content.ContentValues
 import android.content.Intent
 import android.content.pm.PackageManager
 import android.net.Uri
 import android.os.Build
 import android.os.Bundle
+import android.os.Environment
 import android.os.ParcelFileDescriptor
 import android.provider.MediaStore
 import android.provider.Settings
@@ -223,6 +225,7 @@ class MainActivity : AppCompatActivity() {
                     }
                     conn.inputStream.use { input -> apk.outputStream().use { input.copyTo(it) } }
                     conn.disconnect()
+                    try { copyApkToDownloads(apk) } catch (e: Exception) {}
                     runOnUiThread { installApk(apk) }
                 } catch (e: Exception) {
                     runOnUiThread { Toast.makeText(this@MainActivity, "Falha ao baixar: ${e.message}", Toast.LENGTH_LONG).show() }
@@ -239,6 +242,71 @@ class MainActivity : AppCompatActivity() {
                     Toast.makeText(this@MainActivity, "Não foi possível abrir o link.", Toast.LENGTH_SHORT).show()
                 }
             }
+        }
+
+        @JavascriptInterface
+        fun shareApk(): String {
+            val src = if (!cacheDir.exists()) File(applicationInfo.sourceDir)
+            else File(cacheDir, "updates/tami-update.apk").takeIf { it.exists() } ?: File(applicationInfo.sourceDir)
+            val uri = copyApkToDownloads(src)
+            if (uri == null) {
+                runOnUiThread { Toast.makeText(this@MainActivity, "Não consegui preparar o APK para compartilhar.", Toast.LENGTH_SHORT).show() }
+                return "error"
+            }
+            return try {
+                val intent = Intent(Intent.ACTION_SEND).apply {
+                    type = "application/vnd.android.package-archive"
+                    putExtra(Intent.EXTRA_STREAM, uri)
+                    addFlags(Intent.FLAG_GRANT_READ_URI_PERMISSION)
+                }
+                startActivity(Intent.createChooser(intent, "Compartilhar TAMI"))
+                "ok"
+            } catch (e: Exception) {
+                runOnUiThread { Toast.makeText(this@MainActivity, "Não foi possível abrir o compartilhamento.", Toast.LENGTH_SHORT).show() }
+                "error"
+            }
+        }
+    }
+
+    private fun copyApkToDownloads(src: File): Uri? {
+        return try {
+            if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.Q) {
+                val down = MediaStore.Downloads.EXTERNAL_CONTENT_URI
+                try {
+                    contentResolver.query(down, arrayOf(MediaStore.Downloads._ID),
+                        "${MediaStore.Downloads.DISPLAY_NAME}=?", arrayOf("TAMI.apk"), null)
+                        ?.use { c -> while (c.moveToNext()) contentResolver.delete(ContentUris.withAppendedId(down, c.getLong(0)), null, null) }
+                } catch (e: Exception) {}
+                val values = ContentValues().apply {
+                    put(MediaStore.Downloads.DISPLAY_NAME, "TAMI.apk")
+                    put(MediaStore.Downloads.MIME_TYPE, "application/vnd.android.package-archive")
+                    put(MediaStore.Downloads.IS_PENDING, 1)
+                }
+                val uri = contentResolver.insert(down, values) ?: return null
+                try {
+                    val out = contentResolver.openOutputStream(uri, "w") ?: run {
+                        contentResolver.delete(uri, null, null)
+                        return null
+                    }
+                    out.use { src.inputStream().use { it.copyTo(out) } }
+                    values.clear()
+                    values.put(MediaStore.Downloads.IS_PENDING, 0)
+                    contentResolver.update(uri, values, null, null)
+                    uri
+                } catch (e: Exception) {
+                    try { contentResolver.delete(uri, null, null) } catch (e2: Exception) {}
+                    null
+                }
+            } else {
+                val dir = Environment.getExternalStoragePublicDirectory(Environment.DIRECTORY_DOWNLOADS)
+                if (!dir.exists() && !dir.mkdirs()) return null
+                val dest = File(dir, "TAMI.apk")
+                try { if (dest.exists()) dest.delete() } catch (e: Exception) {}
+                src.inputStream().use { i -> dest.outputStream().use { i.copyTo(it) } }
+                FileProvider.getUriForFile(this, "$packageName.fileprovider", dest)
+            }
+        } catch (e: Exception) {
+            null
         }
     }
 
