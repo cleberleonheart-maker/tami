@@ -612,6 +612,14 @@ const I18N = {
   sleepSet: { pt: 'Beleza! Vou desligar a música daqui a {n} minutos. Boa noite já adiantada.', en: 'Alright! I\'ll turn the music off in {n} minutes. Sleep well in advance.', es: '¡Listo! Apagaré la música en {n} minutos. Buenas noches anticipadas.' },
   sleepCancel: { pt: 'Ok! Cancelei o timer. A festa continua.', en: 'Okay! I\'ve cancelled the timer. The party goes on.', es: '¡Ok! Cancelé el temporizador. La fiesta continúa.' },
   radioOn: { pt: 'Você está ouvindo a Rádio TAMI F.M., tocando {n} músicas de todos os estilos!', en: 'You\'re listening to TAMI F.M. Radio, playing {n} songs of every style!', es: '¡Estás escuchando Radio TAMI F.M., tocando {n} canciones de todos los estilos!' },
+  dayGreet: { pt: 'Bom dia!', en: 'Good morning!', es: '¡Buenos días!' },
+  afterGreet: { pt: 'Boa tarde!', en: 'Good afternoon!', es: '¡Buenas tardes!' },
+  nightGreet: { pt: 'Boa noite!', en: 'Good evening!', es: '¡Buenas noches!' },
+  clockIntro: { pt: 'Agora são {t}.', en: 'It\'s {t}.', es: 'Son las {t}.' },
+  weatherIntro: { pt: 'O clima de hoje: {w}.', en: 'Today\'s weather: {w}.', es: 'El clima de hoy: {w}.' },
+  dayStart: { pt: 'Vamos começar o seu dia com essa música:', en: 'Let\'s start your day with this song:', es: '¡Empecemos tu día con esta canción!' },
+  afterStart: { pt: 'Vamos começar a sua tarde com essa música:', en: 'Let\'s start your afternoon with this song:', es: '¡Empecemos tu tarde con esta canción!' },
+  nightStart: { pt: 'Vamos começar a sua noite com essa música:', en: 'Let\'s start your evening with this song:', es: '¡Empecemos tu noche con esta canción!' },
   radioNeed: { pt: 'Importe músicas para a Rádio TAMI tocar.', en: 'Import some songs so Radio TAMI can play.', es: 'Importa canciones para que Radio TAMI toque.' },
   radioOff: { pt: 'Rádio desligada.', en: 'Radio off.', es: 'Radio apagada.' },
   micListen: { pt: 'Oi! Eu sou a TAMI. Estou ouvindo: fale TAMI, próxima música.', en: 'Hi! I\'m TAMI. I\'m listening: say TAMI, next song.', es: '¡Hola! Soy TAMI. Estoy escuchando: di TAMI, siguiente canción.' },
@@ -1999,9 +2007,83 @@ function pjNext() { if (state.djMode) djMarkSkip(); next(true); }
 function djExit() {
   state.djMode = false;
   state.radio = false;
+  stopRadioClock();
   if (state.djPrevRepeat !== undefined) { state.repeat = state.djPrevRepeat; state.djPrevRepeat = undefined; }
   $('p-dj').style.color = 'var(--text)';
   renderVirgin();
+}
+
+// ---------- Rádio: hora, clima e saudação ----------
+let climaCache = null, climaAt = 0;
+let radioClockTimer = 0, lastRadioHour = -1;
+function periodOfDay() {
+  const h = new Date().getHours();
+  return h < 12 ? 'day' : h < 18 ? 'after' : 'night';
+}
+function clockSpeech() {
+  const d = new Date();
+  const h = d.getHours(), m = d.getMinutes();
+  if (state.lang === 'en') return m ? `${h}:${String(m).padStart(2, '0')}` : `${h} o'clock`;
+  if (state.lang === 'es') return m ? `${h} y ${m}` : `${h} en punto`;
+  return m ? `${h} horas e ${m} minutos` : `${h} horas em ponto`;
+}
+function perLang(lang) { return state.lang === 'en' ? 'en' : state.lang === 'es' ? (lang === 'es' ? 'es' : 'pt-br') : 'pt-br'; }
+async function fetchClima() {
+  try {
+    const ctl = new AbortController();
+    const t = setTimeout(() => ctl.abort(), 5500);
+    const r = await fetch('https://wttr.in/?format=j1&lang=' + perLang('pt-br'), { signal: ctl.signal });
+    clearTimeout(t);
+    if (!r.ok) return null;
+    const j = await r.json();
+    const cc = j && j.current_condition && j.current_condition[0];
+    if (!cc) return null;
+    const cand = state.lang === 'es' ? cc.lang_es : state.lang === 'en' ? cc.lang_en : cc.lang_pt;
+    const desc = (cand && cand[0] && cand[0].value) || (cc.weatherDesc && cc.weatherDesc[0] && cc.weatherDesc[0].value) || '';
+    const temp = String(cc.temp_C || '');
+    climaCache = { desc, temp };
+    climaAt = Date.now();
+    return climaCache;
+  } catch (e) { return null; }
+}
+function climaText() {
+  if (!climaCache) return '';
+  const clean = String(climaCache.desc || '').trim();
+  const t = String(climaCache.temp || '').trim();
+  if (state.lang === 'en') return [clean, t && `${t} degrees`].filter(Boolean).join(', ');
+  if (state.lang === 'es') return [clean, t && `${t} grados`].filter(Boolean).join(', ');
+  return [clean, t && `${t} graus`].filter(Boolean).join(', ');
+}
+async function radioWelcome(prefix) {
+  try {
+    if (!climaCache || Date.now() - climaAt > 30 * 60 * 1000) await fetchClima();
+  } catch (e) {}
+  if (!state.radio || !state.djMode || !state.djVoice) return;
+  const p = periodOfDay();
+  const greet = L(p === 'day' ? 'dayGreet' : p === 'after' ? 'afterGreet' : 'nightGreet');
+  const starter = L(p === 'day' ? 'dayStart' : p === 'after' ? 'afterStart' : 'nightStart');
+  const s = state.current;
+  const track = s ? ((s.artist ? s.artist + ', ' : '') + (s.title || '')) : '';
+  const clima = climaText() ? ` ${L('weatherIntro', { w: climaText() })}` : '';
+  const body = `${greet} ${L('clockIntro', { t: clockSpeech() })}${clima} ${starter} ${track}`.trim();
+  djSpeak([prefix, body].filter(Boolean).join(' '));
+}
+function startRadioClock() {
+  clearInterval(radioClockTimer);
+  lastRadioHour = new Date().getHours();
+  radioClockTimer = setInterval(() => {
+    if (!state.radio || !state.djMode || !state.djVoice) return;
+    const now = new Date();
+    if (now.getMinutes() === 0 && now.getHours() !== lastRadioHour) {
+      lastRadioHour = now.getHours();
+      radioWelcome();
+    }
+  }, 30000);
+}
+function stopRadioClock() {
+  clearInterval(radioClockTimer);
+  radioClockTimer = 0;
+  lastRadioHour = -1;
 }
 function pickDjVoice(u) {
   const vs = speechSynthesis.getVoices();
@@ -2307,7 +2389,8 @@ function tamiRadio() {
   openPlayer();
   $('p-dj').style.color = 'var(--primary)';
   renderVirgin();
-  djSpeak(L('radioOn', { n: q.length }));
+  startRadioClock();
+  radioWelcome(L('radioOn', { n: q.length }));
 }
 function pjMicToggle() {
   const SR = window.SpeechRecognition || window.webkitSpeechRecognition;
@@ -3228,6 +3311,11 @@ const CHANGELOG = {
     pt: ['Corrige a janela de "Novidades", que não estava abrindo sozinha — agora ela aparece ao abrir o app'],
     en: ['Fixes the "What\'s new" dialog not showing on its own — it now appears when you open the app'],
     es: ['Corrige el diálogo de "Novedades" que no abría solo — ahora aparece al abrir la app']
+  },
+  '1.22': {
+    pt: ['Rádio TAMI com hora e clima: ao ligar, ela diz bom dia/tarde/noite, que horas são e o clima do dia, e começa com o nome da música', 'A cada hora cheia, o rádio repete a hora e o clima e fala a música que começa', 'Toda música que toca tem o nome anunciado'],
+    en: ['TAMI Radio with time and weather: when you turn it on, she greets by the time of day, tells the time and today\'s weather, then starts with the track name', 'Every hour on the hour the radio repeats time/weather and names the next song', 'Every playing track gets announced'],
+    es: ['Radio TAMI con hora y clima: al encenderla saluda según el momento, dice la hora y el clima del día, y arranca diciendo la canción', 'Cada hora en punto repite hora/clima y anuncia la siguiente canción', 'Toda canción que suena se anuncia']
   }
 };
 function changelogList(ver) {
