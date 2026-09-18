@@ -103,12 +103,117 @@ class MainActivity : AppCompatActivity() {
                 nowPlayingJson = json
                 nowPlayingPlaying = o.optBoolean("playing")
                 TamiPlayerService.syncSessionPos(o.optBoolean("playing"), o.optLong("pos"))
-                if (TamiPlayerService.mode == TamiPlayerService.MODE_ADVERTISE) TamiPlayerService.refreshNotif()
+                if (TamiPlayerService.mode == TamiPlayerService.MODE_ADVERTISE || TamiPlayerService.mode == TamiPlayerService.MODE_CODEC) TamiPlayerService.refreshNotif()
             } catch (e: Exception) {}
         }
 
         @JavascriptInterface
         fun backgroundActive(): Boolean = TamiPlayerService.mode != TamiPlayerService.MODE_NONE
+
+        @JavascriptInterface
+        fun codecActive(): Boolean = TamiPlayerService.mode == TamiPlayerService.MODE_CODEC
+
+        @JavascriptInterface
+        fun codecInfo(): String = TamiPlayerService.codecInfo()
+
+        @JavascriptInterface
+        fun handoffActive(): Boolean = TamiPlayerService.mode == TamiPlayerService.MODE_HANDOFF || TamiPlayerService.mode == TamiPlayerService.MODE_CODEC
+
+        @JavascriptInterface
+        fun codecPlay(url: String, title: String, artist: String, posMs: Long) {
+            try {
+                val i = Intent(this@MainActivity, TamiPlayerService::class.java)
+                    .setAction(TamiPlayerService.ACTION_CODEC)
+                    .putExtra(TamiPlayerService.EXTRA_URL, url)
+                    .putExtra(TamiPlayerService.EXTRA_TITLE, title.ifEmpty { "TAMI" })
+                    .putExtra(TamiPlayerService.EXTRA_ARTIST, artist)
+                    .putExtra(TamiPlayerService.EXTRA_POS, posMs)
+                if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.O) startForegroundService(i) else startService(i)
+            } catch (e: Exception) {}
+        }
+
+        @JavascriptInterface
+        fun codecToggle() {
+            try {
+                startService(
+                    Intent(this@MainActivity, TamiPlayerService::class.java)
+                        .setAction(TamiPlayerService.ACTION_CTRL)
+                        .putExtra(TamiPlayerService.EXTRA_CMD, "playpause")
+                )
+            } catch (e: Exception) {}
+        }
+
+        @JavascriptInterface
+        fun codecPause() {
+            try {
+                startService(
+                    Intent(this@MainActivity, TamiPlayerService::class.java)
+                        .setAction(TamiPlayerService.ACTION_CTRL)
+                        .putExtra(TamiPlayerService.EXTRA_CMD, "pause")
+                )
+            } catch (e: Exception) {}
+        }
+
+        @JavascriptInterface
+        fun codecPlayResume() {
+            try {
+                startService(
+                    Intent(this@MainActivity, TamiPlayerService::class.java)
+                        .setAction(TamiPlayerService.ACTION_CTRL)
+                        .putExtra(TamiPlayerService.EXTRA_CMD, "play")
+                )
+            } catch (e: Exception) {}
+        }
+
+        @JavascriptInterface
+        fun codecSeek(ms: Int) {
+            try {
+                startService(
+                    Intent(this@MainActivity, TamiPlayerService::class.java)
+                        .setAction(TamiPlayerService.ACTION_CTRL)
+                        .putExtra(TamiPlayerService.EXTRA_CMD, "seek")
+                        .putExtra(TamiPlayerService.EXTRA_ARG, ms)
+                )
+            } catch (e: Exception) {}
+        }
+
+        @JavascriptInterface
+        fun codecStop() {
+            try {
+                startService(
+                    Intent(this@MainActivity, TamiPlayerService::class.java)
+                        .setAction(TamiPlayerService.ACTION_STOP)
+                )
+            } catch (e: Exception) {}
+        }
+
+        @JavascriptInterface
+        fun handoffNow(id: String, url: String, title: String, artist: String, posMs: Long): Boolean {
+            try {
+                if (url.isEmpty()) return false
+                val payload = JSONObject()
+                    .put("id", id)
+                    .put("url", url)
+                    .put("title", title)
+                    .put("artist", artist)
+                    .put("pos", posMs)
+                    .put("playing", true)
+                    .toString()
+                TamiPlayerService.handoffPayload = payload
+                val i = Intent(this@MainActivity, TamiPlayerService::class.java)
+                    .setAction(TamiPlayerService.ACTION_HANDOFF)
+                    .putExtra(TamiPlayerService.EXTRA_URL, url)
+                    .putExtra(TamiPlayerService.EXTRA_TITLE, title.ifEmpty { "TAMI" })
+                    .putExtra(TamiPlayerService.EXTRA_ARTIST, artist)
+                    .putExtra(TamiPlayerService.EXTRA_POS, posMs)
+                try {
+                    startService(i)
+                } catch (e: Exception) {
+                    if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.O) startForegroundService(i) else throw e
+                }
+                return true
+            } catch (e: Exception) { return false }
+        }
 
         @JavascriptInterface
         fun finishBackground(): String = TamiPlayerService.finishBackground()
@@ -510,6 +615,9 @@ class MainActivity : AppCompatActivity() {
                         s(0, 4) == "fLaC" -> "audio/flac"
                         s(0, 4) == "RIFF" && s(8, 4) == "WAVE" -> "audio/wav"
                         s(0, 4) == "RIFF" && s(8, 4) == "WMA " -> "audio/x-ms-wma"
+                        s(0, 4) == "MAC " -> "audio/x-ape"
+                        s(0, 4) == "wvpk" -> "audio/x-wavpack"
+                        b(0) == 0x0B && b(1) == 0x77 -> "audio/ac3"
                         s(0, 4) == "#!AM" && b(4) == 'R'.code -> "audio/amr"
                         b(0) == 0xFF && b(1).and(0xE0) == 0xE0 -> "audio/mpeg"
                         b(0) == 0xFF && b(1).and(0xF6) == 0xF0 -> "audio/aac"
@@ -547,8 +655,11 @@ class MainActivity : AppCompatActivity() {
                 "audio/aac" -> "AAC"
                 "audio/flac" -> "FLAC"
                 "audio/wav" -> "WAV / PCM"
-                "audio/x-ms-wma" -> "WMA (sem suporte no WebView)"
-                "audio/amr" -> "AMR (sem suporte no WebView)"
+                "audio/x-ms-wma" -> "WMA (MediaPlayer nativo)"
+                "audio/amr" -> "AMR (MediaPlayer nativo)"
+                "audio/x-ape" -> "APE / Monkey's Audio (MediaPlayer nativo)"
+                "audio/x-wavpack" -> "WavPack (MediaPlayer nativo)"
+                "audio/ac3" -> "AC-3 (MediaPlayer nativo)"
                 "audio/ogg" -> if (head.contains("OpusHead")) "Opus (Ogg)" else "Vorbis (Ogg)"
                 "audio/mp4" -> when {
                     head.contains("alac") -> "ALAC (MOV)"
@@ -602,6 +713,10 @@ class MainActivity : AppCompatActivity() {
                 name.endsWith(".wav", true) -> "audio/x-wav"
                 name.endsWith(".flac", true) -> "audio/flac"
                 name.endsWith(".amr", true) -> "audio/amr"
+                name.endsWith(".ape", true) -> "audio/x-ape"
+                name.endsWith(".wv", true) -> "audio/x-wavpack"
+                name.endsWith(".ac3", true) -> "audio/ac3"
+                name.endsWith(".wma", true) -> "audio/x-ms-wma"
                 else -> ""
             }
         } catch (e: Exception) {
@@ -734,7 +849,7 @@ class MainActivity : AppCompatActivity() {
 
     override fun onDestroy() {
         try {
-            if (!isChangingConfigurations && nowPlayingPlaying == true && TamiPlayerService.mode != TamiPlayerService.MODE_HANDOFF) {
+            if (!isChangingConfigurations && nowPlayingPlaying == true && TamiPlayerService.mode != TamiPlayerService.MODE_HANDOFF && TamiPlayerService.mode != TamiPlayerService.MODE_CODEC) {
                 val json = nowPlayingJson
                 if (!json.isNullOrEmpty()) {
                     val o = JSONObject(json)

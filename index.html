@@ -506,6 +506,7 @@ body::after {
     <button class="pc" onclick="pjNext()">⏭</button>
     <button class="pc primary" id="p-repeat" onclick="toggleRepeat()">🔁</button>
     <button class="pc" id="p-upnext" onclick="openUpNext()" title="Fila / tocar a seguir">⤴<span id="p-upnext-count" style="font-size:9px;vertical-align:top;margin-left:1px"></span></button>
+    <button class="pc" id="p-lyr" onclick="lyrOpenCurrent()" title="Letras">📜</button>
     <button class="pc" id="p-dj" onclick="djMix()" title="DJ TAMI">🎛</button>
     <button class="pc" id="p-djvoice" onclick="djVoiceToggle()" title="Voz da DJ TAMI">🗣</button>
     <button class="pc" id="p-djmic" onclick="pjMicToggle()" title="Comando de voz (TAMI)">🎙</button>
@@ -536,7 +537,7 @@ body::after {
 const state = {
   songs: [], videos: [], playlists: [],
   tab: 'songs', detail: null, // {type:'album'|'artist'|'playlist', ...}
-  queue: [], queueIndex: -1, current: null, upNext: [],
+  queue: [], queueIndex: -1, current: null, upNext: [], codec: null, codecPlaying: false,
   shuffle: false, repeat: 0, favs: new Set(), nick: '', theme: 'dark', accent: 'cyan', visStyle: 'hearts',
   djMode: false, djVoice: true, djMic: false, learn: {},
   radio: false, djLocutor: false,
@@ -627,6 +628,13 @@ const I18N = {
   upNextEmpty: { pt: 'Nenhuma música na fila. Toque em ⏭ numa música para ela tocar logo após a atual.', en: 'No songs queued. Tap ⏭ on a song to play it right after the current one.', es: 'Ninguna canción en la fila. Toca ⏭ en una canción para que suene justo después de la actual.' },
   upNextClear: { pt: 'Limpar fila', en: 'Clear queue', es: 'Vaciar fila' },
   upNextAddBtn: { pt: '⏭ Tocar a seguir', en: '⏭ Play next', es: '⏭ A continuación' },
+  lyrTitle: { pt: 'Letras', en: 'Lyrics', es: 'Letras' },
+  lyrLoading: { pt: 'Buscando letras…', en: 'Looking up lyrics…', es: 'Buscando letras…' },
+  lyrNone: { pt: 'Não encontrei letra para essa música.', en: 'No lyrics found for this song.', es: 'No encontré letra para esta canción.' },
+  lyrTr: { pt: 'Traduzir', en: 'Translate', es: 'Traducir' },
+  lyrTrOff: { pt: 'Sem tradução', en: 'No translation', es: 'Sin traducción' },
+  lyrAll: { pt: 'Traduzir tudo', en: 'Translate all', es: 'Traducir todo' },
+  lyrLoc: { pt: 'Traduzindo…', en: 'Translating…', es: 'Traduciendo…' },
   radioNeed: { pt: 'Importe músicas para a Rádio TAMI tocar.', en: 'Import some songs so Radio TAMI can play.', es: 'Importa canciones para que Radio TAMI toque.' },
   radioOff: { pt: 'Rádio desligada.', en: 'Radio off.', es: 'Radio apagada.' },
   micListen: { pt: 'Oi! Eu sou a TAMI. Estou ouvindo: fale TAMI, próxima música.', en: 'Hi! I\'m TAMI. I\'m listening: say TAMI, next song.', es: '¡Hola! Soy TAMI. Estoy escuchando: di TAMI, siguiente canción.' },
@@ -718,6 +726,9 @@ const I18N = {
   vSleepOff: { pt: 'Timer de sono', en: 'Sleep timer', es: 'Temporizador de sueño' },
   vJoke: { pt: 'Piada', en: 'Joke', es: 'Chiste' },
   vJokeSub: { pt: 'TAMI conta uma', en: 'TAMI tells one', es: 'TAMI cuenta uno' },
+  vFact: { pt: 'Fato', en: 'Fact', es: 'Dato' },
+  vFactSub: { pt: 'Curiosidade da TAMI', en: 'TAMI trivia', es: 'Curiosidad de TAMI' },
+  langCmdTitle: { pt: 'Idioma e comandos', en: 'Language and commands', es: 'Idioma y comandos' },
   vRadio: { pt: 'Rádio', en: 'Radio', es: 'Radio' },
   vRadioOn: { pt: 'No ar', en: 'On air', es: 'Al aire' },
   vRadioSub: { pt: 'TAMI FM', en: 'TAMI FM', es: 'TAMI FM' },
@@ -1900,6 +1911,294 @@ function objUrl(s) {
   if (!objectUrlCache.has(s.id)) objectUrlCache.set(s.id, URL.createObjectURL(s.blob));
   return objectUrlCache.get(s.id);
 }
+function codecNeeded(s) {
+  if (!s || s.blob || s.type === 'video') return false;
+  if (!s.url || !/^(content|file):/.test(s.url)) return false;
+  if (!window.TamiNative || !window.TamiNative.mediaInfo) return false;
+  let info = s.__codec;
+  if (!info) {
+    try { info = JSON.parse(String(window.TamiNative.mediaInfo(s.url))); } catch (e) { info = null; }
+    if (info) s.__codec = info;
+  }
+  if (!info) return false;
+  const m = String(info.m || '');
+  const c = String(info.c || '');
+  return /wma|amr|ape|wavpack|ac-3|ec-3|alac|\.ape/i.test(m + ' ' + c);
+}
+let codecTimer = 0;
+function startCodecTick() { clearInterval(codecTimer); codecTimer = setInterval(codecTickRender, 250); }
+function stopCodecTick() { clearInterval(codecTimer); codecTimer = 0; }
+function codecTickRender() {
+  if (!state.codec) { stopCodecTick(); return; }
+  let o = null;
+  try { o = JSON.parse(String(window.TamiNative.codecInfo() || '{}')); } catch (e) {}
+  if (!o) return;
+  const pos = (Number(o.pos) || 0) / 1000;
+  const dur = (Number(o.dur) || 0) / 1000;
+  const playing = !!o.playing;
+  const seek = $('seek');
+  if (seek) {
+    seek.disabled = dur <= 0;
+    seek.max = dur || 0;
+    if (document.activeElement !== seek) seek.value = Math.min(pos, dur || pos);
+  }
+  if ($('time-cur')) $('time-cur').textContent = fmtTime(pos * 1000);
+  if ($('time-dur')) $('time-dur').textContent = fmtTime(dur * 1000);
+  if ($('p-play')) $('p-play').textContent = playing ? '⏸' : '▶';
+  if ($('mini-play')) $('mini-play').textContent = playing ? '⏸' : '▶';
+  state.codecPlaying = playing;
+  syncNativeNow(false);
+  lyrTick();
+}
+function codecEnded() {
+  if (!state.codec) return;
+  state.codec = null;
+  state.codecPlaying = false;
+  stopCodecTick();
+  const s = state.current;
+  if (state.repeat === 2) { if (s) nativeCodecStart(s); return; }
+  if (state.repeat === 1 || state.queueIndex < state.queue.length - 1 || state.upNext.length) next();
+  else { renderPlayer(); syncNativeNow(true); }
+}
+function nativeCodecStart(s) {
+  audio.pause();
+  try { audio.removeAttribute('src'); } catch (e) {}
+  state.codec = s.id;
+  try { window.TamiNative.codecPlay(s.url, s.title || s.name || '', s.artist || '', 0); } catch (e) {}
+  if (state.djMode) {
+    if (s.id !== djLastId) { djLearnSet(s.id, { plays: djLearnGet(s.id).plays + 1 }); djLastId = s.id; }
+    if (djEntered) djEntered = false;
+    else if (!djAnnounced.has(s.id)) { djAnnounced.add(s.id); djAnnounceTrack(s); }
+  } else announceNowPlaying(s);
+  updateMediaSession();
+  startCodecTick();
+}
+function nativeCodecStop() {
+  if (!state.codec) return;
+  state.codec = null;
+  state.codecPlaying = false;
+  stopCodecTick();
+  try { if (window.TamiNative && window.TamiNative.codecStop) window.TamiNative.codecStop(); } catch (e) {}
+}
+
+// ---------- Letras + karaokê + tradução ----------
+const lyr = { open: false, songId: null, songTitle: '', kind: 'none', lines: [], tr: new Map(), timer: 0, idx: -1, trOn: true };
+const lyrBusy = new Set();
+function parseLrc(raw) {
+  const out = [];
+  const re = /\[(\d{1,2}):(\d{1,2}(?:[.:]\d{1,3})?)\]/g;
+  for (const line of String(raw).split(/\r?\n/)) {
+    const times = [];
+    let m;
+    while ((m = re.exec(line))) times.push((+m[1]) * 60 + parseFloat(m[2].replace(',', '.')));
+    if (!times.length) continue;
+    const text = line.replace(re, '').trim();
+    for (const t of times) out.push({ t, text });
+  }
+  return out.sort((a, b) => a.t - b.t);
+}
+function lyrTrLang() { return state.lang === 'en' ? 'en' : state.lang === 'es' ? 'es' : 'pt'; }
+async function translateText(text) {
+  try {
+    const q = encodeURIComponent(text);
+    const r = await fetch(`https://translate.googleapis.com/translate_a/single?client=gtx&sl=auto&tl=${lyrTrLang()}&dt=t&q=${q}`);
+    if (!r.ok) return '';
+    const j = await r.json();
+    if (!j || !Array.isArray(j[0])) return '';
+    return j[0].map((x) => (x && x[0]) || '').join('');
+  } catch (e) { return ''; }
+}
+async function fetchLyrics(s) {
+  const artist = (s.artist || s.album || '').trim();
+  const title = (s.title || s.name || '').trim();
+  if (!title) return null;
+  try {
+    const r = await fetch(
+      `https://lrclib.net/api/search?artist_name=${encodeURIComponent(artist)}&track_name=${encodeURIComponent(title)}`
+    );
+    if (r.ok) {
+      const arr = await r.json();
+      if (Array.isArray(arr) && arr.length && arr[0]) {
+        const it = arr[0];
+        const syn = it.syncedLyrics || '';
+        if (syn) {
+          const lines = parseLrc(syn);
+          if (lines.length) return { kind: 'lrc', lines };
+        }
+        const pl = String(it.plainLyrics || '').trim();
+        if (pl) return { kind: 'text', lines: pl.split(/\r?\n/).map((x) => ({ t: 0, text: x.trim() })) };
+      }
+    }
+  } catch (e) {}
+  try {
+    const r = await fetch(`https://api.lyrics.ovh/v1/${encodeURIComponent(artist)}/${encodeURIComponent(title)}`);
+    if (r.ok) {
+      const j = await r.json();
+      const ly = String((j && j.lyrics) || '').trim();
+      if (ly) return { kind: 'text', lines: ly.split(/\r?\n/).map((x) => ({ t: 0, text: x.trim() })) };
+    }
+  } catch (e) {}
+  return null;
+}
+function addLyrStyles() {
+  if (document.getElementById('lyr-css')) return;
+  const css = `#lyr-scroll{max-height:52vh;overflow-y:auto;padding:4px 2px;scroll-behavior:smooth}
+  .lyr-col{display:flex;flex-direction:column;gap:2px}
+  .lyr-line{padding:5px 10px;border-radius:10px;transition:all .25s;border-left:3px solid transparent}
+  .lyr-o{font-size:15px;line-height:1.4}.lyr-t{font-size:13px;opacity:.78;margin-top:2px;color:var(--primary,#22c55e)}
+  .lyr-line.lyr-now{background:var(--primary,#22c55e22);border-left-color:var(--primary,#22c55e)}
+  .lyr-line.lyr-now .lyr-o{font-weight:700;font-size:16px}`;
+  const st = document.createElement('style'); st.id = 'lyr-css'; st.textContent = css; document.head.appendChild(st);
+}
+function openLyrics(s) {
+  const wrap = $('modal-wrap');
+  addLyrStyles();
+  lyr.open = true;
+  lyr.songId = s ? s.id : null;
+  lyr.songTitle = s ? (s.title || s.name || '') : '';
+  lyr.kind = 'none';
+  lyr.lines = [];
+  lyr.tr = new Map();
+  lyr.idx = -1;
+  const name = s ? `${esc(s.title || s.name || '')}${s.artist ? ' · ' + esc(s.artist) : ''}` : '';
+  $('modal').innerHTML = `<h3>📜 ${name || L('lyrTitle')}</h3>
+    <div id="lyr-status" style="opacity:.65;padding:8px 0">${L('lyrLoading')}</div>
+    <div id="lyr-scroll"></div>
+    <div id="modal-actions">
+      <button class="btn secondary" id="lyr-trbtn" onclick="lyrToggleTr()">🔤 ${L('lyrTr')}</button>
+      <button class="btn secondary" id="lyr-allbtn" onclick="lyrTranslateAll()" style="display:none">🌐 ${L('lyrAll')}</button>
+      <button class="btn secondary" onclick="closeModal()">${L('detClose')}</button>
+    </div>`;
+  wrap.classList.add('show');
+  clearInterval(lyr.timer);
+  lyr.timer = setInterval(lyrTick, 300);
+  if (s) lsLoad(s);
+}
+async function lsLoad(s) {
+  const res = await fetchLyrics(s);
+  if (!lyr.open || (state.current && s.id !== state.current.id)) return;
+  if (!res || !res.lines.length) {
+    lyr.lines = []; lyr.kind = 'none';
+    const st = $('lyr-status');
+    if (st) st.textContent = L('lyrNone');
+    renderLyrics();
+    return;
+  }
+  lyr.lines = res.lines;
+  lyr.kind = res.kind;
+  lyr.tr = new Map();
+  const st = $('lyr-status');
+  if (st) st.textContent = res.kind === 'lrc' ? '♪ Karaokê síncrono' : '♪ Letra';
+  renderLyrics();
+  if ($('lyr-allbtn')) $('lyr-allbtn').style.display = lyr.lines.length ? '' : 'none';
+  if (lyr.trOn) lyrTranslateNear(0);
+}
+function renderLyrics() {
+  const box = $('lyr-scroll');
+  if (!box) return;
+  box.innerHTML = '';
+  if (!lyr.lines.length) {
+    box.innerHTML = `<div style="opacity:.6;padding:12px">${L('lyrNone')}</div>`;
+    return;
+  }
+  const col = document.createElement('div');
+  col.className = 'lyr-col';
+  lyr.lines.forEach((ln, i) => {
+    const d = document.createElement('div');
+    d.className = 'lyr-line';
+    d.dataset.i = i;
+    const o = document.createElement('div');
+    o.className = 'lyr-o';
+    o.textContent = ln.text || ' ';
+    const t = document.createElement('div');
+    t.className = 'lyr-t';
+    t.textContent = ' ';
+    t.style.display = 'none';
+    d.appendChild(o);
+    d.appendChild(t);
+    col.appendChild(d);
+  });
+  box.appendChild(col);
+}
+function lyrTick() {
+  if (!lyr.open) return;
+  const cur = state.current;
+  if (!cur) return;
+  if (cur.id !== lyr.songId) {
+    lyr.songId = cur.id;
+    lyr.songTitle = cur.title || cur.name || '';
+    lyr.tr = new Map();
+    lyr.idx = -1;
+    const st = $('lyr-status');
+    if (st) st.textContent = L('lyrLoading');
+    lsLoad(cur);
+    return;
+  }
+  if (lyr.kind !== 'lrc' || !lyr.lines.length) return;
+  let t = 0;
+  if (state.codec) {
+    let o = null;
+    try { o = JSON.parse(String(window.TamiNative.codecInfo() || '{}')); } catch (e) {}
+    if (o) t = (Number(o.pos) || 0) / 1000;
+  } else {
+    const el = cur.type === 'video' ? video : audio;
+    t = (el && el.currentTime) || 0;
+  }
+  let i = -1;
+  for (let k = 0; k < lyr.lines.length; k++) {
+    if (lyr.lines[k].t <= t + 0.15) i = k; else break;
+  }
+  if (i === lyr.idx) return;
+  if (i < 0) return;
+  lyr.idx = i;
+  const box = $('lyr-scroll');
+  if (!box) return;
+  const prev = box.querySelector('.lyr-now');
+  if (prev) prev.classList.remove('lyr-now');
+  const el = box.querySelector(`[data-i="${i}"]`);
+  if (el) {
+    el.classList.add('lyr-now');
+    try { el.scrollIntoView({ block: 'center', behavior: 'smooth' }); } catch (e) { el.scrollIntoView(); }
+    if (lyr.trOn) lyrTranslateNear(i);
+  }
+}
+async function lyrTranslateOne(i) {
+  const ln = lyr.lines[i];
+  if (!ln || !ln.text || lyrBusy.has(i) || lyr.tr.has(i)) return;
+  lyrBusy.add(i);
+  const box = $('lyr-scroll');
+  const node = box ? box.querySelector(`[data-i="${i}"] .lyr-t`) : null;
+  if (node) { node.style.display = 'block'; node.textContent = L('lyrLoc'); }
+  const res = await translateText(ln.text);
+  lyrBusy.delete(i);
+  lyr.tr.set(i, res);
+  if (!res || !node) return;
+  const same = res.trim().toLowerCase() === ln.text.trim().toLowerCase();
+  node.style.display = same ? 'none' : 'block';
+  node.textContent = same ? ' ' : res.trim();
+}
+function lyrTranslateNear(i) {
+  const max = lyr.lines.length;
+  for (let k = Math.max(0, i); k < Math.min(i + 3, max); k++) lyrTranslateOne(k);
+}
+async function lyrTranslateAll() {
+  for (let i = 0; i < lyr.lines.length; i++) {
+    if (lyr.lines[i].text && !lyr.tr.has(i)) { lyrTranslateOne(i); }
+    if (i % 4 === 3) await new Promise((r) => setTimeout(r, 120));
+  }
+}
+function lyrToggleTr() {
+  lyr.trOn = !lyr.trOn;
+  const b = $('lyr-trbtn');
+  if (b) b.textContent = '🔤 ' + (lyr.trOn ? L('lyrTr') : L('lyrTrOff'));
+  if (lyr.trOn) lyrTranslateNear(lyr.idx >= 0 ? lyr.idx : 0);
+  else { if ($('lyr-scroll')) $('lyr-scroll').querySelectorAll('.lyr-t').forEach((t) => { t.style.display = 'none'; t.textContent = ' '; }); }
+}
+function lyrOpenCurrent() { if (state.current) openLyrics(state.current); }
+function openLyricsFor(id) {
+  const s = (state.songs || []).find((x) => String(x.id) === String(id));
+  if (s) openLyrics(s);
+}
 function readSongChunk(url, start, len) {
   try {
     const chunk = window.TamiNative && window.TamiNative.readSong ? window.TamiNative.readSong(url, start, len) : '';
@@ -1967,7 +2266,7 @@ function songDetails(s) {
     ${durTxt ? `<div class="me-row"><span class="me-k">${L('detDur')}</span><span class="me-v">${durTxt}</span></div>` : ''}
     ${codecTxt ? `<div class="me-row"><span class="me-k">${L('detCodec')}</span><span class="me-v">${codecTxt}</span></div>` : ''}
     <div class="me-row"><span class="me-k">${L('detSource')}</span><span class="me-v">${srcTxt}</span></div>
-    <div id="modal-actions"><button class="btn" onclick="addUpNextId(${JSON.stringify(s.id)});closeModal()">${L('upNextAddBtn')}</button><button class="btn secondary" onclick="closeModal()">${L('detClose')}</button></div>`;
+    <div id="modal-actions"><button class="btn" onclick="addUpNextId(${JSON.stringify(s.id)});closeModal()">${L('upNextAddBtn')}</button><button class="btn" onclick="closeModal();openLyricsFor(${JSON.stringify(s.id)})">📜 ${L('lyrTitle')}</button><button class="btn secondary" onclick="closeModal()">${L('detClose')}</button></div>`;
   const modal = $('modal');
   const wrap = $('modal-wrap');
   modal.innerHTML = html;
@@ -2041,7 +2340,7 @@ function perLang(lang) { return state.lang === 'en' ? 'en' : state.lang === 'es'
 async function fetchClima() {
   try {
     const ctl = new AbortController();
-    const t = setTimeout(() => ctl.abort(), 5500);
+    const t = setTimeout(() => ctl.abort(), 2500);
     const r = await fetch('https://wttr.in/?format=j1&lang=' + perLang('pt-br'), { signal: ctl.signal });
     clearTimeout(t);
     if (!r.ok) return null;
@@ -2066,7 +2365,9 @@ function climaText() {
 }
 async function radioWelcome(prefix) {
   try {
-    if (!climaCache || Date.now() - climaAt > 30 * 60 * 1000) await fetchClima();
+    if (!climaCache || Date.now() - climaAt > 30 * 60 * 1000) {
+      await Promise.race([fetchClima(), new Promise((r) => setTimeout(r, 2600))]);
+    }
   } catch (e) {}
   if (!state.radio || !state.djMode || !state.djVoice) return;
   const p = periodOfDay();
@@ -2148,7 +2449,7 @@ function tamiLang() {
       <span class="art ${state.lang === code ? 'grad-a' : 'grad-' + 'abcde'[i]}">${LANG_FLAGS[code]}</span>
       <div class="mid"><div class="it-title">${LANG_LABELS[code]}</div><div class="it-sub">${state.lang === code ? '✓' : ''}</div></div>
     </div>`).join('') +
-    `</div><div id="modal-actions"><button class="btn secondary" onclick="closeModal()">Fechar</button></div>`;
+    `</div><div id="modal-actions"><button class="btn secondary" onclick="closeModal()">${L('btnClose')}</button></div>`;
   $('modal-wrap').classList.add('show');
 }
 function setLang(code) {
@@ -2641,6 +2942,7 @@ function playCurrent() {
   video.pause();
   video.removeAttribute('src');
   video.style.display = 'none';
+  if (codecNeeded(s)) { setAudioSource(s); return; }
   if (s.type !== 'video' && s.url && !s.blob) {
     blobForSong(s).finally(() => { if (state.current === s) setAudioSource(s); });
     return;
@@ -2648,6 +2950,8 @@ function playCurrent() {
   setAudioSource(s);
 }
 function setAudioSource(s) {
+  if (codecNeeded(s)) { nativeCodecStart(s); return; }
+  if (state.codec) nativeCodecStop();
   audio.src = objUrl(s);
   audio.play().then(() => updateMediaSession()).catch(() => {});
   if (state.db) putKV('lastSong', { id: s.id });
@@ -2890,6 +3194,11 @@ video.addEventListener('play', () => { if (visCtx && visCtx.state === 'suspended
 
 function togglePlay() {
   if (!state.current) return;
+  if (state.codec) {
+    try { window.TamiNative.codecToggle(); } catch (e) {}
+    setTimeout(codecTickRender, 120);
+    return;
+  }
   const el = state.current.type === 'video' ? video : audio;
   if (el.src) {
     if (el.paused) safePlay(el); else el.pause();
@@ -2899,6 +3208,7 @@ function togglePlay() {
 }
 let interruptionPaused = false;
 function pauseForInterruption() {
+  if (state.codec) { interruptionPaused = true; try { window.TamiNative.codecPause(); } catch (e) {} return; }
   const el = state.current && state.current.type === 'video' ? video : audio;
   if (!state.current || !el.src || el.paused) return;
   interruptionPaused = true;
@@ -2907,6 +3217,7 @@ function pauseForInterruption() {
 function resumeFromInterruption() {
   if (!interruptionPaused || !state.current) return;
   interruptionPaused = false;
+  if (state.codec) { try { window.TamiNative.codecPlayResume(); } catch (e) {} return; }
   const el = state.current.type === 'video' ? video : audio;
   if (el.src && el.paused) { try { safePlay(el); } catch (e) {} }
 }
@@ -2918,13 +3229,19 @@ function syncNativeNow(force) {
     if (!s) return;
     if (!force && Date.now() - lastNativeSync < 5000) return;
     lastNativeSync = Date.now();
-    const el = s.type === 'video' ? video : audio;
     let pos = 0, dur = 0, playing = false;
-    try {
-      pos = Math.floor((el.currentTime || 0) * 1000);
-      dur = Math.floor((el.duration || 0) * 1000);
-      playing = !el.paused && !el.ended && !!el.src;
-    } catch (e) {}
+    if (state.codec) {
+      let o = null;
+      try { o = JSON.parse(String(window.TamiNative.codecInfo() || '{}')); } catch (e) {}
+      if (o) { pos = Math.floor((Number(o.pos) || 0)); dur = Math.floor((Number(o.dur) || 0)); playing = !!o.playing; }
+    } else {
+      const el = s.type === 'video' ? video : audio;
+      try {
+        pos = Math.floor((el.currentTime || 0) * 1000);
+        dur = Math.floor((el.duration || 0) * 1000);
+        playing = !el.paused && !el.ended && !!el.src;
+      } catch (e) {}
+    }
     const url = (s.url && /^(content|file):/.test(s.url)) ? s.url : '';
     window.TamiNative.updateNowPlaying(JSON.stringify({
       id: String(s.id || ''), title: s.title || s.name || '', artist: s.artist || s.album || '',
@@ -2936,10 +3253,16 @@ function tamiRemote(cmd) {
   if (cmd === 'next') next();
   else if (cmd === 'prev') prev();
   else if (cmd === 'play' || cmd === 'pause' || cmd === 'playpause') togglePlay();
+  else if (cmd === 'codecEnd') { codecEnded(); }
+  else if (cmd === 'codecStopped') { if (state.codec) { state.codec = null; state.codecPlaying = false; stopCodecTick(); renderPlayer(); syncNativeNow(true); } }
 }
 function checkBackgroundHandoff() {
   try {
     if (!window.TamiNative || !window.TamiNative.finishBackground) return;
+    if (state.codec) {
+      try { if (!(window.TamiNative.codecActive && window.TamiNative.codecActive())) codecEnded(); } catch (e) {}
+      return;
+    }
     let active = false;
     try { active = !!(window.TamiNative.backgroundActive && window.TamiNative.backgroundActive()); } catch (e) {}
     if (!active) return;
@@ -2971,8 +3294,43 @@ function checkBackgroundHandoff() {
     seekBack();
   } catch (e) {}
 }
+let pendingHandoff = false;
+function maybeHandoffToNative() {
+  try {
+    if (state.codec) return;
+    if (state.djMic) return;
+    if (!window.TamiNative || !window.TamiNative.handoffNow) return;
+    let active = false;
+    try { active = !!(window.TamiNative.handoffActive && window.TamiNative.handoffActive()); } catch (e) {}
+    if (active) return;
+    const s = state.current;
+    if (!s || s.type === 'video') return;
+    const el = audio;
+    if (!el || !el.src || el.paused || el.ended) return;
+    const url = (s.url && /^(content|file):/.test(s.url)) ? s.url : '';
+    if (!url) return;
+    const pos = Math.floor((el.currentTime || 0) * 1000);
+    let ok = false;
+    try { ok = !!window.TamiNative.handoffNow(String(s.id || ''), url, s.title || s.name || '', s.artist || s.album || '', pos); } catch (e) {}
+    if (ok) { pendingHandoff = true; try { el.pause(); } catch (e) {} }
+  } catch (e) {}
+}
 document.addEventListener('visibilitychange', () => {
-  if (document.visibilityState === 'visible') checkBackgroundHandoff();
+  if (document.visibilityState === 'visible') {
+    checkBackgroundHandoff();
+    if (pendingHandoff) {
+      pendingHandoff = false;
+      let active = false;
+      try { active = !!(window.TamiNative.handoffActive && window.TamiNative.handoffActive()); } catch (e) {}
+      if (!active) {
+        const s = state.current;
+        const el = s && s.type === 'video' ? video : audio;
+        if (s && el && el.src && el.paused) { try { safePlay(el); } catch (e) {} }
+      }
+    }
+  } else {
+    maybeHandoffToNative();
+  }
 });
 function toggleShuffle() {
   state.shuffle = !state.shuffle;
@@ -3068,7 +3426,7 @@ audio.addEventListener('ended', () => {
 });
 audio.addEventListener('timeupdate', updateProgress);
 audio.addEventListener('play', () => { renderPlayer(); if ('mediaSession' in navigator) navigator.mediaSession.playbackState = 'playing'; updateAvatarMood(); syncNativeNow(true); });
-audio.addEventListener('pause', () => { renderPlayer(); if ('mediaSession' in navigator) navigator.mediaSession.playbackState = 'paused'; updateAvatarMood(); syncNativeNow(true); });
+audio.addEventListener('pause', () => { if (pendingHandoff) return; renderPlayer(); if ('mediaSession' in navigator) navigator.mediaSession.playbackState = 'paused'; updateAvatarMood(); syncNativeNow(true); });
 video.addEventListener('timeupdate', updateProgress);
 video.addEventListener('play', () => { renderPlayer(); updateAvatarMood(); syncNativeNow(true); });
 video.addEventListener('pause', () => { renderPlayer(); updateAvatarMood(); syncNativeNow(true); });
@@ -3085,6 +3443,7 @@ video.addEventListener('ended', () => {
   else closePlayer();
 });
 function updateProgress() {
+  if (state.codec) { codecTickRender(); return; }
   const el = state.current && state.current.type === 'video' ? video : audio;
   const dur = el.duration || 0;
   const seek = $('seek');
@@ -3096,6 +3455,11 @@ function updateProgress() {
   syncNativeNow(false);
 }
 $('seek').addEventListener('input', () => {
+  if (state.codec) {
+    try { window.TamiNative.codecSeek(Math.floor((+$('seek').value || 0) * 1000)); } catch (e) {}
+    syncNativeNow(true);
+    return;
+  }
   const el = state.current && state.current.type === 'video' ? video : audio;
   el.currentTime = $('seek').value;
   syncNativeNow(true);
@@ -3152,7 +3516,7 @@ function renderPlayer() {
     art.innerHTML = `<div class="ph">${cuteIcon(seed)}</div>`;
   }
   const el = audio;
-  const playing = !el.paused;
+  const playing = state.codec ? !!state.codecPlaying : !el.paused;
   $('p-play').textContent = playing ? '⏸' : '▶';
   $('mini-play').textContent = playing ? '⏸' : '▶';
   $('p-shuffle').style.color = state.shuffle ? 'var(--primary)' : 'var(--text)';
@@ -3200,8 +3564,8 @@ function renderVirgin() {
   const elNow = now && (now.type === 'video' ? video : audio);
   const paused = !elNow || !elNow.src || elNow.paused;
   const status = state.djMode
-    ? 'Tocando agora'
-    : (hasSongs ? 'Pronta para mixar' : 'Sem músicas ainda');
+    ? L('stPlaying')
+    : (hasSongs ? L('stReady') : L('stNoSongs'));
   let html = `<div class="v-hero">
       <div class="v-avatar" id="tami-avatar" onclick="tamiSpeakMood()" title="Falar com a TAMI">
         <span class="v-bow">🎀</span>
@@ -3223,12 +3587,12 @@ function renderVirgin() {
   }
   if (!state.djMode) {
     html += `<div class="v-actions">
-      <button class="btn" onclick="state.songs.length?djMix():$('fileSongs').click()" style="flex:1">${hasSongs ? '🎛 Iniciar TAMI' : '＋ Importar músicas'}</button>
+      <button class="btn" onclick="state.songs.length?djMix():$('fileSongs').click()" style="flex:1">${hasSongs ? L('btnStartTami') : L('btnImportSongs')}</button>
     </div>`;
     if (hasSongs) {
       html += `<div class="v-actions">
-        <button class="btn secondary" onclick="djMix('bombar')" style="flex:1">🎉 Bombar</button>
-        <button class="btn secondary" onclick="djMix('relaxar')" style="flex:1">🌙 Relaxar</button>
+        <button class="btn secondary" onclick="djMix('bombar')" style="flex:1">${L('btnBombar')}</button>
+        <button class="btn secondary" onclick="djMix('relaxar')" style="flex:1">${L('btnRelaxar')}</button>
       </div>`;
     }
   } else {
@@ -3238,21 +3602,21 @@ function renderVirgin() {
       <button class="btn" onclick="pjNext()" style="flex:1">⏭</button>
     </div>`;
   }
-  html += `<div class="section">${L('langTitle')} e comandos</div>
+  html += `<div class="section">${L('langCmdTitle')}</div>
     <div class="v-grid">
       <div class="v-card" onclick="tamiLang()"><div class="v-ic">🌐</div><div class="v-l">${L('langTitle')}</div><div class="v-s">${LANG_FLAGS[state.lang]} ${LANG_LABELS[state.lang]}</div></div>
-      <div class="v-card ${state.djVoice ? 'on' : ''}" onclick="djVoiceToggle()"><div class="v-ic">🗣</div><div class="v-l">Voz</div><div class="v-s">${state.djVoice ? 'Ligada' : 'Desligada'}</div></div>
-      <div class="v-card ${state.djMic ? 'on' : ''}" onclick="pjMicToggle()"><div class="v-ic">🎙</div><div class="v-l">Microfone</div><div class="v-s">${state.djMic ? 'Ouvindo…' : 'Comandos de voz'}</div></div>
-      <div class="v-card ${state.sleep ? 'on' : ''}" onclick="tamiSleep()"><div class="v-ic">💤</div><div class="v-l">Sono</div><div class="v-s">${state.sleep ? 'Desliga em ' + state.sleep + 'min' : 'Timer de sono'}</div></div>
-      <div class="v-card" onclick="tamiPiada()"><div class="v-ic">😄</div><div class="v-l">Piada</div><div class="v-s">TAMI conta uma</div></div>
-      <div class="v-card" onclick="tamiFato()"><div class="v-ic">🤓</div><div class="v-l">Fato</div><div class="v-s">Curiosidade da TAMI</div></div>
-      <div class="v-card ${state.radio ? 'on' : ''}" onclick="tamiRadio()"><div class="v-ic">📻</div><div class="v-l">Rádio</div><div class="v-s">${state.radio ? 'No ar' : 'TAMI FM'}</div></div>
-      <div class="v-card" onclick="tamiStats()"><div class="v-ic">📊</div><div class="v-l">Estatísticas</div><div class="v-s">Seu ranking</div></div>
-      <div class="v-card" onclick="tamiRecomenda()"><div class="v-ic">🎯</div><div class="v-l">Recomenda</div><div class="v-s">Escolhas da TAMI</div></div>
-      <div class="v-card" onclick="scanDeviceMusic()"><div class="v-ic">📂</div><div class="v-l">Localizar</div><div class="v-s">Músicas do aparelho</div></div>
+      <div class="v-card ${state.djVoice ? 'on' : ''}" onclick="djVoiceToggle()"><div class="v-ic">🗣</div><div class="v-l">${L('vVoz')}</div><div class="v-s">${state.djVoice ? L('vVoiceOn') : L('vVoiceOff')}</div></div>
+      <div class="v-card ${state.djMic ? 'on' : ''}" onclick="pjMicToggle()"><div class="v-ic">🎙</div><div class="v-l">${L('vMic')}</div><div class="v-s">${state.djMic ? L('vMicOn') : L('vMicOff')}</div></div>
+      <div class="v-card ${state.sleep ? 'on' : ''}" onclick="tamiSleep()"><div class="v-ic">💤</div><div class="v-l">${L('vSleep')}</div><div class="v-s">${state.sleep ? L('vSleepOn', { n: state.sleep }) : L('vSleepOff')}</div></div>
+      <div class="v-card" onclick="tamiPiada()"><div class="v-ic">😄</div><div class="v-l">${L('vJoke')}</div><div class="v-s">${L('vJokeSub')}</div></div>
+      <div class="v-card" onclick="tamiFato()"><div class="v-ic">🤓</div><div class="v-l">${L('vFact')}</div><div class="v-s">${L('vFactSub')}</div></div>
+      <div class="v-card ${state.radio ? 'on' : ''}" onclick="tamiRadio()"><div class="v-ic">📻</div><div class="v-l">${L('vRadio')}</div><div class="v-s">${state.radio ? L('vRadioOn') : L('vRadioSub')}</div></div>
+      <div class="v-card" onclick="tamiStats()"><div class="v-ic">📊</div><div class="v-l">${L('vStats')}</div><div class="v-s">${L('vStatsSub')}</div></div>
+      <div class="v-card" onclick="tamiRecomenda()"><div class="v-ic">🎯</div><div class="v-l">${L('vRec')}</div><div class="v-s">${L('vRecSub')}</div></div>
+      <div class="v-card" onclick="scanDeviceMusic()"><div class="v-ic">📂</div><div class="v-l">${L('vScan')}</div><div class="v-s">${L('vScanSub')}</div></div>
     </div>`;
   if (!hasSongs) {
-    html += `<div class="empty"><div class="big">🎧</div>A TAMI precisa de músicas para tocar.<br><button class="btn" onclick="$('fileSongs').click()">＋ Importar músicas</button></div>`;
+    html += `<div class="empty"><div class="big">🎧</div>${L('emptyNeed')}<br><button class="btn" onclick="$('fileSongs').click()">${L('btnImportSongs')}</button></div>`;
   }
   list.innerHTML = html;
   if (now) renderArt($('vnow-art'), now, '');
@@ -3276,7 +3640,12 @@ function updateAvatarMood() {
 }
 
 // ---------- Modal ----------
-function closeModal() { $('modal-wrap').classList.remove('show'); }
+function closeModal() {
+  $('modal-wrap').classList.remove('show');
+  lyr.open = false;
+  clearInterval(lyr.timer);
+  lyr.timer = 0;
+}
 
 // ---------- Perfil ----------
 function showProfile() {
@@ -3393,6 +3762,11 @@ const CHANGELOG = {
     pt: ['Nova função "Fila / tocar a seguir": toque em ⏭ numa música e ela toca logo depois da atual', 'Botão ⤴ no player mostra a fila; dá para remover músicas ou limpar a fila inteira'],
     en: ['New "Queue / play next": tap ⏭ on a song and it plays right after the current one', 'The ⤴ button in the player shows the queue; you can remove songs or clear it all'],
     es: ['Nueva función "Fila / tocar a continuación": toca ⏭ en una canción y sonará justo después de la actual', 'El botón ⤴ en el reproductor muestra la fila; puedes quitar canciones o vaciarla por completo']
+  },
+  '1.24': {
+    pt: ['Agora toca formatos que o app não abria: WMA, AMR, APE, WavPack e AC-3 (via player nativo do Android)', 'Novo botão 📜 Letras no player e no menu da música: mostra a letra, com karaokê destacando a linha sincronizada', 'Quando a música é de outro idioma, a tradução aparece logo abaixo de cada linha (em português, inglês ou espanhol)', 'Corrige a música que parava ao fechar o app: ao sair, ela passa na hora para o player nativo e continua em segundo plano', 'Os cards da tela da TAMI, os botões Bombar/Relaxar e o status agora trocam junto com o idioma do app'],
+    en: ['Now plays formats the app could not open: WMA, AMR, APE, WavPack and AC-3 (via Android native player)', 'New 📜 Lyrics button in the player and song menu: shows the lyrics with karaoke-style highlighting of the synced line', 'When the song is in another language, the translation appears right below each line (in Portuguese, English or Spanish)', 'Fixes music stopping when you close the app: on exit it hands over to the native player instantly and keeps playing in the background', 'The TAMI screen cards, the Party/Relax buttons and the status now switch along with the app language'],
+    es: ['Ahora reproduce formatos que la app no abría: WMA, AMR, APE, WavPack y AC-3 (con el reproductor nativo de Android)', 'Nuevo botón 📜 Letras en el reproductor y en el menú de la canción: muestra la letra con karaoke resaltando la línea sincronizada', 'Cuando la canción es de otro idioma, la traducción aparece justo debajo de cada línea (en portugués, inglés o español)', 'Corrige la música que se detenía al cerrar la app: al salir pasa al reproductor nativo al instante y sigue en segundo plano', 'Los cards de la pantalla de TAMI, los botones Fiesta/Relajar y el estado ahora cambian junto con el idioma de la app']
   }
 };
 function changelogList(ver) {

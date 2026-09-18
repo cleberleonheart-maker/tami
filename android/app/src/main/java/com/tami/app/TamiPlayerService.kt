@@ -21,10 +21,12 @@ class TamiPlayerService : Service() {
     companion object {
         const val ACTION_ADVERTISE = "com.tami.app.ADVERTISE"
         const val ACTION_HANDOFF = "com.tami.app.HANDOFF"
+        const val ACTION_CODEC = "com.tami.app.CODEC"
         const val ACTION_STOP = "com.tami.app.STOP"
         const val ACTION_DISMISS = "com.tami.app.DISMISS"
         const val ACTION_CTRL = "com.tami.app.CTRL"
         const val EXTRA_CMD = "cmd"
+        const val EXTRA_ARG = "arg"
         const val EXTRA_URL = "url"
         const val EXTRA_TITLE = "title"
         const val EXTRA_ARTIST = "artist"
@@ -36,6 +38,7 @@ class TamiPlayerService : Service() {
         const val MODE_NONE = 0
         const val MODE_ADVERTISE = 1
         const val MODE_HANDOFF = 2
+        const val MODE_CODEC = 3
 
         @Volatile var mode = MODE_NONE
         @Volatile var handoffPayload: String? = null
@@ -52,6 +55,17 @@ class TamiPlayerService : Service() {
 
         fun refreshNotif() {
             try { liveService?.updateNotification() } catch (e: Exception) {}
+        }
+
+        fun codecInfo(): String {
+            try {
+                val svc = liveService ?: return "{}"
+                if (mode != MODE_CODEC) return "{}"
+                val mp = svc.mediaPlayer ?: return "{}"
+                return try {
+                    "{\"pos\":${mp.currentPosition},\"dur\":${mp.duration},\"playing\":${mp.isPlaying}}"
+                } catch (e: Exception) { "{}" }
+            } catch (e: Exception) { return "{}" }
         }
 
         fun finishBackground(): String {
@@ -109,7 +123,7 @@ class TamiPlayerService : Service() {
         override fun onSkipToNext() = relayOrNothing("next")
         override fun onSkipToPrevious() = relayOrNothing("prev")
         override fun onSeekTo(pos: Long) {
-            if (mode == MODE_HANDOFF) {
+            if (mode == MODE_HANDOFF || mode == MODE_CODEC) {
                 try { mediaPlayer?.seekTo(pos.toInt()) } catch (e: Exception) {}
                 liveSession?.let { s ->
                     MainActivity.nowPlayingPlaying?.let { playing ->
@@ -159,17 +173,34 @@ class TamiPlayerService : Service() {
                 goForeground()
                 startHandoff(trackUrl!!, pos)
             }
+            ACTION_CODEC -> {
+                stopPlayback()
+                trackUrl = intent.getStringExtra(EXTRA_URL)
+                trackTitle = intent.getStringExtra(EXTRA_TITLE) ?: "TAMI"
+                trackArtist = intent.getStringExtra(EXTRA_ARTIST) ?: ""
+                val pos = intent.getLongExtra(EXTRA_POS, 0L)
+                if (trackUrl.isNullOrEmpty()) {
+                    stopAll()
+                    return START_NOT_STICKY
+                }
+                mode = MODE_CODEC
+                goForeground()
+                startHandoff(trackUrl!!, pos)
+            }
             ACTION_CTRL -> when (intent.getStringExtra(EXTRA_CMD)) {
                 "playpause" -> doToggle()
                 "next" -> relayOrNothing("next")
                 "prev" -> relayOrNothing("prev")
-                "play" -> if (mode == MODE_HANDOFF) {
+                "play" -> if (mode == MODE_HANDOFF || mode == MODE_CODEC) {
                     try { mediaPlayer?.start() } catch (e: Exception) {}
                     updateNotification()
                 }
-                "pause" -> if (mode == MODE_HANDOFF) {
+                "pause" -> if (mode == MODE_HANDOFF || mode == MODE_CODEC) {
                     try { mediaPlayer?.pause() } catch (e: Exception) {}
                     updateNotification()
+                }
+                "seek" -> if (mode == MODE_HANDOFF || mode == MODE_CODEC) {
+                    try { mediaPlayer?.seekTo(intent.getIntExtra(EXTRA_ARG, 0)) } catch (e: Exception) {}
                 }
             }
             ACTION_STOP -> {
@@ -223,7 +254,7 @@ class TamiPlayerService : Service() {
                 }
             )
         }
-        val playing = mode == MODE_HANDOFF && (mediaPlayer?.isPlaying ?: false)
+        val playing = (mode == MODE_HANDOFF || mode == MODE_CODEC) && (mediaPlayer?.isPlaying ?: false)
         val openPi = PendingIntent.getActivity(
             this, 0,
             Intent(this, MainActivity::class.java).addFlags(Intent.FLAG_ACTIVITY_NEW_TASK or Intent.FLAG_ACTIVITY_SINGLE_TOP),
@@ -266,7 +297,6 @@ class TamiPlayerService : Service() {
 
     private fun startHandoff(url: String, pos: Long) {
         try {
-            mode = MODE_HANDOFF
             val mp = MediaPlayer()
             mp.setAudioAttributes(
                 AudioAttributes.Builder()
@@ -280,10 +310,12 @@ class TamiPlayerService : Service() {
                 try {
                     if (pos > 0) m.seekTo(pos.toInt())
                     m.start()
-                    val payload = handoffPayload
-                    if (!payload.isNullOrEmpty()) {
-                        val o = JSONObject(payload).put("pos", m.currentPosition.toLong())
-                        handoffPayload = o.toString()
+                    if (mode == MODE_HANDOFF) {
+                        val payload = handoffPayload
+                        if (!payload.isNullOrEmpty()) {
+                            val o = JSONObject(payload).put("pos", m.currentPosition.toLong())
+                            handoffPayload = o.toString()
+                        }
                     }
                     updateNotification()
                     liveSession?.let { s -> syncSessionPos(true, m.currentPosition.toLong()) }
@@ -292,6 +324,10 @@ class TamiPlayerService : Service() {
             mp.setOnErrorListener { _, _, _ -> stopAll(); true }
             mp.setOnCompletionListener {
                 if (mode == MODE_HANDOFF) stopAll()
+                else if (mode == MODE_CODEC) {
+                    MainActivity.relayControl("codecEnd")
+                    stopAll()
+                }
             }
             mp.prepareAsync()
             mediaPlayer = mp
@@ -301,7 +337,7 @@ class TamiPlayerService : Service() {
     }
 
     private fun doToggle() {
-        if (mode == MODE_HANDOFF) {
+        if (mode == MODE_HANDOFF || mode == MODE_CODEC) {
             val mp = mediaPlayer
             if (mp == null) return
             try {
@@ -321,6 +357,16 @@ class TamiPlayerService : Service() {
         MainActivity.relayControl(cmd)
     }
 
+    private fun stopPlayback() {
+        try {
+            mediaPlayer?.let { m ->
+                try { if (m.isPlaying) m.stop() } catch (e: Exception) {}
+                try { m.release() } catch (e: Exception) {}
+            }
+        } catch (e: Exception) {}
+        mediaPlayer = null
+    }
+
     private fun updateNotification() {
         try {
             val nm = getSystemService(NOTIFICATION_SERVICE) as NotificationManager
@@ -329,13 +375,7 @@ class TamiPlayerService : Service() {
     }
 
     private fun stopAll() {
-        try {
-            mediaPlayer?.let { m ->
-                try { if (m.isPlaying) m.stop() } catch (e: Exception) {}
-                try { m.release() } catch (e: Exception) {}
-            }
-        } catch (e: Exception) {}
-        mediaPlayer = null
+        stopPlayback()
         try { session?.release() } catch (e: Exception) {}
         session = null
         liveSession = null
