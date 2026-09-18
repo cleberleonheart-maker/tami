@@ -216,11 +216,12 @@ nav button.active { color: var(--primary); }
 input[type=range] { width: 100%; -webkit-appearance: none; appearance: none; height: 4px; border-radius: 2px; background: var(--surface-v); outline: none; }
 input[type=range]::-webkit-slider-thumb { -webkit-appearance: none; width: 14px; height: 14px; border-radius: 50%; background: var(--primary); cursor: pointer; }
 input[type=range]::-moz-range-thumb { width: 14px; height: 14px; border-radius: 50%; background: var(--primary); cursor: pointer; border: none; }
-.p-controls { display: flex; align-items: center; justify-content: center; gap: 28px; padding: 18px 0 30px; }
+.p-controls { display: flex; align-items: center; justify-content: flex-start; gap: 12px; padding: 16px 14px 26px; overflow-x: auto; -webkit-overflow-scrolling: touch; scrollbar-width: none; }
+.p-controls::-webkit-scrollbar { display: none; width: 0; height: 0; }
 .pc {
-  background: none; border: none; color: var(--text); font-size: 26px;
-  cursor: pointer; padding: 10px; line-height: 1; width: 52px; height: 52px;
-  display: flex; align-items: center; justify-content: center;
+  background: none; border: none; color: var(--text); font-size: 24px;
+  cursor: pointer; padding: 8px; line-height: 1; width: 46px; height: 46px;
+  flex: 0 0 auto; display: flex; align-items: center; justify-content: center;
 }
 .pc.primary { color: var(--primary); }
 .pc.big { font-size: 44px; width: 74px; height: 74px; }
@@ -1374,6 +1375,33 @@ function durationOf(file, isVideo) {
 }
 
 // ---------- Importação ----------
+function fileReaderB64(blob) {
+  return new Promise((res) => {
+    const r = new FileReader();
+    r.onload = () => res(String(r.result || '').split(',')[1] || '');
+    r.onerror = () => res('');
+    r.readAsDataURL(blob);
+  });
+}
+async function cacheHandoffPath(file, id) {
+  try {
+    if (!(window.TamiNative && window.TamiNative.cacheStart && window.TamiNative.cacheAppend)) return '';
+    if (!file || !file.size) return '';
+    const base = (file.name || 'music').replace(/[^A-Za-z0-9._ -]/g, '_');
+    const path = window.TamiNative.cacheStart(base + '-' + String(id).replace(/[^A-Za-z0-9_-]/g, ''));
+    if (!path) return '';
+    const CH = 512 * 1024;
+    for (let off = 0; off < file.size; off += CH) {
+      const slice = file.slice(off, off + CH);
+      const b64 = await fileReaderB64(slice);
+      if (!b64 || !window.TamiNative.cacheAppend(path, b64)) return '';
+    }
+    return path;
+  } catch (e) { return ''; }
+}
+function deleteHandoffCache(s) {
+  try { if (s && s.handoffPath && window.TamiNative && window.TamiNative.cacheDelete) window.TamiNative.cacheDelete(s.handoffPath); } catch (e) {}
+}
 async function importFiles(fileList, kind) {
   const existing = new Set();
   const seeds = kind === 'song' ? state.songs : state.videos;
@@ -1392,13 +1420,15 @@ async function importFiles(fileList, kind) {
       if (kind === 'song') {
         const meta = await metadataOf(file);
         const dur = await durationOf(file, false);
+        const id = 's' + (file.lastModified) + '-' + Math.random().toString(36).slice(2, 8);
+        const handoffPath = await cacheHandoffPath(file, id);
         await putSong({
-          id: 's' + (file.lastModified) + '-' + Math.random().toString(36).slice(2, 8),
+          id: id,
           title: meta.title || file.name, artist: meta.artist || 'Artista desconhecido',
           album: meta.album || UNKNOWN, year: meta.year || (new Date().getFullYear()),
           durationMs: dur, cover: meta.cover ? meta.cover.blob : null,
           coverMime: meta.cover ? meta.cover.mime : null,
-          type: 'song', createdAt: Date.now(), blob: file, name: file.name
+          type: 'song', createdAt: Date.now(), blob: file, name: file.name, handoffPath
         });
       } else {
         const dur = await durationOf(file, true);
@@ -3324,7 +3354,7 @@ function syncNativeNow(force) {
         playing = !el.paused && !el.ended && !!el.src;
       } catch (e) {}
     }
-    const url = (s.url && /^(content|file):/.test(s.url)) ? s.url : '';
+    const url = (s.url && /^(content|file):/.test(s.url)) ? s.url : (s.handoffPath || '');
     window.TamiNative.updateNowPlaying(JSON.stringify({
       id: String(s.id || ''), title: s.title || s.name || '', artist: s.artist || s.album || '',
       url, pos, dur, playing
@@ -3389,7 +3419,7 @@ function maybeHandoffToNative() {
     if (!s || s.type === 'video') return;
     const el = audio;
     if (!el || !el.src || el.paused || el.ended) return;
-    const url = (s.url && /^(content|file):/.test(s.url)) ? s.url : '';
+    const url = (s.url && /^(content|file):/.test(s.url)) ? s.url : (s.handoffPath || '');
     if (!url) return;
     const pos = Math.floor((el.currentTime || 0) * 1000);
     let ok = false;
@@ -3414,6 +3444,7 @@ document.addEventListener('visibilitychange', () => {
     maybeHandoffToNative();
   }
 });
+window.addEventListener('pagehide', () => { maybeHandoffToNative(); });
 function toggleShuffle() {
   state.shuffle = !state.shuffle;
   renderPlayer();
@@ -3864,6 +3895,11 @@ const CHANGELOG = {
     pt: ['Tradução das letras agora num tom claro que sempre aparece, inclusive na linha destacada'],
     en: ['Lyric translation now uses a light tone that always shows, even on the highlighted line'],
     es: ['La traducción de letras ahora usa un tono claro que siempre se ve, incluso en la línea resaltada']
+  },
+  '1.28': {
+    pt: ['Os botões do player ficavam grandes demais e o play (e outros) sumiam da tela: agora a fileira desliza pro lado com o dedo e todo botão aparece', 'Corrige a música que parava ao fechar o app quando tocava uma música importada: ela agora é copiada na hora e continua no player nativo; o app também recupera a música sozinho se for fechado com força'],
+    en: ['The player buttons were too big and the play (and others) hid off screen: now the row slides sideways with your finger and every button shows up', 'Fixes music stopping when closing the app while an imported song played: it is now copied to the native player and keeps playing; the app also recovers the song by itself if closed forcefully'],
+    es: ['Los botones del reproductor eran demasiado grandes y el play (y otros) quedaban ocultos: ahora la fila se desliza de lado con el dedo y se ve cada botón', 'Corrige la música que se detenía al cerrar la app con una canción importada: ahora se copia al reproductor nativo y sigue sonando; la app también recupera la canción sola si se cierra a la fuerza']
   }
 };
 function changelogList(ver) {
@@ -4099,6 +4135,8 @@ async function deleteDupes(idsArg) {
   if (!ids.length) return;
   closeModal();
   for (const id of ids) {
+    const it = state.songs.find((x) => x.id === id);
+    deleteHandoffCache(it);
     await delObj('songs', id);
     state.favs.delete(id);
     if (state.learn[id]) { delete state.learn[id]; }
@@ -4127,6 +4165,8 @@ async function delVideo(id) {
 async function delSong(id) {
   if (!confirm('Excluir esta música? Ela também sai das playlists e favoritos.')) return;
   const wasCurrent = state.current && state.current.id === id;
+  const old = state.songs.find((x) => x.id === id);
+  deleteHandoffCache(old);
   await delObj('songs', id);
   state.favs.delete(id);
   await putKV('favs', [...state.favs]);

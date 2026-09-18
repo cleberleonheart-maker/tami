@@ -15,6 +15,7 @@ import android.os.Build
 import android.os.IBinder
 import android.os.PowerManager
 import org.json.JSONObject
+import java.io.File
 
 class TamiPlayerService : Service() {
 
@@ -219,7 +220,7 @@ class TamiPlayerService : Service() {
             }
             ACTION_DISMISS -> stopAll()
         }
-        return START_NOT_STICKY
+        return START_REDELIVER_INTENT
     }
 
     private fun readAdvertiseMetadata() {
@@ -305,7 +306,8 @@ class TamiPlayerService : Service() {
                     .build()
             )
             mp.setWakeMode(this, PowerManager.PARTIAL_WAKE_LOCK)
-            mp.setDataSource(this, Uri.parse(url))
+            val uri = if (url.startsWith("/")) Uri.fromFile(File(url)) else Uri.parse(url)
+            mp.setDataSource(this, uri)
             mp.setOnPreparedListener { m ->
                 try {
                     if (pos > 0) m.seekTo(pos.toInt())

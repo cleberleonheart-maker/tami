@@ -219,6 +219,31 @@ class MainActivity : AppCompatActivity() {
         fun finishBackground(): String = TamiPlayerService.finishBackground()
 
         @JavascriptInterface
+        fun cacheStart(name: String): String {
+            try {
+                val safe = name.replace(Regex("[^A-Za-z0-9._\\- ]"), "_").trim().ifEmpty { "music" }
+                val dir = File(filesDir, "handoff").apply { mkdirs() }
+                val f = File(dir, safe)
+                f.delete()
+                return f.absolutePath
+            } catch (e: Exception) { return "" }
+        }
+
+        @JavascriptInterface
+        fun cacheAppend(path: String, b64: String): Boolean {
+            try {
+                val bytes = android.util.Base64.decode(b64, android.util.Base64.DEFAULT)
+                java.io.FileOutputStream(path, true).use { it.write(bytes) }
+                return true
+            } catch (e: Exception) { return false }
+        }
+
+        @JavascriptInterface
+        fun cacheDelete(path: String) {
+            try { java.io.File(path).delete() } catch (e: Exception) {}
+        }
+
+        @JavascriptInterface
         fun speak(text: String) {
             runOnUiThread {
                 try {
