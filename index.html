@@ -2245,6 +2245,22 @@ function downloadApk() {
   if (window.TamiNative && TamiNative.installUpdate) { TamiNative.installUpdate(APK_INFO.url); return; }
   window.location.href = APK_INFO.url;
 }
+function dismissUpdate() {
+  try { localStorage.setItem('tami-update-seen', APK_INFO.ver); } catch (e) {}
+  closeModal();
+}
+function showUpdateDialog() {
+  if (!APK_INFO || !APK_INFO.ver || !APK_INFO.url || !updateAvailable()) return;
+  try { if (localStorage.getItem('tami-update-seen') === APK_INFO.ver) return; } catch (e) {}
+  const inst = installedVersion();
+  $('modal').innerHTML = `<h3>🚀 Atualização disponível</h3>
+    <div class="section">Saiu a TAMI <b>${esc(APK_INFO.ver)}</b> e a sua é a ${esc(inst || '?')}. Quer baixar e instalar agora?</div>
+    <div id="modal-actions">
+      <button class="btn secondary" onclick="dismissUpdate()">Agora não</button>
+      <button class="btn" onclick="closeModal();downloadApk()">⬇ Baixar e instalar</button>
+    </div>`;
+  $('modal-wrap').classList.add('show');
+}
 function applyTheme() { document.documentElement.classList.toggle('light', (state.theme || 'dark') === 'light'); }
 function toggleTheme() {
   state.theme = state.theme === 'light' ? 'dark' : 'light';
@@ -2639,7 +2655,10 @@ async function init() {
   startVis();
   if (window.TamiNative) {
     loadApkInfo().then(() => {
-      if (updateAvailable()) toast('Atualização da TAMI ' + APK_INFO.ver + ' disponível! (Perfil → TAMI para Android)');
+      if (updateAvailable()) {
+        toast('Atualização da TAMI ' + APK_INFO.ver + ' disponível!');
+        setTimeout(showUpdateDialog, 1500);
+      }
     });
   }
 }
