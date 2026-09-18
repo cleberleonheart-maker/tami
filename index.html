@@ -663,13 +663,18 @@ function urlOfSong(s) { return URL.createObjectURL(s.blob); }
 function renderArt(art, s, size) {
   art.className = 'art ' + (size || '');
   art.textContent = '';
-  if (s.cover) {
+  if (s.coverUrl) {
+    const img = document.createElement('img');
+    img.src = s.coverUrl;
+    art.appendChild(img);
+  } else if (s.cover) {
     const img = document.createElement('img');
     img.src = URL.createObjectURL(s.cover);
     art.appendChild(img);
   } else {
-    art.textContent = (s.album === UNKNOWN ? '♪' : initials(s.album));
-    art.classList.add(grad(Number(s.album.split('').reduce((a, c) => a + c.charCodeAt(0), 0))));
+    const c = (s.album === UNKNOWN ? '♪' : initials(s.album));
+    art.textContent = c;
+    art.classList.add(grad(Number(s.album.split('').reduce((a, cc) => a + cc.charCodeAt(0), 0))));
   }
 }
 function renderSongs(list, container, favOnly) {
@@ -1224,6 +1229,7 @@ function importPrompt() { $('fileSongs').click(); }
 // ---------- Player ----------
 let objectUrlCache = new Map();
 function objUrl(s) {
+  if (s.url) return s.url;
   if (!objectUrlCache.has(s.id)) objectUrlCache.set(s.id, URL.createObjectURL(s.blob));
   return objectUrlCache.get(s.id);
 }
@@ -1359,6 +1365,50 @@ function djMix(vibe) {
   renderVirgin();
   djSpeak(msg);
 }
+const TAMI_FACTS = [
+  'Sabia que a música mais ouvida do mundo é "Shape of You" do Ed Sheeran? Mais de três bilhões de plays. Ela deve ter um replay forte!',
+  'Você sabia que as músicas ficam presas na cabeça porque o cérebro repete o refrão sozinho? A culpa é da sua cabeça, não minha!',
+  'Sabia que os Beatles gravaram a música mais curta da história da banda, com um minuto e meio? Tudo a ver com a nossa vibe.',
+  'Curiosidade: o primeiro DJ da história surgiu na década de quarenta, quando o rádio ainda era tudo. Vem de longe essa profissão, hein!',
+  'Sabia que ouvir música enquanto faz tarefas melhora a concentração? Bom, se não melhorar, pelo menos fica mais divertido.',
+  'Curiosidade: o som viaja a 340 metros por segundo no ar. Mas quando cai a balada, parece que ele chega na hora certa.',
+  'Sabia que o fone de ouvido foi inventado para marinheiros em 1910? Depois virou companheiro de balada pra todo mundo.',
+  'Você sabia que uma música pop média tem três minutos e meio? Tempo suficiente pra você curtir e a gente emendar já a próxima.',
+  'Curiosidade: o vinil voltou a vender mais que o CD em 202o. O analógico tem um charme que o digital não mata.',
+  'Sabia que a voz humana já era considerada o instrumento mais antigo do mundo? E a minha, vocês aprovam?',
+  'Fato curioso: na década de setenta surgiram os primeiros grandes DJs de festa, revolucionando a balada. É por eles que eu existo.',
+  'Sabia que existem mais de 100 milhões de músicas disponíveis hoje? Imagina eu mixando tudo isso! Dava uma festa infinita.'
+];
+function tamiCuriosidade() {
+  const cur = state.current;
+  const banda = cur && (cur.artist || cur.album || '').trim();
+  const msg = TAMI_FACTS[Math.floor(Math.random() * TAMI_FACTS.length)];
+  djSpeak(banda
+    ? 'Curiosidade sobre a banda ' + banda + '. ' + msg
+    : 'Curiosidade da TAMI. ' + msg);
+  toast('🥸 Curiosidade sobre a banda!');
+}
+function tamiLocutorToggle() {
+  state.djLocutor = !state.djLocutor;
+  renderVirgin();
+  const c = $('p-djvoice');
+  if (c) c.style.color = state.djLocutor ? 'var(--primary)' : 'var(--text)';
+  djSpeak(state.djLocutor
+    ? 'Modo locutor ativado! Agora eu apresento cada música como uma locutora de rádio de verdade, e trago uma curiosidade sobre a banda a cada cinco minutos.'
+    : 'Modo locutor desativado. Voltamos ao modo DJ normal.');
+  if (state.djLocutor) tamiFactTimerStart(); else tamiFactTimerStop();
+}
+let tamiFactTimer = null;
+function tamiFactTimerStart() {
+  tamiFactTimerStop();
+  tamiFactTimer = setInterval(() => {
+    if (state.djMode && state.djLocutor) tamiCuriosidade();
+  }, 5 * 60 * 1000);
+  setTimeout(() => { if (state.djLocutor && state.djMode) tamiCuriosidade(); }, 20000);
+}
+function tamiFactTimerStop() {
+  if (tamiFactTimer) { clearInterval(tamiFactTimer); tamiFactTimer = null; }
+}
 const TAMI_JOKES = [
   'Por que o músico não paga o aluguel? Porque ele sempre vive no tempo. Ah, essa foi ruim, né?',
   'O que o DJ falou para o microfone? Você me tem. Determinada presença!',
@@ -1479,6 +1529,12 @@ function djCommand(raw) {
     case 'bombar': djSpeak('Bora bombar! Preparando um mix só pra você.'); setTimeout(() => djMix('bombar'), 1500); break;
     case 'relaxar': djSpeak('Pode relaxar. Deixa comigo o clima.'); setTimeout(() => djMix('relaxar'), 1500); break;
     case 'piada': setTimeout(tamiPiada, 600); break;
+    case 'curiosidade': {
+      djSpeak('Ótimo! Vou te contar uma curiosidade sobre a banda.');
+      setTimeout(tamiCuriosidade, 700);
+      break;
+    }
+    case 'locutor': tamiLocutorToggle(); break;
     case 'timer': {
       const m = parseInt((norm.match(/(\d+)/) || [])[1], 10);
       if (m && m > 0 && m <= 120) { djSpeak('Combinado! Desligo em ' + m + ' minutos.'); tamiSleep(m); }
