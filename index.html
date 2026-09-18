@@ -1090,7 +1090,6 @@ const VERSION_URL = 'https://cleberleonheart-maker.github.io/tami/version';
 // ---------- IndexedDB ----------
 function openDB() {
   return new Promise((resolve, reject) => {
-    const t = setTimeout(() => resolve(null), 3000);
     try {
       const req = indexedDB.open('tami-app', 1);
       req.onupgradeneeded = (e) => {
@@ -1100,10 +1099,25 @@ function openDB() {
         if (!db.objectStoreNames.contains('playlists')) db.createObjectStore('playlists', { keyPath: 'id' });
         if (!db.objectStoreNames.contains('kv')) db.createObjectStore('kv');
       };
-      req.onsuccess = () => { clearTimeout(t); resolve(req.result); };
-      req.onerror = () => { clearTimeout(t); reject(req.error); };
-    } catch (e) { clearTimeout(t); reject(e); }
+      req.onsuccess = () => resolve(req.result);
+      req.onerror = () => reject(req.error);
+      req.onblocked = () => reject(new Error('blocked'));
+    } catch (e) { reject(e); }
   });
+}
+async function ensureDB() {
+  if (state.db) return state.db;
+  for (let i = 0; i < 3; i++) {
+    try {
+      const db = await Promise.race([
+        openDB(),
+        new Promise((r) => setTimeout(() => r(null), 8000))
+      ]);
+      if (db) { state.db = db; return db; }
+    } catch (e) {}
+    await new Promise((r) => setTimeout(r, 1500));
+  }
+  return state.db;
 }
 function tx(store, mode) { return state.db.transaction(store, mode).objectStore(store); }
 function getAll(store) {
@@ -1300,7 +1314,7 @@ async function importFiles(fileList, kind) {
   }
   let added = 0, skipped = 0;
   toast(`Importando ${fileList.length} arquivos…`);
-  if (!state.db) { toast('Armazenamento indisponível: não é possível importar músicas.'); return; }
+  if (!(await ensureDB())) { toast('Armazenamento indisponível: não é possível importar músicas.'); return; }
   for (const file of fileList) {
     const key = (file.lastModified || 0) + '|' + file.size + '|' + file.name;
     if (existing.has(key)) { skipped++; continue; }
@@ -3568,12 +3582,16 @@ async function reloadAll() {
 async function init() {
   try { registerTabs(); } catch (e) { console.warn('tabs', e); }
   applyLang();
-  try {
-    state.db = await openDB();
-  } catch (e) {
-    console.warn('IndexedDB indisponível:', e);
-    state.db = null;
-    if (!$('toast').classList.contains('show')) toast('Armazenamento indisponível — não será possível salvar músicas.');
+  state.db = await ensureDB();
+  if (!state.db) {
+    toast('Armazenamento indisponível — vou tentar de novo em instantes.');
+    (async () => {
+      for (let i = 0; i < 6 && !state.db; i++) {
+        await new Promise((r) => setTimeout(r, 5000));
+        state.db = await ensureDB();
+        if (state.db) { await reloadAll(); toast('Armazenamento restabelecido.'); }
+      }
+    })();
   }
   await reloadAll();
   try {
@@ -3652,7 +3670,7 @@ function registerTabs() {
 }
 async function scanDeviceMusic() {
   if (!(window.TamiNative && window.TamiNative.scanMusic)) { toast('Localização automática disponível no app Android.'); return; }
-  if (!state.db) { toast('Armazenamento indisponível.'); return; }
+  if (!(await ensureDB())) { toast('Armazenamento indisponível.'); return; }
   toast('Lendo músicas do aparelho…');
   let list;
   try { list = JSON.parse(window.TamiNative.scanMusic()) || []; } catch (e) { list = []; }
