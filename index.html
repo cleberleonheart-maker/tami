@@ -605,8 +605,9 @@ const I18N = {
   mixNeed: { pt: 'Importe músicas para a TAMI mixar.', en: 'Import some songs so TAMI can mix.', es: 'Importa canciones para que TAMI mezcle.' },
   factBand: { pt: 'Curiosidade sobre a banda {band}. {fact}', en: 'A fun fact about {band}. {fact}', es: 'Una curiosidad sobre la banda {band}. {fact}' },
   factSolo: { pt: 'Curiosidade da TAMI. {fact}', en: 'A TAMI fun fact. {fact}', es: 'Una curiosidad de TAMI. {fact}' },
+  factSong: { pt: 'Curiosidade sobre essa música. {fact}', en: 'A fun fact about this song. {fact}', es: 'Una curiosidad sobre esta canción. {fact}' },
   factToast: { pt: '🥸 Curiosidade sobre a banda!', en: '🥸 Fun fact about the band!', es: '🥸 ¡Curiosidad sobre la banda!' },
-  annOn: { pt: 'Modo locutor ativado! Agora eu apresento cada música como uma locutora de rádio de verdade, e trago uma curiosidade sobre a banda a cada cinco minutos.', en: 'Announcer mode on! Now I introduce every song like a real radio host, and I bring a fun fact about the band every five minutes.', es: '¡Modo locutor activado! Ahora presento cada canción como una locutora de radio de verdad y traigo una curiosidad sobre la banda cada cinco minutos.' },
+  annOn: { pt: 'Modo locutor ativado! Agora eu apresento cada música como uma locutora de rádio de verdade, e trago curiosidades sobre as bandas e as músicas a cada cinco minutos.', en: 'Announcer mode on! Now I introduce every song like a real radio host, and I bring fun facts about the bands and songs every five minutes.', es: '¡Modo locutor activado! Ahora presento cada canción como una locutora de radio de verdad y traigo curiosidades sobre las bandas y las canciones cada cinco minutos.' },
   annOff: { pt: 'Modo locutor desativado. Voltamos ao modo DJ normal.', en: 'Announcer mode off. Back to normal DJ mode.', es: 'Modo locutor desactivado. Volvemos al modo DJ normal.' },
   jokeIntro: { pt: 'Sabe o que é engraçado? {joke}', en: 'Wanna hear something funny? {joke}', es: '¿Sabes qué es gracioso? {joke}' },
   sleepOff: { pt: 'Boa noite! Desliguei tudo por aqui. Até amanhã.', en: 'Good night! I\'ve turned everything off here. See you tomorrow.', es: '¡Buenas noches! Apagué todo por aquí. Hasta mañana.' },
@@ -641,7 +642,7 @@ const I18N = {
   comNo: { pt: 'Desculpa, não entendi. Tente: TAMI, próxima música.', en: 'Sorry, I didn\'t get that. Try: TAMI, next song.', es: 'Perdón, no te entendí. Prueba: TAMI, siguiente canción.' },
   actBombar: { pt: 'Bora bombar! Preparando um mix só pra você.', en: 'Let\'s rock! Preparing a mix just for you.', es: '¡A darle! Preparando un mix solo para ti.' },
   actRelaxar: { pt: 'Pode relaxar. Deixa comigo o clima.', en: 'You can relax. I\'ll take care of the vibe.', es: 'Puedes relajarte. Yo me encargo del ambiente.' },
-  actFact: { pt: 'Ótimo! Vou te contar uma curiosidade sobre a banda.', en: 'Great! I\'ll tell you a fun fact about the band.', es: '¡Genial! Te contaré una curiosidad sobre la banda.' },
+  actFact: { pt: 'Ótimo! Vou buscar uma curiosidade sobre a banda ou a música.', en: 'Great! I\'ll look up a fun fact about the band or the song.', es: '¡Genial! Buscaré una curiosidad sobre la banda o la canción.' },
   actTimer: { pt: 'Combinado! Desligo em {n} minutos.', en: 'Deal! I\'ll shut down in {n} minutes.', es: '¡Hecho! Apago en {n} minutos.' },
   actTimerAsk: { pt: 'Diga em quantos minutos, por exemplo: TAMI, timer de 20 minutos.', en: 'Tell me in how many minutes, for example: TAMI, 20 minute timer.', es: 'Dime en cuántos minutos, por ejemplo: TAMI, temporizador de 20 minutos.' },
   actMix: { pt: 'Claro! Preparando um mix novo para você.', en: 'Sure! Preparing a fresh mix for you.', es: '¡Claro! Preparando un mix nuevo para ti.' },
@@ -1055,7 +1056,21 @@ const TAMI_MOODS_ALL = {
     'Bora deixar o dia mais bonito!',
     'Eu acredito em você. Sempre.',
     'Um bom som resolve quase tudo.',
-    'Dance um pouquinho, faz bem pro coração!'
+    'Dance um pouquinho, faz bem pro coração!',
+    'Tô com umas músicas novas guardadas pra você. Quer ouvir?',
+    'Sabe o segredo de um dia bom? Uma trilha sonora melhor ainda.',
+    'Seu sorriso combina com o som bem alto!',
+    'Ei, não esquece de beber água e aumentar o volume.',
+    'Eu podia ficar aqui conversando, mas prefiro te ver dançando.',
+    'Cada música que você ouve vira uma lembrança. Bora criar mais uma?',
+    'Confia em mim: essa próxima vai te arrepirar.',
+    'Você tem um gosto musical ótimo. E eu tenho provas disso.',
+    'A vida fica mais leve quando tem refrão.',
+    'Se o dia foi difícil, deixa que eu toco a trilha da vitória.',
+    'Tô com saudade de te ver por aqui! Volta sempre.',
+    'Já pensou em montar uma playlist só com músicas que te fazem sorrir?',
+    'Aperta o play e esquece o resto por um instante.',
+    'Prontinha pra te acompanhar o dia inteiro. Só chamar!'
   ],
   en: [
     'Hey, gorgeous! Want to listen to something good?',
@@ -1065,7 +1080,21 @@ const TAMI_MOODS_ALL = {
     'Let\'s make today more beautiful!',
     'I believe in you. Always.',
     'A good song fixes almost everything.',
-    'Dance a little — it\'s good for the heart!'
+    'Dance a little — it\'s good for the heart!',
+    'I\'ve got some new songs saved just for you. Want to hear them?',
+    'Know the secret to a good day? An even better soundtrack.',
+    'Your smile goes perfectly with the volume turned up!',
+    'Hey, don\'t forget to drink water and turn up the volume.',
+    'I could stay here chatting, but I\'d rather watch you dance.',
+    'Every song you hear becomes a memory. Let\'s make one more?',
+    'Trust me: this next one will give you chills.',
+    'You have great taste in music. And I have proof.',
+    'Life is lighter when there\'s a chorus.',
+    'If your day was rough, let me play the victory soundtrack.',
+    'I miss seeing you here! Come back often.',
+    'Ever thought of making a playlist of songs that make you smile?',
+    'Hit play and forget the rest for a moment.',
+    'All set to keep you company all day. Just call me!'
   ],
   es: [
     '¡Hola, guapa! ¿Vamos a escuchar algo bueno?',
@@ -1075,7 +1104,21 @@ const TAMI_MOODS_ALL = {
     '¡Vamos a hacer el día más bonito!',
     'Creo en ti. Siempre.',
     'Un buen sonido arregla casi todo.',
-    '¡Baila un poquito, es bueno para el corazón!'
+    '¡Baila un poquito, es bueno para el corazón!',
+    'Tengo unas canciones nuevas guardadas para ti. ¿Quieres oírlas?',
+    '¿Sabes el secreto de un buen día? Una banda sonora aún mejor.',
+    '¡Tu sonrisa combina con la música bien alta!',
+    'Oye, no olvides tomar agua y subir el volumen.',
+    'Podría quedarme charlando, pero prefiero verte bailar.',
+    'Cada canción que escuchas se vuelve un recuerdo. ¿Creamos otro?',
+    'Confía en mí: esta próxima te va a emocionar.',
+    'Tienes un gusto musical increíble. Y tengo pruebas.',
+    'La vida es más ligera cuando hay estribillo.',
+    'Si el día fue difícil, déjame poner la banda sonora de la victoria.',
+    '¡Extraño verte por aquí! Vuelve siempre.',
+    '¿Has pensado en hacer una playlist de canciones que te hagan sonreír?',
+    'Pulsa play y olvida el resto por un momento.',
+    'Lista para acompañarte todo el día. ¡Solo llámame!'
   ]
 };
 const I18N_MORE = {
@@ -2572,17 +2615,56 @@ function artistFacts(banda) {
   } catch (e) {}
   return null;
 }
-function tamiCuriosidade() {
+async function wikiSummary(term) {
+  const lang = lyrTrLang();
+  if (!term) return '';
+  try {
+    const sr = await fetch(`https://${lang}.wikipedia.org/w/api.php?action=query&format=json&origin=*&list=search&srlimit=1&srsearch=${encodeURIComponent(term)}`);
+    if (!sr.ok) return '';
+    const sj = await sr.json();
+    const hit = sj && sj.query && sj.query.search && sj.query.search[0];
+    if (!hit || !hit.title) return '';
+    const sm = await fetch(`https://${lang}.wikipedia.org/api/rest_v1/page/summary/${encodeURIComponent(String(hit.title).replace(/ /g, '_'))}`);
+    if (!sm.ok) return '';
+    const mj = await sm.json();
+    if (!mj || mj.type === 'disambiguation') return '';
+    let ex = String(mj.extract || '').replace(/\s+/g, ' ').trim();
+    if (!ex) return '';
+    if (ex.length > 320) {
+      const cut = ex.slice(0, 320);
+      const dot = cut.lastIndexOf('. ');
+      ex = dot > 80 ? cut.slice(0, dot + 1) : cut + '…';
+    }
+    return ex;
+  } catch (e) { return ''; }
+}
+async function tamiCuriosidade(opts) {
   const cur = state.current;
   const banda = cur && (cur.artist || cur.album || '').trim();
   const af = artistFacts(banda);
-  const msg = af && af.length
-    ? af[Math.floor(Math.random() * af.length)]
-    : langArr(TAMI_FACTS_ALL)[Math.floor(Math.random() * langArr(TAMI_FACTS_ALL).length)];
-  djSpeak(banda
-    ? L('factBand', { band: banda, fact: msg })
-    : L('factSolo', { fact: msg }));
-  toast(L('factToast'));
+  if (af && af.length) {
+    const msg = af[Math.floor(Math.random() * af.length)];
+    djSpeak(L('factBand', { band: banda, fact: msg }));
+    toast(L('factToast'));
+    return true;
+  }
+  const song = cur && (cur.title || cur.name || '').trim();
+  const term = banda || song;
+  let wf = '';
+  if (term) wf = await wikiSummary(term);
+  if (!wf && song && song !== term) wf = await wikiSummary(song);
+  if (wf) {
+    djSpeak(banda ? L('factBand', { band: banda, fact: wf }) : L('factSong', { song: song || '', fact: wf }));
+    toast(L('factToast'));
+    return true;
+  }
+  if (opts && opts.generic) {
+    const gf = langArr(TAMI_FACTS_ALL);
+    djSpeak(L('factSolo', { fact: gf[Math.floor(Math.random() * gf.length)] }));
+    toast(L('factToast'));
+    return true;
+  }
+  return false;
 }
 function tamiLocutorToggle() {
   state.djLocutor = !state.djLocutor;
@@ -2774,7 +2856,7 @@ function djCommand(raw) {
     case 'piada': setTimeout(tamiPiada, 600); break;
     case 'curiosidade': {
       djSpeak(L('actFact'));
-      setTimeout(tamiCuriosidade, 700);
+      setTimeout(() => tamiCuriosidade({ generic: true }), 700);
       break;
     }
     case 'locutor': tamiLocutorToggle(); break;
@@ -3767,6 +3849,11 @@ const CHANGELOG = {
     pt: ['Agora toca formatos que o app não abria: WMA, AMR, APE, WavPack e AC-3 (via player nativo do Android)', 'Novo botão 📜 Letras no player e no menu da música: mostra a letra, com karaokê destacando a linha sincronizada', 'Quando a música é de outro idioma, a tradução aparece logo abaixo de cada linha (em português, inglês ou espanhol)', 'Corrige a música que parava ao fechar o app: ao sair, ela passa na hora para o player nativo e continua em segundo plano', 'Os cards da tela da TAMI, os botões Bombar/Relaxar e o status agora trocam junto com o idioma do app'],
     en: ['Now plays formats the app could not open: WMA, AMR, APE, WavPack and AC-3 (via Android native player)', 'New 📜 Lyrics button in the player and song menu: shows the lyrics with karaoke-style highlighting of the synced line', 'When the song is in another language, the translation appears right below each line (in Portuguese, English or Spanish)', 'Fixes music stopping when you close the app: on exit it hands over to the native player instantly and keeps playing in the background', 'The TAMI screen cards, the Party/Relax buttons and the status now switch along with the app language'],
     es: ['Ahora reproduce formatos que la app no abría: WMA, AMR, APE, WavPack y AC-3 (con el reproductor nativo de Android)', 'Nuevo botón 📜 Letras en el reproductor y en el menú de la canción: muestra la letra con karaoke resaltando la línea sincronizada', 'Cuando la canción es de otro idioma, la traducción aparece justo debajo de cada línea (en portugués, inglés o español)', 'Corrige la música que se detenía al cerrar la app: al salir pasa al reproductor nativo al instante y sigue en segundo plano', 'Los cards de la pantalla de TAMI, los botones Fiesta/Relajar y el estado ahora cambian junto con el idioma de la app']
+  },
+  '1.25': {
+    pt: ['No modo rádio, as curiosidades agora são sobre a banda ou a música, buscadas na Wikipédia no idioma do app', 'Os fatos genéricos ficam só no card "Fato"', 'A TAMI ganhou várias falas novas: toque no avatar para ouvir'],
+    en: ['In radio mode, facts are now about the band or the song, pulled from Wikipedia in the app language', 'Generic facts now live only in the "Fact" card', 'TAMI got several new lines: tap the avatar to hear them'],
+    es: ['En modo radio, las curiosidades ahora son sobre la banda o la canción, tomadas de Wikipedia en el idioma de la app', 'Los datos genéricos quedan solo en el card "Dato"', 'TAMI estrenó varias frases nuevas: toca el avatar para escucharlas']
   }
 };
 function changelogList(ver) {
