@@ -37,6 +37,7 @@ class MainActivity : AppCompatActivity() {
 
     private lateinit var webView: WebView
     private lateinit var tts: TextToSpeech
+    private var pendingTtsLang: Locale? = null
     private var filePathCallback: ValueCallback<Array<Uri>>? = null
     private var pendingApk: File? = null
 
@@ -77,6 +78,21 @@ class MainActivity : AppCompatActivity() {
         @JavascriptInterface
         fun stopSpeaking() {
             runOnUiThread { try { if (::tts.isInitialized) tts.stop() } catch (e: Exception) {} }
+        }
+
+        @JavascriptInterface
+        fun setLang(lang: String) {
+            val locale = when (lang) {
+                "en" -> Locale("en", "US")
+                "es" -> Locale("es", "ES")
+                else -> Locale("pt", "BR")
+            }
+            runOnUiThread {
+                try {
+                    if (::tts.isInitialized) applyTtsLanguage(locale)
+                    else pendingTtsLang = locale
+                } catch (e: Exception) {}
+            }
         }
 
         @JavascriptInterface
@@ -209,7 +225,12 @@ class MainActivity : AppCompatActivity() {
 
     private fun serveContent(uri: Uri, rangeHeader: String?): WebResourceResponse? {
         return try {
-            val mime = contentResolver.getType(uri) ?: "application/octet-stream"
+            val mime = queryDisplayNameMime(uri).ifEmpty {
+                when (val t = contentResolver.getType(uri) ?: "") {
+                    "", "application/octet-stream", "*/*" -> "audio/mpeg"
+                    else -> t
+                }
+            }
             val pfd = contentResolver.openFileDescriptor(uri, "r") ?: return null
             val total = pfd.statSize
             val stream = ParcelFileDescriptor.AutoCloseInputStream(pfd)
@@ -227,14 +248,40 @@ class MainActivity : AppCompatActivity() {
                             "Content-Range" to "bytes $start-$end/$total",
                             "Content-Length" to len.toString()
                         )
-                        return WebResourceResponse(mime, "utf-8", 206, "Partial Content", headers, stream)
+                        return WebResourceResponse(mime, null, 206, "Partial Content", headers, stream)
                     }
                 }
             }
             val headers = mapOf("Accept-Ranges" to "bytes", "Content-Length" to total.toString())
-            WebResourceResponse(mime, "utf-8", 200, "OK", headers, stream)
+            WebResourceResponse(mime, null, 200, "OK", headers, stream)
         } catch (e: Exception) {
             null
+        }
+    }
+
+    private fun queryDisplayNameMime(uri: Uri): String {
+        return try {
+            val name = contentResolver.query(uri, arrayOf(MediaStore.Audio.Media.DISPLAY_NAME), null, null, null)
+                ?.use { if (it.moveToFirst()) it.getString(0) else null } ?: return ""
+            when {
+                name.endsWith(".mp3", true) -> "audio/mpeg"
+                name.endsWith(".m4a", true) || name.endsWith(".m4b", true) || name.endsWith(".m4p", true) || name.endsWith(".mp4a", true) -> "audio/mp4"
+                name.endsWith(".aac", true) -> "audio/aac"
+                name.endsWith(".ogg", true) || name.endsWith(".opus", true) -> "audio/ogg"
+                name.endsWith(".wav", true) -> "audio/x-wav"
+                name.endsWith(".flac", true) -> "audio/flac"
+                name.endsWith(".amr", true) -> "audio/amr"
+                else -> ""
+            }
+        } catch (e: Exception) {
+            ""
+        }
+    }
+
+    private fun applyTtsLanguage(locale: Locale) {
+        val res = tts.setLanguage(locale)
+        if (res == TextToSpeech.LANG_MISSING_DATA || res == TextToSpeech.LANG_NOT_SUPPORTED) {
+            tts.setLanguage(Locale.getDefault())
         }
     }
 
@@ -244,10 +291,9 @@ class MainActivity : AppCompatActivity() {
 
         tts = TextToSpeech(this) { status ->
             if (status == TextToSpeech.SUCCESS) {
-                val res = tts.setLanguage(Locale("pt", "BR"))
-                if (res == TextToSpeech.LANG_MISSING_DATA || res == TextToSpeech.LANG_NOT_SUPPORTED) {
-                    tts.setLanguage(Locale.getDefault())
-                }
+                val pending = pendingTtsLang
+                applyTtsLanguage(pending ?: Locale("pt", "BR"))
+                pendingTtsLang = null
             }
         }
 

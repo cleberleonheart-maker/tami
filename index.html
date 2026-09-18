@@ -26,7 +26,13 @@
     show('TAMI erro: '+(ev.message||'?')+(ev.filename?(' @ '+(ev.filename.split('/').pop())+' '+(ev.lineno||'?')+':'+(ev.colno||'?')):''));
   });
   window.addEventListener('unhandledrejection',function(ev){
-    var r=ev.reason; show('TAMI promessa: '+(r&&r.message?r.message:String(r)));
+    var r=ev.reason;
+    if (!r) return;
+    var name=r.name||'';
+    var msg=(r.message!=null)?''+r.message:(typeof r==='string'?r:String(r));
+    if (/NotSupportedError|AbortError|InvalidStateError|EncodingError/i.test(name)) return;
+    if (/has no supported source|no supported sources|not supported|cannot play|no hay fuentes|sem origens|origens suportadas|fuentes soportadas|não é possível reproduzir|de reprodução não suportado/i.test(msg)) return;
+    show('TAMI promessa: '+msg);
   });
   window.addEventListener('DOMContentLoaded',function(){
     setTimeout(function(){
@@ -52,14 +58,17 @@
   --glow: 0 0 14px rgba(0,229,255,.55);
   --glow-soft: 0 0 8px rgba(0,229,255,.28);
   --blur: blur(18px) saturate(130%);
+  --bg-glow1: rgba(0,229,255,.16);
+  --bg-glow2: rgba(255,47,214,.15);
+  --bg-glow3: rgba(179,136,255,.14);
 }
 * { box-sizing: border-box; -webkit-tap-highlight-color: transparent; }
 html, body { margin: 0; padding: 0; height: 100%; overflow-x: hidden; overscroll-behavior-x: none; }
 body {
   background:
-    radial-gradient(1200px 600px at 12% -8%, rgba(0,229,255,.16), transparent 60%),
-    radial-gradient(1100px 700px at 108% 16%, rgba(255,47,214,.15), transparent 60%),
-    radial-gradient(900px 620px at 48% 108%, rgba(179,136,255,.14), transparent 62%),
+    radial-gradient(1200px 600px at 12% -8%, var(--bg-glow1), transparent 60%),
+    radial-gradient(1100px 700px at 108% 16%, var(--bg-glow2), transparent 60%),
+    radial-gradient(900px 620px at 48% 108%, var(--bg-glow3), transparent 62%),
     var(--bg);
   color: var(--text);
   font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif;
@@ -239,10 +248,23 @@ html.light {
   --bg: #F5F3FA; --surface: #FFFFFF; --surface-v: #EDEAF5;
   --primary: #7C4DFF; --primary-dark: #5E35B1;
   --text: #1C1A23; --text2: #6E6A7A; --divider: #E3E0EC;
+  --bg-glow1: rgba(124,77,255,.10);
+  --bg-glow2: rgba(255,47,214,.08);
+  --bg-glow3: rgba(0,229,255,.07);
 }
 html.light #player { background: linear-gradient(160deg, #EFEAFA 0%, #F5F3FA 55%); }
 html.light .p-art { box-shadow: 0 18px 50px rgba(124,77,255,.18); }
 html.light #drop-overlay { background: rgba(124,77,255,.15); color: var(--primary-dark); }
+html[data-accent="roxo"] { --primary:#B388FF; --primary-dark:#7C4DFF; --secondary:#FF2FD6; --tertiary:#00E5FF; --divider:rgba(179,136,255,.14); --glow:0 0 14px rgba(179,136,255,.55); --glow-soft:0 0 8px rgba(179,136,255,.28); --bg-glow1:rgba(179,136,255,.18); --bg-glow2:rgba(255,47,214,.12); --bg-glow3:rgba(0,229,255,.10); }
+html[data-accent="rosa"] { --primary:#FF6EC7; --primary-dark:#E0509F; --secondary:#FFD166; --tertiary:#B388FF; --divider:rgba(255,110,199,.14); --glow:0 0 14px rgba(255,110,199,.55); --glow-soft:0 0 8px rgba(255,110,199,.28); --bg-glow1:rgba(255,110,199,.20); --bg-glow2:rgba(179,136,255,.13); --bg-glow3:rgba(255,209,102,.10); }
+html[data-accent="azul"] { --primary:#54A0FF; --primary-dark:#2E86DE; --secondary:#00E5FF; --tertiary:#B388FF; --divider:rgba(84,160,255,.14); --glow:0 0 14px rgba(84,160,255,.55); --glow-soft:0 0 8px rgba(84,160,255,.28); --bg-glow1:rgba(84,160,255,.18); --bg-glow2:rgba(0,229,255,.12); --bg-glow3:rgba(179,136,255,.10); }
+html[data-accent="verde"] { --primary:#5CD859; --primary-dark:#26A65A; --secondary:#FFD166; --tertiary:#00E5FF; --divider:rgba(92,216,89,.14); --glow:0 0 14px rgba(92,216,89,.55); --glow-soft:0 0 8px rgba(92,216,89,.28); --bg-glow1:rgba(92,216,89,.16); --bg-glow2:rgba(0,229,255,.10); --bg-glow3:rgba(255,209,102,.08); }
+html[data-accent="laranja"] { --primary:#FF9F43; --primary-dark:#EE812B; --secondary:#FFD166; --tertiary:#FF2FD6; --divider:rgba(255,159,67,.14); --glow:0 0 14px rgba(255,159,67,.55); --glow-soft:0 0 8px rgba(255,159,67,.28); --bg-glow1:rgba(255,159,67,.18); --bg-glow2:rgba(255,47,214,.10); --bg-glow3:rgba(255,209,102,.10); }
+html[data-accent="roxo"].light { --primary:#7C4DFF; --primary-dark:#5E35B1; }
+html[data-accent="rosa"].light { --primary:#E0509F; --primary-dark:#C2408A; }
+html[data-accent="azul"].light { --primary:#2E86DE; --primary-dark:#1D6FC0; }
+html[data-accent="verde"].light { --primary:#26A65A; --primary-dark:#1B8A48; }
+html[data-accent="laranja"].light { --primary:#EE812B; --primary-dark:#CD6B1E; }
 #drop-overlay {
   position: fixed; inset: 0; z-index: 50; display: none;
   align-items: center; justify-content: center; text-align: center;
@@ -354,9 +376,9 @@ html.light #drop-overlay { background: rgba(124,77,255,.15); color: var(--primar
 body::before {
   content: ''; position: fixed; inset: 0; z-index: -1; pointer-events: none;
   background:
-    radial-gradient(1200px 800px at 110% -10%, rgba(0,229,255,.18), transparent 55%),
-    radial-gradient(1000px 700px at -10% 110%, rgba(255,47,214,.16), transparent 55%),
-    radial-gradient(700px 500px at 60% 6%, rgba(179,136,255,.12), transparent 60%);
+    radial-gradient(1200px 800px at 110% -10%, var(--bg-glow1), transparent 55%),
+    radial-gradient(1000px 700px at -10% 110%, var(--bg-glow2), transparent 55%),
+    radial-gradient(700px 500px at 60% 6%, var(--bg-glow3), transparent 60%);
 }
 body::after {
   content: ''; position: fixed; inset: 0; z-index: -1; pointer-events: none;
@@ -370,15 +392,15 @@ body::after {
 }
 .v-card, .item, .mrow, .empty, .section {
   background: rgba(20,26,58,.5) !important;
-  border: 1px solid rgba(0,229,255,.14) !important;
+  border: 1px solid var(--divider) !important;
   backdrop-filter: blur(12px) saturate(150%);
 }
 .v-card {
   transition: transform .18s ease, box-shadow .2s ease, border-color .2s ease;
 }
 .v-card:hover, .item:hover, .mrow:hover {
-  border-color: rgba(0,229,255,.55) !important;
-  box-shadow: 0 0 24px rgba(0,229,255,.25), inset 0 0 12px rgba(0,229,255,.08);
+  border-color: var(--primary) !important;
+  box-shadow: 0 0 24px var(--primary)44, inset 0 0 12px var(--primary)22;
   transform: translateY(-2px);
 }
 .v-card.on { border-color: #FF2FD6 !important; box-shadow: 0 0 26px rgba(255,47,214,.4); }
@@ -449,15 +471,15 @@ body::after {
     <button class="mm primary" id="mini-play" onclick="event.stopPropagation();togglePlay()">▶</button>
   </div>
   <nav id="nav">
-    <button data-tab="virgin" class="active" onclick="selectTab('virgin')"><span class="ic">🎧</span>TAMI</button>
-    <button data-tab="songs" onclick="selectTab('songs')"><span class="ic">♪</span>Músicas</button>
-    <button data-tab="albums" onclick="selectTab('albums')"><span class="ic">▣</span>Álbuns</button>
-    <button data-tab="artists" onclick="selectTab('artists')"><span class="ic">◎</span>Artistas</button>
-    <button data-tab="playlists" onclick="selectTab('playlists')"><span class="ic">☰</span>Playlists</button>
-    <button data-tab="favs" onclick="selectTab('favs')"><span class="ic">♥</span>Favoritas</button>
-    <button data-tab="videos" onclick="selectTab('videos')"><span class="ic">▷</span>Vídeos</button>
-    <button data-tab="amb" onclick="selectTab('amb')"><span class="ic">🌿</span>Som</button>
-    <button data-tab="phone" onclick="selectTab('phone')"><span class="ic">📱</span>Celular</button>
+    <button data-tab="virgin" class="active" data-icon="🎧" data-label="TAMI" onclick="selectTab('virgin')"><span class="ic">🎧</span>TAMI</button>
+    <button data-tab="songs" data-icon="♪" data-label="tSongs" onclick="selectTab('songs')"><span class="ic">♪</span>Músicas</button>
+    <button data-tab="albums" data-icon="▣" data-label="tAlbums" onclick="selectTab('albums')"><span class="ic">▣</span>Álbuns</button>
+    <button data-tab="artists" data-icon="◎" data-label="tArtists" onclick="selectTab('artists')"><span class="ic">◎</span>Artistas</button>
+    <button data-tab="playlists" data-icon="☰" data-label="tPlaylists" onclick="selectTab('playlists')"><span class="ic">☰</span>Playlists</button>
+    <button data-tab="favs" data-icon="♥" data-label="tFavs" onclick="selectTab('favs')"><span class="ic">♥</span>Favoritas</button>
+    <button data-tab="videos" data-icon="▷" data-label="tVideos" onclick="selectTab('videos')"><span class="ic">▷</span>Vídeos</button>
+    <button data-tab="amb" data-icon="🌿" data-label="tSom" onclick="selectTab('amb')"><span class="ic">🌿</span>Som</button>
+    <button data-tab="phone" data-icon="📱" data-label="tPhone" onclick="selectTab('phone')"><span class="ic">📱</span>Celular</button>
   </nav>
 </div>
 
@@ -491,6 +513,7 @@ body::after {
     <span class="pl">🔉</span>
     <input type="range" id="vol" min="0" max="1" step="0.05" value="1">
     <span class="pr" id="p-speed" onclick="cycleSpeed()" title="Velocidade de reprodução">1x</span>
+    <span class="pr" id="p-8d" onclick="tami8d()" title="Áudio 8D" style="color:var(--text2)">8D</span>
   </div>
 </div>
 
@@ -513,18 +536,415 @@ const state = {
   songs: [], videos: [], playlists: [],
   tab: 'songs', detail: null, // {type:'album'|'artist'|'playlist', ...}
   queue: [], queueIndex: -1, current: null,
-  shuffle: false, repeat: 0, favs: new Set(), nick: '', theme: 'dark', visStyle: 'hearts',
+  shuffle: false, repeat: 0, favs: new Set(), nick: '', theme: 'dark', accent: 'cyan', visStyle: 'hearts',
   djMode: false, djVoice: true, djMic: false, learn: {},
   radio: false, djLocutor: false,
   amb: { id: null, vol: 0.4, playing: false },
   sleep: 0, sleepId: null,
   phone: { dev: '', online: false, state: null, songs: null, syncing: false },
-  db: null
+  db: null,
+  lang: (() => { try { return ['pt', 'en', 'es'].includes(localStorage.getItem('tami-lang')) ? localStorage.getItem('tami-lang') : 'pt'; } catch (e) { return 'pt'; } })()
 };
 
 const $ = (id) => document.getElementById(id);
 const audio = $('audio'), video = $('video');
 const UNKNOWN = 'Desconhecido';
+let mediaSkipGuard = {};
+function mediaError(ev, reason) {
+  const el = ev && ev.target ? ev.target : null;
+  if (!el) return;
+  const err = el.error;
+  const code = err ? err.code : 0;
+  const msg = (err && err.message) || (reason && reason.message) || '';
+  if (code !== 4 && !/supported sources|no hay fuentes|sem origens|origens suportadas|fuentes soportadas|cannot play|not supported/i.test(msg)) return;
+  const cur = state.queue[state.queueIndex];
+  const now = Date.now();
+  if (cur && mediaSkipGuard[cur.id] && now - mediaSkipGuard[cur.id] < 4000) return;
+  if (cur) mediaSkipGuard[cur.id] = now;
+  try { el.pause(); el.removeAttribute('src'); el.load(); } catch (e) {}
+  if (state.djMode && state.queue.length) { toast('Não consegui tocar essa — pulando pra próxima.'); pjNext(); }
+  else toast('Este arquivo não pode ser reproduzido (formato/codec não suportado).');
+}
+function safePlay(el) {
+  if (!el) return;
+  try {
+    const p = el.play();
+    if (p && typeof p.catch === 'function') p.catch((reason) => mediaError({ target: el }, reason));
+  } catch (e) {}
+}
+audio.addEventListener('error', mediaError);
+video.addEventListener('error', mediaError);
+
+// ---------- Idiomas (pt / en / es) ----------
+const LANG_LOCALES = { pt: 'pt-BR', en: 'en-US', es: 'es-ES' };
+const LANG_LABELS = { pt: 'Português', en: 'English', es: 'Español' };
+const LANG_FLAGS = { pt: '🇧🇷', en: '🇺🇸', es: '🇪🇸' };
+function L(key, vars) {
+  const row = I18N[key] || {};
+  let s = row[state.lang] || row.pt || row.en || row.es || key;
+  if (vars) for (const k of Object.keys(vars)) s = s.split('{' + k + '}').join(vars[k]);
+  return s;
+}
+function langArr(arr) { return arr[state.lang] || arr.pt || arr.en || arr.es || []; }
+const I18N = {
+  hiIntro: { pt: 'Oi! Eu sou a TAMI, sua DJ virtual!', en: 'Hi! I\'m TAMI, your virtual DJ!', es: '¡Hola! Soy TAMI, tu DJ virtual.' },
+  hello: { pt: 'Olá! Sou a TAMI, sua DJ virtual.', en: 'Hello! I\'m TAMI, your virtual DJ.', es: '¡Hola! Soy TAMI, tu DJ virtual.' },
+  welcome: { pt: 'Bem-vindo(a)! Eu sou a TAMI, sua DJ virtual.', en: 'Welcome! I\'m TAMI, your virtual DJ.', es: '¡Bienvenido(a)! Soy TAMI, tu DJ virtual.' },
+  nowPlaying: { pt: 'Agora tocando: {track}.', en: 'Now playing: {track}.', es: 'Ahora suena: {track}.' },
+  cGood: { pt: 'Essa é umas boas!', en: 'That one is amazing!', es: '¡Esa es muy buena!' },
+  cLike: { pt: 'Tipo essa eu gosto de tocar.', en: 'I love playing songs like this one.', es: 'Me encanta tocar canciones así.' },
+  cMachine: { pt: 'Boa escolha da máquina, né?', en: 'Great pick by the machine, right?', es: 'Buena elección de la máquina, ¿eh?' },
+  cParty: { pt: 'Essa vai longe na balada.', en: 'This one goes far at the party.', es: 'Esta llega lejos en la fiesta.' },
+  cFav: { pt: 'Essa é das suas favoritas!', en: 'That\'s one of your favorites!', es: '¡Esta es de tus favoritas!' },
+  mixIntro: { pt: 'Olá! Eu sou a TAMI, sua DJ virtual. Bora! Vou tocar {n} músicas para você.', en: 'Hi! I\'m TAMI, your virtual DJ. Let\'s go! I\'ll play {n} songs for you.', es: '¡Hola! Soy TAMI, tu DJ virtual. ¡Vamos! Voy a tocar {n} canciones para ti.' },
+  mixFav: { pt: 'Bora bombar! Vou tocar só as suas favoritas.', en: 'Let\'s rock! I\'ll play only your favorites.', es: '¡A darle! Tocaré solo tus favoritas.' },
+  mixNoFav: { pt: 'Bora bombar! Você ainda não escolheu favoritas, então vou misturar tudo de bom.', en: 'Let\'s rock! You haven\'t picked favorites yet, so I\'ll mix the best of everything.', es: '¡A darle! Aún no has elegido favoritas, así que mezclaré lo mejor de todo.' },
+  mixRelax: { pt: 'Relaxa que eu cuido da trilha sonora. Vou deixar um clima leve pra você.', en: 'Relax, I\'ll handle the soundtrack. I\'ll set a light mood for you.', es: 'Tranquilo(a), yo me encargo de la música. Te dejo un ambiente ligero.' },
+  mixNeed: { pt: 'Importe músicas para a TAMI mixar.', en: 'Import some songs so TAMI can mix.', es: 'Importa canciones para que TAMI mezcle.' },
+  factBand: { pt: 'Curiosidade sobre a banda {band}. {fact}', en: 'A fun fact about {band}. {fact}', es: 'Una curiosidad sobre la banda {band}. {fact}' },
+  factSolo: { pt: 'Curiosidade da TAMI. {fact}', en: 'A TAMI fun fact. {fact}', es: 'Una curiosidad de TAMI. {fact}' },
+  factToast: { pt: '🥸 Curiosidade sobre a banda!', en: '🥸 Fun fact about the band!', es: '🥸 ¡Curiosidad sobre la banda!' },
+  annOn: { pt: 'Modo locutor ativado! Agora eu apresento cada música como uma locutora de rádio de verdade, e trago uma curiosidade sobre a banda a cada cinco minutos.', en: 'Announcer mode on! Now I introduce every song like a real radio host, and I bring a fun fact about the band every five minutes.', es: '¡Modo locutor activado! Ahora presento cada canción como una locutora de radio de verdad y traigo una curiosidad sobre la banda cada cinco minutos.' },
+  annOff: { pt: 'Modo locutor desativado. Voltamos ao modo DJ normal.', en: 'Announcer mode off. Back to normal DJ mode.', es: 'Modo locutor desactivado. Volvemos al modo DJ normal.' },
+  jokeIntro: { pt: 'Sabe o que é engraçado? {joke}', en: 'Wanna hear something funny? {joke}', es: '¿Sabes qué es gracioso? {joke}' },
+  sleepOff: { pt: 'Boa noite! Desliguei tudo por aqui. Até amanhã.', en: 'Good night! I\'ve turned everything off here. See you tomorrow.', es: '¡Buenas noches! Apagué todo por aquí. Hasta mañana.' },
+  sleepWarn: { pt: 'Faltam dois minutos para eu desligar tudo. Se quiser continuar, é só cancelar o timer.', en: 'Two minutes left until I shut everything down. If you want to keep going, just cancel the timer.', es: 'Faltan dos minutos para que apague todo. Si quieres continuar, solo cancela el temporizador.' },
+  sleepSet: { pt: 'Beleza! Vou desligar a música daqui a {n} minutos. Boa noite já adiantada.', en: 'Alright! I\'ll turn the music off in {n} minutes. Sleep well in advance.', es: '¡Listo! Apagaré la música en {n} minutos. Buenas noches anticipadas.' },
+  sleepCancel: { pt: 'Ok! Cancelei o timer. A festa continua.', en: 'Okay! I\'ve cancelled the timer. The party goes on.', es: '¡Ok! Cancelé el temporizador. La fiesta continúa.' },
+  radioOn: { pt: 'Você está ouvindo a Rádio TAMI F.M., tocando {n} músicas de todos os estilos!', en: 'You\'re listening to TAMI F.M. Radio, playing {n} songs of every style!', es: '¡Estás escuchando Radio TAMI F.M., tocando {n} canciones de todos los estilos!' },
+  radioNeed: { pt: 'Importe músicas para a Rádio TAMI tocar.', en: 'Import some songs so Radio TAMI can play.', es: 'Importa canciones para que Radio TAMI toque.' },
+  radioOff: { pt: 'Rádio desligada.', en: 'Radio off.', es: 'Radio apagada.' },
+  micListen: { pt: 'Oi! Eu sou a TAMI. Estou ouvindo: fale TAMI, próxima música.', en: 'Hi! I\'m TAMI. I\'m listening: say TAMI, next song.', es: '¡Hola! Soy TAMI. Estoy escuchando: di TAMI, siguiente canción.' },
+  comNo: { pt: 'Desculpa, não entendi. Tente: TAMI, próxima música.', en: 'Sorry, I didn\'t get that. Try: TAMI, next song.', es: 'Perdón, no te entendí. Prueba: TAMI, siguiente canción.' },
+  actBombar: { pt: 'Bora bombar! Preparando um mix só pra você.', en: 'Let\'s rock! Preparing a mix just for you.', es: '¡A darle! Preparando un mix solo para ti.' },
+  actRelaxar: { pt: 'Pode relaxar. Deixa comigo o clima.', en: 'You can relax. I\'ll take care of the vibe.', es: 'Puedes relajarte. Yo me encargo del ambiente.' },
+  actFact: { pt: 'Ótimo! Vou te contar uma curiosidade sobre a banda.', en: 'Great! I\'ll tell you a fun fact about the band.', es: '¡Genial! Te contaré una curiosidad sobre la banda.' },
+  actTimer: { pt: 'Combinado! Desligo em {n} minutos.', en: 'Deal! I\'ll shut down in {n} minutes.', es: '¡Hecho! Apago en {n} minutos.' },
+  actTimerAsk: { pt: 'Diga em quantos minutos, por exemplo: TAMI, timer de 20 minutos.', en: 'Tell me in how many minutes, for example: TAMI, 20 minute timer.', es: 'Dime en cuántos minutos, por ejemplo: TAMI, temporizador de 20 minutos.' },
+  actMix: { pt: 'Claro! Preparando um mix novo para você.', en: 'Sure! Preparing a fresh mix for you.', es: '¡Claro! Preparando un mix nuevo para ti.' },
+  actThink: { pt: 'Deixa eu pensar aqui...', en: 'Let me think about it...', es: 'Déjame pensar...' },
+  actNoLike: { pt: 'Entendido! Não vou tocar essa por um tempo.', en: 'Got it! I won\'t play this one for a while.', es: '¡Entendido! No tocaré esta por un tiempo.' },
+  actSkip: { pt: 'Pulada!', en: 'Skipped!', es: '¡Saltada!' },
+  actNext: { pt: 'Próxima!', en: 'Next!', es: '¡Siguiente!' },
+  actPrev: { pt: 'Voltando!', en: 'Going back!', es: '¡Volvemos!' },
+  actPause: { pt: 'Pausado!', en: 'Paused!', es: '¡Pausado!' },
+  actPlay: { pt: 'Tocando de novo!', en: 'Playing again!', es: '¡De nuevo sonando!' },
+  actFav: { pt: 'Marcada como favorita!', en: 'Marked as favorite!', es: '¡Marcada como favorita!' },
+  actNothing: { pt: 'Nada tocando no momento.', en: 'Nothing playing right now.', es: 'Nada suena en este momento.' },
+  actThanks: { pt: 'Por nada! A gente se vê na próxima.', en: 'You\'re welcome! See you next time.', es: '¡De nada! Nos vemos a la próxima.' },
+  recNone: { pt: 'Ainda não tenho dados suficientes para recomendar. Toque e favorite músicas que eu aprendo.', en: 'I still don\'t have enough data to recommend. Play and favorite some songs so I can learn.', es: 'Aún no tengo datos suficientes para recomendar. Toca y marca favoritas para que aprenda.' },
+  recDone: { pt: 'Separei {n} músicas para você. As melhores por aqui.', en: 'I picked {n} songs for you. The best ones out there.', es: 'Separé {n} canciones para ti. Las mejores por aquí.' },
+  dupNone: { pt: 'Não encontrei músicas duplicadas. Tudo certo!', en: 'I didn\'t find any duplicate songs. All good!', es: 'No encontré canciones duplicadas. ¡Todo bien!' },
+  dupFound: { pt: 'Encontrei {n} músicas duplicadas. Toque em remover, ou confirme por voz dizendo sim.', en: 'I found {n} duplicate songs. Tap remove, or confirm by voice saying yes.', es: 'Encontré {n} canciones duplicadas. Toca eliminar, o confirma por voz diciendo sí.' },
+  dupAsk: { pt: 'Quer que eu remova as duplicadas? Diga sim, ou diga não.', en: 'Do you want me to remove the duplicates? Say yes or no.', es: '¿Quieres que elimine las duplicadas? Di sí o no.' },
+  dupYes: { pt: 'Perfeito! Removendo as duplicadas.', en: 'Perfect! Removing the duplicates.', es: '¡Perfecto! Eliminando las duplicadas.' },
+  dupNo: { pt: 'Tudo bem, não removo nada.', en: 'Alright, I won\'t remove anything.', es: 'Está bien, no elimino nada.' },
+  d8Need: { pt: 'Áudio 8D disponível quando houver som tocando.', en: '8D audio works when there\'s sound playing.', es: 'El audio 8D funciona cuando hay sonido.' },
+  d8On: { pt: '🎧 8D ativado!', en: '🎧 8D on!', es: '🎧 ¡8D activado!' },
+  d8Off: { pt: '8D desativado.', en: '8D off.', es: '8D desactivado.' },
+  langTitle: { pt: 'Idioma da TAMI', en: 'TAMI language', es: 'Idioma de TAMI' },
+  langChanged: { pt: 'Idioma: {lang}', en: 'Language: {lang}', es: 'Idioma: {lang}' },
+  themeTitle: { pt: 'Tema e cores', en: 'Theme and colors', es: 'Tema y colores' },
+  themeDark: { pt: 'Escuro', en: 'Dark', es: 'Oscuro' },
+  themeLight: { pt: 'Claro', en: 'Light', es: 'Claro' },
+  tSongs: { pt: 'Músicas', en: 'Songs', es: 'Canciones' },
+  tAlbums: { pt: 'Álbuns', en: 'Albums', es: 'Álbumes' },
+  tArtists: { pt: 'Artistas', en: 'Artists', es: 'Artistas' },
+  tPlaylists: { pt: 'Playlists', en: 'Playlists', es: 'Playlists' },
+  tFavs: { pt: 'Favoritas', en: 'Favorites', es: 'Favoritas' },
+  tVideos: { pt: 'Vídeos', en: 'Videos', es: 'Vídeos' },
+  tAmb: { pt: 'Som de fundo', en: 'Background', es: 'Sonido' },
+  tPhone: { pt: 'Celular', en: 'Phone', es: 'Celular' },
+  tSom: { pt: 'Som', en: 'Sound', es: 'Sonido' },
+  searchPh: { pt: 'Buscar músicas, artistas…', en: 'Search songs, artists…', es: 'Buscar canciones, artistas…' },
+  uNotFound: { pt: 'Nada encontrado para <b>{q}</b>.', en: 'Nothing found for <b>{q}</b>.', es: 'Nada encontrado para <b>{q}</b>.' },
+  sOne: { pt: '{n} música', en: '{n} song', es: '{n} canción' },
+  sMany: { pt: '{n} músicas', en: '{n} songs', es: '{n} canciones' },
+  aOne: { pt: '{n} artista', en: '{n} artist', es: '{n} artista' },
+  aMany: { pt: '{n} artistas', en: '{n} artists', es: '{n} artistas' },
+  btnClose: { pt: 'Fechar', en: 'Close', es: 'Cerrar' },
+  btnCancel: { pt: 'Cancelar', en: 'Cancel', es: 'Cancelar' },
+  btnSave: { pt: 'Salvar', en: 'Save', es: 'Guardar' },
+  btnCreate: { pt: 'Criar', en: 'Create', es: 'Crear' },
+  artistUnknown: { pt: 'Artista desconhecido', en: 'Unknown artist', es: 'Artista desconocido' },
+  emptySongs: { pt: 'Nenhuma música. Importe seus arquivos abaixo.', en: 'No songs yet. Import your files below.', es: 'Aún no hay canciones. Importa tus archivos abajo.' },
+  emptyFavs: { pt: 'Nenhuma favorita ainda. Toque no coração para favoritar.', en: 'No favorites yet. Tap the heart to favorite.', es: 'Aún no hay favoritas. Toca el corazón para marcar.' },
+  emptyAlbums: { pt: 'Sem álbuns.', en: 'No albums yet.', es: 'Sin álbumes.' },
+  emptyArtists: { pt: 'Sem artistas ainda.', en: 'No artists yet.', es: 'Sin artistas todavía.' },
+  emptyPlaylists: { pt: 'Nenhuma playlist.', en: 'No playlists yet.', es: 'Sin playlists.' },
+  emptyVideos: { pt: 'Nenhum vídeo.', en: 'No videos yet.', es: 'Sin vídeos.' },
+  btnImportSongs: { pt: '＋ Importar músicas', en: '＋ Import songs', es: '＋ Importar canciones' },
+  btnImportVideos: { pt: '＋ Importar vídeos', en: '＋ Import videos', es: '＋ Importar vídeos' },
+  playlistAddSongs: { pt: 'Adicionar músicas', en: 'Add songs', es: 'Añadir canciones' },
+  playlistAddTitle: { pt: 'Adicionar à playlist', en: 'Add to playlist', es: 'Añadir a la playlist' },
+  playlistAdded: { pt: 'Adicionada à playlist', en: 'Added to playlist', es: 'Añadida a la playlist' },
+  playlistCreated: { pt: 'Playlist criada', en: 'Playlist created', es: 'Playlist creada' },
+  plAlertName: { pt: 'Digite um nome', en: 'Type a name', es: 'Escribe un nombre' },
+  plNamePh: { pt: 'Nome da playlist', en: 'Playlist name', es: 'Nombre de la playlist' },
+  btnNewPlaylist: { pt: '＋ Criar playlist', en: '＋ Create playlist', es: '＋ Crear playlist' },
+  ambSection: { pt: 'Som de fundo', en: 'Background sounds', es: 'Sonidos de fondo' },
+  ambStop: { pt: '⏹ Parar som', en: '⏹ Stop sound', es: '⏹ Detener sonido' },
+  ambPlay: { pt: '▶ Tocar', en: '▶ Play', es: '▶ Reproducir' },
+  ambPlayingTag: { pt: ' · Tocando', en: ' · Playing', es: ' · Sonando' },
+  stPlaying: { pt: 'Tocando agora', en: 'Playing now', es: 'Sonando ahora' },
+  stReady: { pt: 'Pronta para mixar', en: 'Ready to mix', es: 'Lista para mezclar' },
+  stNoSongs: { pt: 'Sem músicas ainda', en: 'No songs yet', es: 'Sin canciones aún' },
+  btnStartTami: { pt: '🎛 Iniciar TAMI', en: '🎛 Start TAMI', es: '🎛 Iniciar TAMI' },
+  btnBombar: { pt: '🎉 Bombar', en: '🎉 Party', es: '🎉 Fiesta' },
+  btnRelaxar: { pt: '🌙 Relaxar', en: '🌙 Relax', es: '🌙 Relajar' },
+  vVoz: { pt: 'Voz', en: 'Voice', es: 'Voz' },
+  vVoiceOn: { pt: 'Ligada', en: 'On', es: 'Activada' },
+  vVoiceOff: { pt: 'Desligada', en: 'Off', es: 'Desactivada' },
+  vMic: { pt: 'Microfone', en: 'Microphone', es: 'Micrófono' },
+  vMicOn: { pt: 'Ouvindo…', en: 'Listening…', es: 'Escuchando…' },
+  vMicOff: { pt: 'Comandos de voz', en: 'Voice commands', es: 'Comandos de voz' },
+  vSleep: { pt: 'Sono', en: 'Sleep', es: 'Sueño' },
+  vSleepOn: { pt: 'Desliga em {n}min', en: 'Off in {n}min', es: 'Apaga en {n}min' },
+  vSleepOff: { pt: 'Timer de sono', en: 'Sleep timer', es: 'Temporizador de sueño' },
+  vJoke: { pt: 'Piada', en: 'Joke', es: 'Chiste' },
+  vJokeSub: { pt: 'TAMI conta uma', en: 'TAMI tells one', es: 'TAMI cuenta uno' },
+  vRadio: { pt: 'Rádio', en: 'Radio', es: 'Radio' },
+  vRadioOn: { pt: 'No ar', en: 'On air', es: 'Al aire' },
+  vRadioSub: { pt: 'TAMI FM', en: 'TAMI FM', es: 'TAMI FM' },
+  vStats: { pt: 'Estatísticas', en: 'Stats', es: 'Estadísticas' },
+  vStatsSub: { pt: 'Seu ranking', en: 'Your ranking', es: 'Tu ranking' },
+  vRec: { pt: 'Recomenda', en: 'Recommend', es: 'Recomendar' },
+  vRecSub: { pt: 'Escolhas da TAMI', en: "TAMI's picks", es: 'Elecciones de TAMI' },
+  vScan: { pt: 'Localizar', en: 'Locate', es: 'Localizar' },
+  vScanSub: { pt: 'Músicas do aparelho', en: 'Music on device', es: 'Música en el dispositivo' },
+  emptyNeed: { pt: 'A TAMI precisa de músicas para tocar.', en: 'TAMI needs songs to play.', es: 'TAMI necesita canciones para tocar.' },
+  profileTitle: { pt: 'Perfil', en: 'Profile', es: 'Perfil' },
+  nickLabel: { pt: 'Nickname:', en: 'Nickname:', es: 'Apodo:' },
+  themeRow: { pt: 'Tema', en: 'Theme', es: 'Tema' },
+  themeRowSub: { pt: 'Modo e cores', en: 'Mode and colors', es: 'Modo y colores' },
+  tamiForAndroid: { pt: 'TAMI para Android', en: 'TAMI for Android', es: 'TAMI para Android' },
+  checking: { pt: 'Verificando…', en: 'Checking…', es: 'Verificando…' },
+  saved: { pt: 'Perfil salvo', en: 'Profile saved', es: 'Perfil guardado' },
+  apkAvail: { pt: 'Atualização disponível: {v} · tocar para instalar', en: 'Update available: {v} · tap to install', es: 'Actualización disponible: {v} · toca para instalar' },
+  apkVer: { pt: 'Android · versão {v} · tocar para baixar', en: 'Android · version {v} · tap to download', es: 'Android · versión {v} · toca para descargar' },
+  themeColorSec: { pt: 'Cor', en: 'Color', es: 'Color' },
+  themeToggleSub: { pt: 'Tocar para alternar', en: 'Tap to switch', es: 'Toca para alternar' },
+  impTitle: { pt: 'Importar mídia', en: 'Import media', es: 'Importar medios' },
+  impSongs: { pt: 'Músicas', en: 'Songs', es: 'Canciones' },
+  impSongsSub: { pt: 'Selecionar arquivos de áudio', en: 'Select audio files', es: 'Seleccionar archivos de audio' },
+  impDevice: { pt: 'Músicas do aparelho', en: 'Music on device', es: 'Música en el dispositivo' },
+  impDeviceSub: { pt: 'Ler tudo automaticamente (Android)', en: 'Read everything automatically (Android)', es: 'Leer todo automáticamente (Android)' },
+  impVideos: { pt: 'Vídeos', en: 'Videos', es: 'Vídeos' },
+  impVideosSub: { pt: 'Selecionar arquivos de vídeo', en: 'Select video files', es: 'Seleccionar archivos de vídeo' },
+  impFolder: { pt: 'Pasta inteira', en: 'Whole folder', es: 'Carpeta completa' },
+  impFolderSub: { pt: 'Chrome/Edge no Windows', en: 'Chrome/Edge on Windows', es: 'Chrome/Edge en Windows' },
+  impNovFolder: { pt: 'Buscar novidades na pasta', en: 'Check folder for new files', es: 'Buscar novedades en la carpeta' },
+  impNovFolderSub: { pt: 'Reler a pasta e importar só o que é novo', en: 'Re-read the folder and import only what is new', es: 'Releer la carpeta e importar solo lo nuevo' },
+  impNovVer: { pt: 'Buscar novidades de versão', en: 'Check for app updates', es: 'Buscar novedades de versión' },
+  impNovVerSub: { pt: 'Verifica atualização do app no GitHub', en: 'Check for app update on GitHub', es: 'Comprueba la actualización en GitHub' },
+  impDupes: { pt: 'Remover músicas duplicadas', en: 'Remove duplicate songs', es: 'Eliminar canciones duplicadas' },
+  impDupesSub: { pt: 'A TAMI encontra e remove repetidas', en: 'TAMI finds and removes duplicates', es: 'TAMI encuentra y elimina repetidas' },
+  impProgress: { pt: 'Importando {n} arquivos…', en: 'Importing {n} files…', es: 'Importando {n} archivos…' },
+  impDone: { pt: 'Importadas {n} {item}.', en: '{n} {item} imported.', es: '{n} {item} importadas.' },
+  impItemSongs: { pt: 'músicas', en: 'songs', es: 'canciones' },
+  impItemVideos: { pt: 'vídeos', en: 'videos', es: 'vídeos' },
+  impDup1: { pt: ' ({n} duplicada ignorada)', en: ' ({n} duplicate skipped)', es: ' ({n} duplicada omitida)' },
+  impDupN: { pt: ' ({n} duplicadas ignoradas)', en: ' ({n} duplicates skipped)', es: ' ({n} duplicadas omitidas)' },
+  impNoStore: { pt: 'Armazenamento indisponível: não é possível importar músicas.', en: 'Storage unavailable: cannot import songs.', es: 'Almacenamiento no disponible: no se pueden importar canciones.' },
+  impErrPasta: { pt: 'Erro ao ler pasta', en: 'Error reading folder', es: 'Error al leer la carpeta' },
+  impNoMedia: { pt: 'Nenhum arquivo de mídia na pasta', en: 'No media files in the folder', es: 'No hay archivos multimedia en la carpeta' },
+  impNov0: { pt: 'Pasta já estava em dia — nada novo 😊', en: 'Folder is up to date — nothing new 😊', es: 'La carpeta ya está al día — nada nuevo 😊' },
+  impNovN: { pt: 'Novidades importadas: {n}', en: 'New files imported: {n}', es: 'Novedades importadas: {n}' },
+  dupTitle: { pt: 'Duplicadas ({n})', en: 'Duplicates ({n})', es: 'Duplicadas ({n})' },
+  dupConfirmVoice: { pt: '🎙 Confirmar por voz', en: '🎙 Confirm by voice', es: '🎙 Confirmar por voz' },
+  dupRemoveBtn: { pt: 'Remover {n}', en: 'Remove {n}', es: 'Eliminar {n}' },
+  dupNothing: { pt: 'Nada a remover', en: 'Nothing to remove', es: 'Nada que eliminar' },
+  dupRemoved: { pt: 'Duplicadas removidas!', en: 'Duplicates removed!', es: '¡Duplicadas eliminadas!' },
+  dupNoneFound: { pt: 'Nenhuma duplicada encontrada 😊', en: 'No duplicates found 😊', es: 'No se encontraron duplicadas 😊' },
+  delBtnTitle: { pt: 'Excluir', en: 'Delete', es: 'Eliminar' },
+  confirmDel: { pt: 'Excluir esta música? Ela também sai das playlists e favoritos.', en: 'Delete this song? It also leaves playlists and favorites.', es: '¿Eliminar esta canción? También sale de playlists y favoritas.' },
+  songRemoved: { pt: 'Música removida', en: 'Song removed', es: 'Canción eliminada' },
+  videoRemoved: { pt: 'Vídeo removido', en: 'Video removed', es: 'Vídeo eliminado' },
+  scanProgress: { pt: 'Lendo músicas do aparelho…', en: 'Reading music from device…', es: 'Leyendo música del dispositivo…' },
+  scanNone: { pt: 'Nenhuma música encontrada — se o app pediu permissão, permita e toque de novo.', en: 'No music found — if the app asked for permission, allow it and tap again.', es: 'No se encontró música — si la app pidió permiso, permítelo y toca de nuevo.' },
+  scanAppOnly: { pt: 'Localização automática disponível no app Android.', en: 'Auto-locate is available in the Android app.', es: 'La localización automática está disponible en la app Android.' },
+  scanDone: { pt: 'Localizadas {n} músicas no aparelho.', en: 'Found {n} songs on device.', es: 'Localizadas {n} canciones en el dispositivo.' },
+  scanAllPresent: { pt: 'Músicas do aparelho já estão todas aqui.', en: 'Device songs are all here already.', es: 'Las canciones del dispositivo ya están todas aquí.' },
+  visHearts: { pt: 'corações', en: 'hearts', es: 'corazones' },
+  visFlowers: { pt: 'flores', en: 'flowers', es: 'flores' },
+  visStars: { pt: 'estrelas', en: 'stars', es: 'estrellas' },
+  visBars: { pt: 'barras', en: 'bars', es: 'barras' },
+  visToast: { pt: 'Visualizador: {style}', en: 'Visualizer: {style}', es: 'Visualizador: {style}' },
+  phOffline: { pt: 'Celular offline — abra o TAMI no Android', en: 'Phone offline — open TAMI on Android', es: 'Celular sin conexión — abre TAMI en Android' },
+  phOnline: { pt: 'Celular conectado ({dev}{app})', en: 'Phone connected ({dev}{app})', es: 'Celular conectado ({dev}{app})' },
+  phAppTag: { pt: ' · TAMI {app}', en: ' · TAMI {app}', es: ' · TAMI {app}' },
+  phAddrPh: { pt: 'http://seu-pc:8081', en: 'http://your-pc:8081', es: 'http://tu-pc:8081' },
+  phConnect: { pt: 'Conectar', en: 'Connect', es: 'Conectar' },
+  phAddrHint: { pt: 'Endereço do PC com o servidor acompanhante — ex.: <b>{ex}</b>', en: 'PC address with the companion server — e.g.: <b>{ex}</b>', es: 'Dirección del PC con el servidor acompañante — ej.: <b>{ex}</b>' },
+  phNeedAddr: { pt: 'Digite o endereço do servidor.', en: 'Enter the server address.', es: 'Escribe la dirección del servidor.' },
+  phServerSet: { pt: 'Servidor definido: {addr}', en: 'Server set: {addr}', es: 'Servidor definido: {addr}' },
+  phNothing: { pt: 'Nada tocando no celular.', en: 'Nothing playing on the phone.', es: 'Nada sonando en el celular.' },
+  phFindNews: { pt: '🔎 Buscar novidades', en: '🔎 Check for new songs', es: '🔎 Buscar novedades' },
+  phRefresh: { pt: '🔄 Atualizar', en: '🔄 Refresh', es: '🔄 Actualizar' },
+  phUpdated: { pt: 'Lista do celular atualizada.', en: 'Phone list updated.', es: 'Lista del celular actualizada.' },
+  phQueueSec: { pt: 'Fila no celular', en: 'Queue on phone', es: 'Cola en el celular' },
+  phQueueEmpty: { pt: 'Fila vazia no celular.', en: 'Empty queue on phone.', es: 'Cola vacía en el celular.' },
+  phSongsSec: { pt: 'Músicas do celular', en: 'Songs on phone', es: 'Canciones del celular' },
+  phMoreSongs: { pt: '+ {n} mais — atualizar lista', en: '+ {n} more — refresh list', es: '+ {n} más — actualizar lista' },
+  phNoLib: { pt: 'O celular ainda não enviou a biblioteca. Aguarde o app sincronizar.', en: 'The phone has not sent its library yet. Wait for the app to sync.', es: 'El celular aún no envió la biblioteca. Espera a que la app sincronice.' },
+  phNoConn: { pt: 'Sem conexão com o servidor do celular.', en: 'No connection to the phone server.', es: 'Sin conexión con el servidor del celular.' },
+  updTitle: { pt: '🚀 Atualização disponível', en: '🚀 Update available', es: '🚀 Actualización disponible' },
+  updBody: { pt: 'Saiu a TAMI <b>{nw}</b> e a sua é a {old}. Quer baixar e instalar agora?', en: 'TAMI <b>{nw}</b> is out and you have {old}. Download and install now?', es: 'Salió TAMI <b>{nw}</b> y tienes {old}. ¿Descargar e instalar ahora?' },
+  updLater: { pt: 'Agora não', en: 'Not now', es: 'Ahora no' },
+  updDownload: { pt: '⬇ Baixar e instalar', en: '⬇ Download and install', es: '⬇ Descargar e instalar' },
+  updToast: { pt: 'Atualização da TAMI {v} disponível!', en: 'TAMI {v} update available!', es: '¡TAMI {v} actualización disponible!' },
+  updUrlUnavail: { pt: 'URL do APK indisponível.', en: 'APK URL unavailable.', es: 'URL del APK no disponible.' },
+  novTitle: { pt: 'Novidades!', en: "What's new!", es: '¡Novedades!' },
+  novAndroid: { pt: 'TAMI Android {v}', en: 'TAMI Android {v}', es: 'TAMI Android {v}' },
+  novUpd: { pt: 'Atualização disponível no GitHub · tocar para instalar', en: 'Update available on GitHub · tap to install', es: 'Actualización disponible en GitHub · toca para instalar' },
+  novLatest: { pt: 'Versão mais recente no GitHub', en: 'Latest version on GitHub', es: 'Versión más reciente en GitHub' },
+  novInstalled: { pt: 'Instalada: {v}', en: 'Installed: {v}', es: 'Instalada: {v}' },
+  novNone: { pt: 'Nada de novo por aqui 😊', en: 'Nothing new here 😊', es: 'Nada nuevo por aquí 😊' },
+  novProgress: { pt: 'Buscando novidades de versão…', en: 'Checking for updates…', es: 'Buscando novedades de versión…' },
+  noGitHub: { pt: 'Sem conexão com o GitHub', en: 'No connection to GitHub', es: 'Sin conexión con GitHub' },
+  recTitle: { pt: '🎯 Recomendadas pela TAMI', en: '🎯 Recommended by TAMI', es: '🎯 Recomendadas por TAMI' },
+  recPlayAll: { pt: '▶ Tocar todas', en: '▶ Play all', es: '▶ Reproducir todas' },
+  recReasonFav: { pt: 'Você curtiu ♥', en: 'You liked it ♥', es: 'Te gustó ♥' },
+  recReasonArtist: { pt: 'Do artista que você mais ouve', en: 'From the artist you listen to most', es: 'Del artista que más escuchas' },
+  recReasonArtistLike: { pt: 'Você favoritou músicas dele', en: 'You favorited their songs', es: 'Favoritaste sus canciones' },
+  recReasonNew: { pt: 'Descoberta nova ✨', en: 'New discovery ✨', es: 'Descubrimiento nuevo ✨' },
+  recToast: { pt: 'Toque e favorite músicas para eu aprender 🎧', en: 'Play and favorite songs so I can learn 🎧', es: 'Toca y marca favoritas para que aprenda 🎧' },
+  stTitle: { pt: '📊 Estatísticas', en: '📊 Stats', es: '📊 Estadísticas' },
+  stSummary: { pt: '{songs} músicas · {favs} favoritas · {pls} playlists · {plays} plays', en: '{songs} songs · {favs} favorites · {pls} playlists · {plays} plays', es: '{songs} canciones · {favs} favoritas · {pls} playlists · {plays} plays' },
+  stNoData: { pt: 'Sem dados ainda.<br>Toque, favoritize e pule músicas que a TAMI monta seu ranking.', en: 'No data yet.<br>Play, favorite and skip songs so TAMI builds your ranking.', es: 'Aún sin datos.<br>Toca, marca favoritas y salta canciones para que TAMI cree tu ranking.' },
+  stTopList: { pt: 'Mais tocadas', en: 'Most played', es: 'Más escuchadas' },
+  stPlays: { pt: '{n} plays', en: '{n} plays', es: '{n} reproducciones' },
+  stSkipped: { pt: ' {n} puladas', en: ' {n} skipped', es: ' {n} saltadas' }
+};
+const TAMI_FACTS_ALL = {
+  pt: [
+    'Sabia que a música mais ouvida do mundo é "Shape of You" do Ed Sheeran? Mais de três bilhões de plays. Ela deve ter um replay forte!',
+    'Você sabia que as músicas ficam presas na cabeça porque o cérebro repete o refrão sozinho? A culpa é da sua cabeça, não minha!',
+    'Sabia que os Beatles gravaram a música mais curta da história da banda, com um minuto e meio? Tudo a ver com a nossa vibe.',
+    'Curiosidade: o primeiro DJ da história surgiu na década de quarenta, quando o rádio ainda era tudo. Vem de longe essa profissão, hein!',
+    'Sabia que ouvir música enquanto faz tarefas melhora a concentração? Bom, se não melhorar, pelo menos fica mais divertido.',
+    'Curiosidade: o som viaja a 340 metros por segundo no ar. Mas quando cai a balada, parece que ele chega na hora certa.',
+    'Sabia que o fone de ouvido foi inventado para marinheiros em 1910? Depois virou companheiro de balada pra todo mundo.',
+    'Você sabia que uma música pop média tem três minutos e meio? Tempo suficiente pra você curtir e a gente emendar já a próxima.',
+    'Curiosidade: o vinil voltou a vender mais que o CD em 2020. O analógico tem um charme que o digital não mata.',
+    'Sabia que a voz humana já era considerada o instrumento mais antigo do mundo? E a minha, vocês aprovam?',
+    'Fato curioso: na década de setenta surgiram os primeiros grandes DJs de festa, revolucionando a balada. É por eles que eu existo.',
+    'Sabia que existem mais de 100 milhões de músicas disponíveis hoje? Imagina eu mixando tudo isso! Dava uma festa infinita.'
+  ],
+  en: [
+    'Did you know the most streamed song in the world is "Shape of You" by Ed Sheeran? Over three billion plays. That replay is strong!',
+    'Did you know songs get stuck in your head because your brain repeats the chorus on its own? That\'s on you, not me!',
+    'Did you know the Beatles recorded the shortest song in their history, just one and a half minutes? Fits our vibe perfectly.',
+    'Fun fact: the first DJ in history appeared in the forties, when radio was everything. This profession goes way back!',
+    'Did you know listening to music while doing chores improves focus? Well, if it doesn\'t, at least it\'s more fun.',
+    'Fun fact: sound travels at 340 meters per second in the air. But when the party drops, it always arrives right on time.',
+    'Did you know headphones were invented for sailors back in 1910? They became everyone\'s party buddy ever since.',
+    'Did you know the average pop song is three and a half minutes long? Plenty of time to enjoy it and let me start the next one.',
+    'Fun fact: in 2020 vinyl outsold CDs again. Analog has a charm that digital just can\'t kill.',
+    'Did you know the human voice is considered the oldest instrument in the world? So, how about mine?',
+    'Fun fact: in the seventies the first great party DJs appeared, changing the dance floor forever. They\'re why I exist.',
+    'Did you know there are over 100 million songs available today? Imagine me mixing all of that! That would be an endless party.'
+  ],
+  es: [
+    '¿Sabías que la canción más escuchada del mundo es "Shape of You" de Ed Sheeran? Más de tres mil millones de reproducciones. ¡Ese replay es fuerte!',
+    '¿Sabías que las canciones se quedan en tu cabeza porque el cerebro repite el coro solo? ¡La culpa es tuya, no mía!',
+    '¿Sabías que los Beatles grabaron la canción más corta de su historia, de solo un minuto y medio? Perfecta para nuestra vibra.',
+    'Dato curioso: el primer DJ de la historia apareció en los años cuarenta, cuando la radio lo era todo. ¡Esta profesión viene de lejos!',
+    '¿Sabías que escuchar música mientras haces tareas mejora la concentración? Bueno, si no mejora, al menos es más divertido.',
+    'Dato curioso: el sonido viaja a 340 metros por segundo en el aire. Pero cuando arranca la fiesta, siempre llega justo a tiempo.',
+    '¿Sabías que los audífonos fueron inventados para marineros en 1910? Después se volvieron el compañero de fiesta de todos.',
+    '¿Sabías que una canción pop promedio dura tres minutos y medio? Tiempo suficiente para disfrutarla y empezar la siguiente.',
+    'Dato curioso: en 2020 el vinilo volvió a vender más que el CD. Lo análogo tiene un encanto que lo digital no mata.',
+    '¿Sabías que la voz humana es considerada el instrumento más antiguo del mundo? Y la mía, ¿la apruebas?',
+    'Dato curioso: en los años setenta surgieron los primeros grandes DJs de fiesta, revolucionando la pista. Gracias a ellos existo.',
+    '¿Sabías que hay más de 100 millones de canciones hoy en día? ¡Imagina yo mezclando todo eso! Sería una fiesta infinita.'
+  ]
+};
+const TAMI_JOKES_ALL = {
+  pt: [
+    'Por que o músico não paga o aluguel? Porque ele sempre vive no tempo. Ah, essa foi ruim, né?',
+    'O que o DJ falou para o microfone? Você me tem. Determinada presença!',
+    'Por que o celular foi ao psicólogo? Porque ele tinha muita memória curto-prazo.',
+    'Qual a tecla favorita do pianista? A de escapar.',
+    'O que o zero disse para o oito? Cinto legal, hein!',
+    'Por que a minhoca não entra na balada? Porque não tem coluna. Parte pro sertanejo, ai!',
+    'Como o tomate cumprimenta o pepino? Fala, colega!',
+    'Por que o computador foi ao médico? Porque estava sem memória.',
+    'O que é um ponto no meio do oceano? Uma bolha saindo para dar uma volta.',
+    'Por que a guitarra não ficou com a bateria? Porque ela ouviu que a bateria só faz barulho.',
+    'Como se chama o primo do morcego? Soturno. Achei essa profunda!',
+    'Por que o livro não assiste TV? Porque tem medo das séries.',
+    'O que o pato disse para a pata? Vem quá!',
+    'Por que o elétricista odeia sexta-feira? Porque é o dia do fio. Eu paro.',
+    'Por que o café foi ao psiquiatra? Porque estava muito moído por dentro.'
+  ],
+  en: [
+    'Why doesn\'t a musician ever pay rent? Because they always live in the past. Ouch, that was a bad one!',
+    'What did the DJ say to the microphone? You look up to me. Strong presence!',
+    'Why did the phone go to a therapist? Because it had too much short-term memory.',
+    'What\'s a pianist\'s favorite key? The escape key.',
+    'What did zero say to eight? Nice belt!',
+    'Why doesn\'t a worm go to parties? Because it has no spine. Too groovy!',
+    'How does a tomato greet a cucumber? Wassup, bud!',
+    'Why did the computer go to the doctor? Because it had no memory.',
+    'What is a dot in the middle of the ocean? A bubble going out for a walk.',
+    'Why didn\'t the guitar date the drums? Because it heard the drums only make noise.',
+    'What do you call a bat\'s cousin? Bro-fessional. That one was deep!',
+    'Why doesn\'t the book watch TV? Because it\'s afraid of series.',
+    'What did the duck say to the duckess? Quack to you too!',
+    'Why do electricians hate Friday? Because it\'s wire day. I\'ll stop.',
+    'Why did the coffee go to a psychiatrist? Because it felt too ground up inside.'
+  ],
+  es: [
+    '¿Por qué el músico no paga el alquiler? Porque siempre vive en el tiempo. ¡Ay, esa fue mala!',
+    '¿Qué le dijo el DJ al micrófono? Me tienes en la palma. ¡Presencia decidida!',
+    '¿Por qué el celular fue al psicólogo? Porque tenía mucha memoria a corto plazo.',
+    '¿Cuál es la tecla favorita del pianista? La de escape.',
+    '¿Qué le dijo el cero al ocho? ¡Lindos cinturones, eh!',
+    '¿Por qué la lombriz no entra a la fiesta? Porque no tiene columna. ¡Pobrecita!',
+    '¿Cómo saluda el tomate al pepino? ¡Hola, colega!',
+    '¿Por qué el computador fue al médico? Porque estaba sin memoria.',
+    '¿Qué es un punto en medio del océano? Una burbuja saliendo a dar un paseo.',
+    '¿Por qué la guitarra no quedó con la batería? Porque oyó que la batería solo hace ruido.',
+    '¿Cómo se llama el primo del murciélago? Soturno. ¡Me pareció profunda!',
+    '¿Por qué el libro no ve tele? Porque les tiene miedo a las series.',
+    '¿Qué le dijo el pato a la pata? ¡Ven, cuak!',
+    '¿Por qué el electricista odia los viernes? Porque es el día del cable. Ya paro.',
+    '¿Por qué el café fue al psiquiatra? Porque estaba muy molido por dentro.'
+  ]
+};
+const TAMI_MOODS_ALL = {
+  pt: [
+    'Oi, linda! Bora ouvir uma boa música?',
+    'Você está incrível hoje, viu?',
+    'Já escolheu suas favoritas? Eu adoro um coraçãozinho.',
+    'Respira fundo. A música cuida do resto.',
+    'Bora deixar o dia mais bonito!',
+    'Eu acredito em você. Sempre.',
+    'Um bom som resolve quase tudo.',
+    'Dance um pouquinho, faz bem pro coração!'
+  ],
+  en: [
+    'Hey, gorgeous! Want to listen to something good?',
+    'You look amazing today, you know?',
+    'Picked your favorites yet? I love a little heart.',
+    'Take a deep breath. Music handles the rest.',
+    'Let\'s make today more beautiful!',
+    'I believe in you. Always.',
+    'A good song fixes almost everything.',
+    'Dance a little — it\'s good for the heart!'
+  ],
+  es: [
+    '¡Hola, guapa! ¿Vamos a escuchar algo bueno?',
+    'Estás increíble hoy, ¿sabes?',
+    '¿Ya elegiste tus favoritas? Adoro un corazoncito.',
+    'Respira hondo. La música cuida el resto.',
+    '¡Vamos a hacer el día más bonito!',
+    'Creo en ti. Siempre.',
+    'Un buen sonido arregla casi todo.',
+    '¡Baila un poquito, es bueno para el corazón!'
+  ]
+};
 let REMOTE = '';
 function getRemote() {
   if (REMOTE) return REMOTE;
@@ -1181,7 +1601,7 @@ function selectTab(tab, updateDetail) {
   $('tab-' + tab).classList.add('active');
   $('addPlaylistBtn').classList.toggle('hidden', tab !== 'playlists');
   $('back').classList.remove('show');
-  $('title').textContent = { virgin: 'TAMI', songs: 'Músicas', albums: 'Álbuns', artists: 'Artistas', playlists: 'Playlists', favs: 'Favoritas', videos: 'Vídeos', amb: 'Som de fundo', phone: 'Celular' }[tab];
+  updateTitle();
 }
 let detailBackStack = null;
 function openDetail(d) {
@@ -1331,10 +1751,11 @@ function djExit() {
 function pickDjVoice(u) {
   const vs = speechSynthesis.getVoices();
   if (!vs.length) return;
-  const langPref = ['pt', 'pt-BR', 'en', 'es'];
+  const myLang = (LANG_LOCALES[state.lang] || 'pt-BR').toLowerCase().slice(0, 2);
+  const langPref = [myLang, 'pt', 'pt-BR', 'en', 'es'];
   const pick =
     langPref.map(l => vs.filter(v => (v.lang || '').toLowerCase().startsWith(l.toLowerCase()))
-      .find(v => /female|feminina|femenine|woman|mulher/i.test(v.name)))
+      .find(v => /female|feminina|femenine|woman|mulher|Paula|Helena|Samantha|Google UK English Female|Karen|Zira/i.test(v.name)))
       .find(Boolean) ||
     langPref.map(l => vs.find(v => (v.lang || '').toLowerCase().startsWith(l.toLowerCase())))
       .find(Boolean) ||
@@ -1368,21 +1789,62 @@ function djWaitVoices() {
 function djVoiceToggle() {
   state.djVoice = !state.djVoice;
   $('p-djvoice').style.color = state.djVoice ? 'var(--primary)' : 'var(--text)';
-  if (state.djVoice) djSpeak('Oi! Eu sou a TAMI, sua DJ virtual!');
+  if (state.djVoice) djSpeak(L('hiIntro'));
   renderVirgin();
+}
+function tamiLang() {
+  const list = $('modal');
+  const order = ['pt', 'en', 'es'];
+  list.innerHTML = `<h3>🌐 ${L('langTitle')}</h3>
+    <div class="list" style="padding:0">` +
+    order.map((code, i) => `<div class="mrow" onclick="setLang('${code}')">
+      <span class="art ${state.lang === code ? 'grad-a' : 'grad-' + 'abcde'[i]}">${LANG_FLAGS[code]}</span>
+      <div class="mid"><div class="it-title">${LANG_LABELS[code]}</div><div class="it-sub">${state.lang === code ? '✓' : ''}</div></div>
+    </div>`).join('') +
+    `</div><div id="modal-actions"><button class="btn secondary" onclick="closeModal()">Fechar</button></div>`;
+  $('modal-wrap').classList.add('show');
+}
+function setLang(code) {
+  if (!LANG_LOCALES[code]) return;
+  state.lang = code;
+  try { localStorage.setItem('tami-lang', code); } catch (e) {}
+  applyLang();
+  const sr = state.sr;
+  if (sr) { try { sr.lang = LANG_LOCALES[code]; } catch (e) {} }
+  closeModal();
+  renderAll();
+  updateTitle();
+  toast(L('langChanged', { lang: LANG_LABELS[code] }));
+  if (state.djMode && state.djVoice) djSpeak(L('hello'));
+}
+function applyLang() {
+  document.documentElement.lang = LANG_LOCALES[state.lang] || 'pt-BR';
+  try { if (window.TamiNative && TamiNative.setLang) TamiNative.setLang(state.lang); } catch (e) {}
+  renderUILabels();
+}
+function renderUILabels() {
+  document.querySelectorAll('#nav button[data-label]').forEach((b) => {
+    const ic = b.querySelector('.ic');
+    const icHtml = ic ? ic.outerHTML : '';
+    const lbl = b.dataset.label;
+    b.innerHTML = icHtml + (lbl === 'TAMI' ? 'TAMI' : L(lbl || ''));
+  });
+  const s = $('search');
+  if (s) s.placeholder = L('searchPh');
+  updateTitle();
+}
+function updateTitle() {
+  if (state.detail) { $('title').textContent = state.detail.name || ''; return; }
+  const key = { virgin: 'TAMI', songs: 'tSongs', albums: 'tAlbums', artists: 'tArtists', playlists: 'tPlaylists', favs: 'tFavs', videos: 'tVideos', amb: 'tAmb', phone: 'tPhone' }[state.tab];
+  $('title').textContent = key === 'TAMI' ? 'TAMI' : L(key);
 }
 function djAnnounceTrack(s) {
   if (!s) return;
-  djSpeak('Agora tocando: ' + (s.artist ? s.artist + ', ' : '') + (s.title || '') + '.');
+  djSpeak(L('nowPlaying', { track: (s.artist ? s.artist + ', ' : '') + (s.title || '') }));
   const st = djLearnGet(s.id);
   if (state.djMode && Math.random() < 0.4) {
-    const comments = [
-      'Essa é umas boas!',
-      'Tipo essa eu gosto de tocar.',
-      'Boa escolha da máquina, né?',
-      'Essa vai longe na balada.'
-    ];
-    const pick = state.favs.has(s.id) ? 'Essa é das suas favoritas!' : comments[Math.floor(Math.random() * comments.length)];
+    const comments = [L('cGood'), L('cLike'), L('cMachine'), L('cParty')];
+    const pick = state.favs.has(s.id) ? L('cFav') : comments[Math.floor(Math.random() * comments.length)];
     setTimeout(() => { if (state.djMode) djSpeak(pick); }, 2800);
   }
 }
@@ -1422,14 +1884,14 @@ function djEngine(pool) {
 }
 function djMix(vibe) {
   let pool = state.songs.filter(s => !s.type || s.type !== 'video');
-  if (!pool.length) { toast('Importe músicas para a TAMI mixar.'); return; }
-  let msg = 'Olá! Eu sou a TAMI, sua DJ virtual. Bora! Vou tocar ' + pool.length + ' músicas para você.';
+  if (!pool.length) { toast(L('mixNeed')); return; }
+  let msg = L('mixIntro', { n: pool.length });
   if (vibe === 'bombar' || vibe === 'festa') {
     const fav = pool.filter(s => state.favs.has(s.id));
-    if (fav.length) { pool = fav; msg = 'Bora bombar! Vou tocar só as suas favoritas.'; }
-    else msg = 'Bora bombar! Você ainda não escolheu favoritas, então vou misturar tudo de bom.';
+    if (fav.length) { pool = fav; msg = L('mixFav'); }
+    else msg = L('mixNoFav');
   } else if (vibe === 'relaxar') {
-    msg = 'Relaxa que eu cuido da trilha sonora. Vou deixar um clima leve pra você.';
+    msg = L('mixRelax');
   }
   state.djMode = true;
   state.shuffle = false;
@@ -1445,37 +1907,22 @@ function djMix(vibe) {
   renderVirgin();
   djSpeak(msg);
 }
-const TAMI_FACTS = [
-  'Sabia que a música mais ouvida do mundo é "Shape of You" do Ed Sheeran? Mais de três bilhões de plays. Ela deve ter um replay forte!',
-  'Você sabia que as músicas ficam presas na cabeça porque o cérebro repete o refrão sozinho? A culpa é da sua cabeça, não minha!',
-  'Sabia que os Beatles gravaram a música mais curta da história da banda, com um minuto e meio? Tudo a ver com a nossa vibe.',
-  'Curiosidade: o primeiro DJ da história surgiu na década de quarenta, quando o rádio ainda era tudo. Vem de longe essa profissão, hein!',
-  'Sabia que ouvir música enquanto faz tarefas melhora a concentração? Bom, se não melhorar, pelo menos fica mais divertido.',
-  'Curiosidade: o som viaja a 340 metros por segundo no ar. Mas quando cai a balada, parece que ele chega na hora certa.',
-  'Sabia que o fone de ouvido foi inventado para marinheiros em 1910? Depois virou companheiro de balada pra todo mundo.',
-  'Você sabia que uma música pop média tem três minutos e meio? Tempo suficiente pra você curtir e a gente emendar já a próxima.',
-  'Curiosidade: o vinil voltou a vender mais que o CD em 202o. O analógico tem um charme que o digital não mata.',
-  'Sabia que a voz humana já era considerada o instrumento mais antigo do mundo? E a minha, vocês aprovam?',
-  'Fato curioso: na década de setenta surgiram os primeiros grandes DJs de festa, revolucionando a balada. É por eles que eu existo.',
-  'Sabia que existem mais de 100 milhões de músicas disponíveis hoje? Imagina eu mixando tudo isso! Dava uma festa infinita.'
-];
 function tamiCuriosidade() {
   const cur = state.current;
   const banda = cur && (cur.artist || cur.album || '').trim();
-  const msg = TAMI_FACTS[Math.floor(Math.random() * TAMI_FACTS.length)];
+  const facts = langArr(TAMI_FACTS_ALL);
+  const msg = facts[Math.floor(Math.random() * facts.length)];
   djSpeak(banda
-    ? 'Curiosidade sobre a banda ' + banda + '. ' + msg
-    : 'Curiosidade da TAMI. ' + msg);
-  toast('🥸 Curiosidade sobre a banda!');
+    ? L('factBand', { band: banda, fact: msg })
+    : L('factSolo', { fact: msg }));
+  toast(L('factToast'));
 }
 function tamiLocutorToggle() {
   state.djLocutor = !state.djLocutor;
   renderVirgin();
   const c = $('p-djvoice');
   if (c) c.style.color = state.djLocutor ? 'var(--primary)' : 'var(--text)';
-  djSpeak(state.djLocutor
-    ? 'Modo locutor ativado! Agora eu apresento cada música como uma locutora de rádio de verdade, e trago uma curiosidade sobre a banda a cada cinco minutos.'
-    : 'Modo locutor desativado. Voltamos ao modo DJ normal.');
+  djSpeak(state.djLocutor ? L('annOn') : L('annOff'));
   if (state.djLocutor) tamiFactTimerStart(); else tamiFactTimerStop();
 }
 let tamiFactTimer = null;
@@ -1489,26 +1936,10 @@ function tamiFactTimerStart() {
 function tamiFactTimerStop() {
   if (tamiFactTimer) { clearInterval(tamiFactTimer); tamiFactTimer = null; }
 }
-const TAMI_JOKES = [
-  'Por que o músico não paga o aluguel? Porque ele sempre vive no tempo. Ah, essa foi ruim, né?',
-  'O que o DJ falou para o microfone? Você me tem. Determinada presença!',
-  'Por que o celular foi ao psicólogo? Porque ele tinha muita memória curto-prazo.',
-  'Qual a tecla favorita do pianista? A de escapar.',
-  'O que o zero disse para o oito? Cinto legal, hein!',
-  'Por que a minhoca não entra na balada? Porque não tem coluna. Parte pro sertanejo, ai!',
-  'Como o tomate cumprimenta o pepino? Fala, colega!',
-  'Por que o computador foi ao médico? Porque estava sem memória.',
-  'O que é um ponto no meio do oceano? Uma bolha saindo para dar uma volta.',
-  'Por que a guitarra não ficou com a bateria? Porque ela ouviu que a bateria só faz barulho.',
-  'Como se chama o primo do morcego? Soturno. Achei essa profunda!',
-  'Por que o livro não assiste TV? Porque tem medo das séries.',
-  'O que o pato disse para a pata? Vem quá!',
-  'Por que o elétricista odeia sexta-feira? Porque é o dia do fio. Eu paro.',
-  'Por que o café foi ao psiquiatra? Porque estava muito moído por dentro.'
-];
 function tamiPiada() {
-  const j = TAMI_JOKES[Math.floor(Math.random() * TAMI_JOKES.length)];
-  djSpeak('Sabe o que é engraçado? ' + j);
+  const jokes = langArr(TAMI_JOKES_ALL);
+  const j = jokes[Math.floor(Math.random() * jokes.length)];
+  djSpeak(L('jokeIntro', { joke: j }));
   toast(j);
 }
 function tamiSleep(min) {
@@ -1530,19 +1961,19 @@ function tamiSleep(min) {
       ambStop();
       syncMini();
       renderAll();
-      djSpeak('Boa noite! Desliguei tudo por aqui. Até amanhã.');
+      djSpeak(L('sleepOff'));
       state.sleep = 0; state.sleepId = null;
       renderVirgin();
     }, next * 60000);
     if (next > 2) {
       setTimeout(() => {
-        if (state.sleep === next) djSpeak('Faltam dois minutos para eu desligar tudo. Se quiser continuar, é só cancelar o timer.');
+        if (state.sleep === next) djSpeak(L('sleepWarn'));
       }, (next - 2) * 60000);
     }
-    djSpeak('Beleza! Vou desligar a música daqui a ' + next + ' minutos. Boa noite já adiantada.');
+    djSpeak(L('sleepSet', { n: next }));
   } else {
     clearTimeout(state.sleepId);
-    djSpeak('Ok! Cancelei o timer. A festa continua.');
+    djSpeak(L('sleepCancel'));
   }
   renderVirgin();
 }
@@ -1571,12 +2002,12 @@ function tamiStats() {
   $('modal-wrap').classList.add('show');
 }
 function tamiRadio() {
-  if (!state.songs.length) { toast('Importe músicas para a Rádio TAMI tocar.'); return; }
+  if (!state.songs.length) { toast(L('radioNeed')); return; }
   if (state.radio) {
     state.radio = false;
     if (state.djLocutor) tamiLocutorToggle();
     if (state.djMode) djExit();
-    toast('Rádio desligada.');
+    toast(L('radioOff'));
     renderVirgin();
     return;
   }
@@ -1596,7 +2027,7 @@ function tamiRadio() {
   openPlayer();
   $('p-dj').style.color = 'var(--primary)';
   renderVirgin();
-  djSpeak('Você está ouvindo a Rádio TAMI F.M., tocando ' + q.length + ' músicas de todos os estilos!');
+  djSpeak(L('radioOn', { n: q.length }));
 }
 function pjMicToggle() {
   const SR = window.SpeechRecognition || window.webkitSpeechRecognition;
@@ -1606,7 +2037,7 @@ function pjMicToggle() {
   $('p-djmic').style.color = 'var(--primary)';
   const r = new SR();
   state.sr = r;
-  r.lang = 'pt-BR';
+  r.lang = LANG_LOCALES[state.lang] || 'pt-BR';
   r.continuous = true;
   r.interimResults = false;
   r.maxAlternatives = 3;
@@ -1623,7 +2054,7 @@ function pjMicToggle() {
     }
   };
   r.onend = () => { if (state.djMic) setTimeout(restart, 400); };
-  djSpeak('Oi! Eu sou a TAMI. Estou ouvindo: fale TAMI, próxima música.');
+  djSpeak(L('micListen'));
   restart();
 }
 function stopDjMic() {
@@ -1640,50 +2071,50 @@ function djNorm(t) {
 function djCommand(raw) {
   const norm = djNorm(raw);
   const hasWake = /tami|tammi|tammy|tani/.test(norm);
-  const action = /bombar|festa|balada|anima/.test(norm) ? 'bombar'
-    : /relaxa|calma|calm|tranquil|light/.test(norm) ? 'relaxar'
-    : /curiosidade|fato curioso|sabia|curios/.test(norm) ? 'curiosidade'
-    : /locutor|radio\b|apresenta/.test(norm) ? 'locutor'
-    : /piada|zoeira|conta|engracad|sorri/.test(norm) ? 'piada'
-    : /timer|dormi|dormir|sleep|deslig|apaga.*(min|minuto)/.test(norm) ? 'timer'
-    : /mix|mistura|mixa/.test(norm) ? 'mix'
-    : /odia|odeio|nao gostei|nao curti/.test(norm) ? 'dislike'
-    : /duplicad|repetid/.test(norm) ? 'dupes'
-    : /pula|pular|pule|skip/.test(norm) ? 'skip'
-    : /proxima|passa|avanc/.test(norm) ? 'next'
-    : /anterior|volta|volt/.test(norm) ? 'prev'
-    : /pausa|parar|pare|stop|\bpara (a|o|de|com|por|agora)/.test(norm) ? 'pause'
-    : /toca|toque|continua|play|roda/.test(norm) ? 'play'
-    : /favorit|curti|gostei|amei/.test(norm) ? 'fav'
-    : /qual|essa|tocando|nome/.test(norm) ? 'info'
-    : /recomend|suger|sugest|indica|dica/.test(norm) ? 'recomenda'
-    : /obrigad|valeu|thanks/.test(norm) ? 'thanks'
-    : /oi|ola|hello/.test(norm) ? 'hello'
+  const action = /bombar|festa|balada|anima|party|fiesta|rancear/.test(norm) ? 'bombar'
+    : /relaxa|calma|calm|tranquil|light|relax|suave/.test(norm) ? 'relaxar'
+    : /curiosidade|fato curioso|sabia|curios|fact|interesting|dato|saber/.test(norm) ? 'curiosidade'
+    : /locutor|radio\b|apresenta|announcer|present|anunci/.test(norm) ? 'locutor'
+    : /piada|zoeira|conta|engracad|sorri|joke|funny|laugh|chiste|cuenta/.test(norm) ? 'piada'
+    : /timer|dormi|dormir|sleep|deslig|apaga.*(min|minuto)|alarma|minutos?/.test(norm) ? 'timer'
+    : /mix|mistura|mixa|shuffle/.test(norm) ? 'mix'
+    : /odia|odeio|nao gostei|nao curti|hate|dislike|no me gusta|detesto/.test(norm) ? 'dislike'
+    : /duplicad|repetid|duplicate|repeat/.test(norm) ? 'dupes'
+    : /pula|pular|pule|skip|saltar/.test(norm) ? 'skip'
+    : /proxima|passa|avanc|next|siguiente|adelante/.test(norm) ? 'next'
+    : /anterior|volta|volt|back|previous|retroced/.test(norm) ? 'prev'
+    : /pausa|parar|pare|stop|\bpara (a|o|de|com|por|agora)|pause\b/.test(norm) ? 'pause'
+    : /toca|toque|continua|play|roda|resume|reanud/.test(norm) ? 'play'
+    : /favorit|curti|gostei|amei|like|megusta|fav/.test(norm) ? 'fav'
+    : /qual|essa|tocando|nome|what|playing|song|que suena|cual/.test(norm) ? 'info'
+    : /recomend|suger|sugest|indica|dica|recommend|suggest|sugiere/.test(norm) ? 'recomenda'
+    : /obrigad|valeu|thanks|thank|gracias/.test(norm) ? 'thanks'
+    : /oi|ola|hello|hola|hi\b/.test(norm) ? 'hello'
     : null;
   if (!hasWake) return;
-  if (!action) { djSpeak('Desculpa, não entendi. Tente: TAMI, próxima música.'); return; }
+  if (!action) { djSpeak(L('comNo')); return; }
   const cur = state.current;
   switch (action) {
-    case 'bombar': djSpeak('Bora bombar! Preparando um mix só pra você.'); setTimeout(() => djMix('bombar'), 1500); break;
-    case 'relaxar': djSpeak('Pode relaxar. Deixa comigo o clima.'); setTimeout(() => djMix('relaxar'), 1500); break;
+    case 'bombar': djSpeak(L('actBombar')); setTimeout(() => djMix('bombar'), 1500); break;
+    case 'relaxar': djSpeak(L('actRelaxar')); setTimeout(() => djMix('relaxar'), 1500); break;
     case 'piada': setTimeout(tamiPiada, 600); break;
     case 'curiosidade': {
-      djSpeak('Ótimo! Vou te contar uma curiosidade sobre a banda.');
+      djSpeak(L('actFact'));
       setTimeout(tamiCuriosidade, 700);
       break;
     }
     case 'locutor': tamiLocutorToggle(); break;
     case 'timer': {
       const m = parseInt((norm.match(/(\d+)/) || [])[1], 10);
-      if (m && m > 0 && m <= 120) { djSpeak('Combinado! Desligo em ' + m + ' minutos.'); tamiSleep(m); }
-      else { djSpeak('Diga em quantos minutos, por exemplo: TAMI, timer de 20 minutos.'); }
+      if (m && m > 0 && m <= 120) { djSpeak(L('actTimer', { n: m })); tamiSleep(m); }
+      else { djSpeak(L('actTimerAsk')); }
       break;
     }
-    case 'mix': djSpeak('Claro! Preparando um mix novo para você.'); setTimeout(djMix, 1500); break;
-    case 'recomenda': djSpeak('Deixa eu pensar aqui...'); setTimeout(tamiRecomenda, 800); break;
+    case 'mix': djSpeak(L('actMix')); setTimeout(djMix, 1500); break;
+    case 'recomenda': djSpeak(L('actThink')); setTimeout(tamiRecomenda, 800); break;
     case 'dislike':
       djMarkDislike();
-      djSpeak('Entendido! Não vou tocar essa por um tempo.');
+      djSpeak(L('actNoLike'));
       if (state.queue.length) next(true);
       break;
     case 'dupes':
@@ -1691,33 +2122,33 @@ function djCommand(raw) {
       break;
     case 'skip':
       djMarkSkip();
-      djSpeak('Pulada!');
+      djSpeak(L('actSkip'));
       if (state.queue.length) next(true);
       break;
     case 'next':
       djMarkSkip();
-      djSpeak('Próxima!');
+      djSpeak(L('actNext'));
       if (state.queue.length) next(true);
       break;
-    case 'prev': djSpeak('Voltando!'); prev(); break;
+    case 'prev': djSpeak(L('actPrev')); prev(); break;
     case 'pause': {
       const el2 = state.current && state.current.type === 'video' ? video : audio;
-      if (el2.src && !el2.paused) { el2.pause(); djSpeak('Pausado!'); }
+      if (el2.src && !el2.paused) { el2.pause(); djSpeak(L('actPause')); }
       break;
     }
     case 'play': {
       const el2 = state.current && state.current.type === 'video' ? video : audio;
-      if (el2.src && el2.paused) { el2.play(); djSpeak('Tocando de novo!'); }
+      if (el2.src && el2.paused) { safePlay(el2); djSpeak('Tocando de novo!'); }
       break;
     }
     case 'fav':
-      if (cur) { toggleFav(cur); djSpeak('Marcada como favorita!'); }
+      if (cur) { toggleFav(cur); djSpeak(L('actFav')); }
       break;
     case 'info':
-      if (cur) djAnnounceTrack(cur); else djSpeak('Nada tocando no momento.');
+      if (cur) djAnnounceTrack(cur); else djSpeak(L('actNothing'));
       break;
-    case 'thanks': djSpeak('Por nada! A gente se vê na próxima.'); break;
-    case 'hello': djSpeak('Olá! Sou a TAMI, sua DJ virtual.'); break;
+    case 'thanks': djSpeak(L('actThanks')); break;
+    case 'hello': djSpeak(L('hello')); break;
   }
 }
 
@@ -1771,7 +2202,7 @@ function recommendTop(n) {
 function tamiRecomenda() {
   const recs = recommendTop(10);
   if (!recs.length) {
-    djSpeak('Ainda não tenho dados suficientes para recomendar. Toque e favorite músicas que eu aprendo.');
+    djSpeak(L('recNone'));
     toast('Toque e favorite músicas para eu aprender 🎧');
     return;
   }
@@ -1801,7 +2232,7 @@ function tamiRecomenda() {
     playList(songs, songs[0]);
     closeModal();
   };
-  djSpeak(`Separei ${recs.length} músicas para você. As melhores por aqui.`);
+  djSpeak(L('recDone', { n: recs.length }));
 }
 
 function playList(list, song) {
@@ -1873,33 +2304,100 @@ function updateMediaSession() {
   } catch (e) {}
 }
 
-// ---------- Visualizador ----------
+// ---------- Visualizador + Efeitos (8D) ----------
 let visCtx = null, visAnalyser = null, visData = null;
-function ensureVis() {
+const fx = { engine: null, src: null, master: null, panner: null, lfo: null, wet: null, dry: null, rev: null, on: false };
+function ensureFx() {
+  if (fx.engine) return true;
   const AC = window.AudioContext || window.webkitAudioContext;
   if (!AC) return false;
-  if (!visCtx) {
-    try {
-      visCtx = new AC();
-      visAnalyser = visCtx.createAnalyser();
-      visAnalyser.fftSize = 256;
-      visAnalyser.smoothingTimeConstant = 0.82;
-      visData = new Uint8Array(visAnalyser.frequencyBinCount);
-      const asrc = visCtx.createMediaElementSource(audio);
-      asrc.connect(visAnalyser);
-      visAnalyser.connect(visCtx.destination);
-      const vAnalyser = visCtx.createAnalyser();
+  try {
+    fx.engine = new AC();
+    fx.src = fx.engine.createMediaElementSource(audio);
+    fx.master = fx.engine.createGain();
+    fx.master.gain.value = 1;
+    visCtx = fx.engine;
+    visAnalyser = fx.engine.createAnalyser();
+    visAnalyser.fftSize = 256;
+    visAnalyser.smoothingTimeConstant = 0.82;
+    visData = new Uint8Array(visAnalyser.frequencyBinCount);
+    fx.src.connect(visAnalyser);
+    visAnalyser.connect(fx.master);
+    fx.master.connect(fx.engine.destination);
+    return true;
+  } catch (e) { fx.engine = null; return false; }
+}
+function ensureVis() {
+  if (!ensureFx()) return false;
+  try {
+    if (!video._visAnalyser) {
+      const vAnalyser = fx.engine.createAnalyser();
       vAnalyser.fftSize = 256;
       vAnalyser.smoothingTimeConstant = 0.82;
-      const vsrc = visCtx.createMediaElementSource(video);
+      const vsrc = fx.engine.createMediaElementSource(video);
       vsrc.connect(vAnalyser);
-      vAnalyser.connect(visCtx.destination);
+      vAnalyser.connect(fx.engine.destination);
       video._visAnalyser = vAnalyser;
-      $('vis-wrap').style.display = 'flex';
-    } catch (e) { visCtx = null; return false; }
-  }
-  if (visCtx.state === 'suspended') visCtx.resume().catch(() => {});
+    }
+    $('vis-wrap').style.display = 'flex';
+  } catch (e) { return false; }
+  if (fx.engine.state === 'suspended') fx.engine.resume().catch(() => {});
   return true;
+}
+function update8dUI() {
+  const b = $('p-8d');
+  if (b) { b.style.color = fx.on ? 'var(--primary)' : 'var(--text2)'; b.style.textShadow = fx.on ? 'var(--glow-soft)' : 'none'; }
+}
+function makeImpulse(duration, decay) {
+  const rate = fx.engine.sampleRate;
+  const len = Math.floor(rate * duration);
+  const buf = fx.engine.createBuffer(2, len, rate);
+  for (let ch = 0; ch < 2; ch++) {
+    const d = buf.getChannelData(ch);
+    for (let i = 0; i < len; i++) d[i] = (Math.random() * 2 - 1) * Math.pow(1 - i / len, decay);
+  }
+  return buf;
+}
+function tami8d() {
+  if (!ensureFx()) { toast(L('d8Need')); return; }
+  if (fx.on) {
+    try {
+      visAnalyser.disconnect();
+      visAnalyser.connect(fx.master);
+      if (fx.lfo) { try { fx.lfo.stop(); } catch (e) {} fx.lfo.disconnect(); }
+      if (fx.wet) fx.wet.disconnect();
+      if (fx.dry) fx.dry.disconnect();
+      if (fx.rev) fx.rev.disconnect();
+      if (fx.panner) fx.panner.disconnect();
+      fx.lfo = fx.wet = fx.dry = fx.rev = fx.panner = null;
+      fx.on = false;
+    } catch (e) {}
+  } else {
+    try {
+      fx.panner = fx.engine.createStereoPanner();
+      fx.lfo = fx.engine.createOscillator();
+      fx.lfo.frequency.value = 0.12;
+      const lfoGain = fx.engine.createGain();
+      lfoGain.gain.value = 1;
+      fx.lfo.connect(lfoGain);
+      lfoGain.connect(fx.panner.pan);
+      fx.rev = fx.engine.createConvolver();
+      fx.rev.buffer = makeImpulse(2.4, 2.4);
+      fx.wet = fx.engine.createGain();
+      fx.wet.gain.value = 0.35;
+      fx.dry = fx.engine.createGain();
+      fx.dry.gain.value = 0.85;
+      visAnalyser.disconnect();
+      visAnalyser.connect(fx.panner);
+      fx.panner.connect(fx.dry); fx.dry.connect(fx.master);
+      fx.panner.connect(fx.rev); fx.rev.connect(fx.wet); fx.wet.connect(fx.master);
+      fx.lfo.start();
+      fx.on = true;
+    } catch (e) { fx.on = false; }
+  }
+  if (fx.engine.state === 'suspended') fx.engine.resume().catch(() => {});
+  update8dUI();
+  toast(fx.on ? L('d8On') : L('d8Off'));
 }
 function visAnalyserOf() {
   if (!visCtx) return null;
@@ -2014,7 +2512,7 @@ function togglePlay() {
   if (!state.current) return;
   const el = state.current.type === 'video' ? video : audio;
   if (el.src) {
-    if (el.paused) el.play(); else el.pause();
+    if (el.paused) safePlay(el); else el.pause();
   }
   renderPlayer();
 }
@@ -2035,7 +2533,7 @@ function toggleRepeat() {
 }
 function next(user) {
   if (!state.queue.length) return;
-  if (state.repeat === 2 && !user) { audio.currentTime = 0; audio.play(); return; }
+  if (state.repeat === 2 && !user) { audio.currentTime = 0; safePlay(audio); return; }
   state.queueIndex = (state.queueIndex + 1) % state.queue.length;
   playCurrent();
 }
@@ -2046,7 +2544,7 @@ function prev() {
   playCurrent();
 }
 audio.addEventListener('ended', () => {
-  if (state.repeat === 2) { if (audio.currentTime) { audio.currentTime = 0; } audio.play(); return; }
+  if (state.repeat === 2) { if (audio.currentTime) { audio.currentTime = 0; } safePlay(audio); return; }
   if (state.repeat === 1 || state.queueIndex < state.queue.length - 1) next();
 });
 audio.addEventListener('timeupdate', updateProgress);
@@ -2218,8 +2716,9 @@ function renderVirgin() {
       <button class="btn" onclick="pjNext()" style="flex:1">⏭</button>
     </div>`;
   }
-  html += `<div class="section">Voz e comandos</div>
+  html += `<div class="section">${L('langTitle')} e comandos</div>
     <div class="v-grid">
+      <div class="v-card" onclick="tamiLang()"><div class="v-ic">🌐</div><div class="v-l">${L('langTitle')}</div><div class="v-s">${LANG_FLAGS[state.lang]} ${LANG_LABELS[state.lang]}</div></div>
       <div class="v-card ${state.djVoice ? 'on' : ''}" onclick="djVoiceToggle()"><div class="v-ic">🗣</div><div class="v-l">Voz</div><div class="v-s">${state.djVoice ? 'Ligada' : 'Desligada'}</div></div>
       <div class="v-card ${state.djMic ? 'on' : ''}" onclick="pjMicToggle()"><div class="v-ic">🎙</div><div class="v-l">Microfone</div><div class="v-s">${state.djMic ? 'Ouvindo…' : 'Comandos de voz'}</div></div>
       <div class="v-card ${state.sleep ? 'on' : ''}" onclick="tamiSleep()"><div class="v-ic">💤</div><div class="v-l">Sono</div><div class="v-s">${state.sleep ? 'Desliga em ' + state.sleep + 'min' : 'Timer de sono'}</div></div>
@@ -2238,18 +2737,9 @@ function renderVirgin() {
 }
 
 // ---------- Avatar da TAMI ----------
-const TAMI_PHRASES = [
-  'Oi, linda! Bora ouvir uma boa música?',
-  'Você está incrível hoje, viu?',
-  'Já escolheu suas favoritas? Eu adoro um coraçãozinho.',
-  'Respira fundo. A música cuida do resto.',
-  'Bora deixar o dia mais bonito!',
-  'Eu acredito em você. Sempre.',
-  'Um bom som resolve quase tudo.',
-  'Dance um pouquinho, faz bem pro coração!'
-];
 function tamiSpeakMood() {
-  const p = TAMI_PHRASES[Math.floor(Math.random() * TAMI_PHRASES.length)];
+  const moods = langArr(TAMI_MOODS_ALL);
+  const p = moods[Math.floor(Math.random() * moods.length)];
   djSpeak(p); toast(p);
 }
 function updateAvatarMood() {
@@ -2270,7 +2760,7 @@ function showProfile() {
   const list = $('modal');
   list.innerHTML = `<h3>Perfil</h3>
     <div class="mrow">Nickname: <input type="text" id="nick-in" value="${esc(state.nick)}" style="width:auto"></div>
-    <div class="mrow" onclick="toggleTheme()"><span class="art grad-c">◐</span><div class="mid"><div class="it-title">Tema</div><div class="it-sub">Claro / Escuro</div></div><span id="theme-ic" style="color:var(--primary);font-size:18px">${state.theme === 'light' ? '🌙' : '☀️'}</span></div>
+    <div class="mrow" onclick="openThemes()"><span class="art grad-c">◐</span><div class="mid"><div class="it-title">Tema</div><div class="it-sub">Modo e cores</div></div><span id="theme-ic" style="color:var(--primary);font-size:18px">${state.theme === 'light' ? '🌙' : '☀️'}</span></div>
     <div class="mrow" id="apk-row" onclick="downloadApk()" style="margin-top:6px"><span class="art grad-e">🤖</span><div class="mid"><div class="it-title">TAMI para Android</div><div class="it-sub" id="apk-ver">Verificando…</div></div><span style="color:var(--primary);font-size:20px">⤓</span></div>
     <div id="modal-actions"><button class="btn secondary" onclick="closeModal()">Fechar</button><button class="btn" onclick="saveNick()">Salvar</button></div>`;
   $('modal-wrap').classList.add('show');
@@ -2337,12 +2827,42 @@ function showUpdateDialog() {
     </div>`;
   $('modal-wrap').classList.add('show');
 }
-function applyTheme() { document.documentElement.classList.toggle('light', (state.theme || 'dark') === 'light'); }
+const ACCENTS = ['cyan', 'roxo', 'rosa', 'azul', 'verde', 'laranja'];
+const ACCENT_COLORS = { cyan: '#00E5FF', roxo: '#B388FF', rosa: '#FF6EC7', azul: '#54A0FF', verde: '#5CD859', laranja: '#FF9F43' };
+function applyTheme() {
+  document.documentElement.classList.toggle('light', (state.theme || 'dark') === 'light');
+  document.documentElement.setAttribute('data-accent', ACCENTS.includes(state.accent) ? state.accent : 'cyan');
+  const mt = document.querySelector('meta[name="theme-color"]');
+  if (mt) mt.content = ACCENT_COLORS[state.accent] || '#B388FF';
+}
 function toggleTheme() {
   state.theme = state.theme === 'light' ? 'dark' : 'light';
   applyTheme();
   putKV('theme', state.theme);
   const i = $('theme-ic'); if (i) i.textContent = state.theme === 'light' ? '🌙' : '☀️';
+  const m = $('themes-modal-sub');
+  if (m) m.textContent = L(state.theme === 'light' ? 'themeLight' : 'themeDark');
+}
+function openThemes() {
+  const list = $('modal');
+  const clamp = (name, color) => `<span style="display:inline-block;width:20px;height:20px;border-radius:50%;background:${color};box-shadow:0 0 8px ${color}aa;border:2px solid ${state.accent === name ? '#fff' : 'transparent'}"></span>`;
+  list.innerHTML = `<h3>🎨 ${L('themeTitle')}</h3>
+    <div class="section">${L('themeDark')} / ${L('themeLight')}</div>
+    <div class="mrow" onclick="toggleTheme()"><span class="art ${state.theme === 'light' ? 'grad-b' : 'grad-a'}">${state.theme === 'light' ? '☀️' : '🌙'}</span><div class="mid"><div class="it-title">${state.theme === 'light' ? L('themeLight') : L('themeDark')}</div><div class="it-sub" id="themes-modal-sub">Tocar para alternar</div></div></div>
+    <div class="section">Cor</div>
+    <div class="v-grid" style="grid-template-columns:repeat(3,1fr)">` +
+    ACCENTS.map((a) => `<div class="v-card ${state.accent === a ? 'on' : ''}" style="align-items:center;gap:6px;padding:12px 6px" onclick="setAccent('${a}')"><div class="v-ic" style="color:${ACCENT_COLORS[a]}">🎨</div><div class="v-l" style="font-size:12px">${a}</div></div>`).join('') +
+    `</div>
+    <div id="modal-actions"><button class="btn secondary" onclick="closeModal()">Fechar</button></div>`;
+  $('modal-wrap').classList.add('show');
+}
+function setAccent(code) {
+  if (!ACCENTS.includes(code)) return;
+  state.accent = code;
+  applyTheme();
+  putKV('accent', state.accent);
+  closeModal();
+  openThemes();
 }
 function cycleSpeed() {
   speedIdx = (speedIdx + 1) % SPEEDS.length;
@@ -2448,7 +2968,7 @@ async function removeDuplicates() {
   const groups = findDuplicates();
   const extras = groups.reduce((acc, g) => acc.concat(g.slice(1)), []);
   if (!extras.length) {
-    djSpeak('Não encontrei músicas duplicadas. Tudo certo!');
+    djSpeak(L('dupNone'));
     toast('Nenhuma duplicada encontrada 😊');
     return;
   }
@@ -2464,7 +2984,7 @@ async function removeDuplicates() {
       <button class="btn" onclick="deleteDupes()">Remover ${extras.length}</button>
     </div>`;
   $('modal-wrap').classList.add('show');
-  djSpeak(`Encontrei ${extras.length} músicas duplicadas. Toque em remover, ou confirme por voz dizendo sim.`);
+  djSpeak(L('dupFound', { n: extras.length }));
 }
 function confirmByVoice() {
   const SR = window.SpeechRecognition || window.webkitSpeechRecognition;
@@ -2472,16 +2992,16 @@ function confirmByVoice() {
   const ids = [];
   for (const g of findDuplicates()) ids.push(...g.slice(1).map((s) => s.id));
   if (!ids.length) { toast('Nada a remover'); return; }
-  djSpeak('Quer que eu remova as duplicadas? Diga sim, ou diga não.');
+  djSpeak(L('dupAsk'));
   const r = new SR();
-  r.lang = 'pt-BR'; r.continuous = false; r.interimResults = false; r.maxAlternatives = 3;
+  r.lang = LANG_LOCALES[state.lang] || 'pt-BR'; r.continuous = false; r.interimResults = false; r.maxAlternatives = 3;
   let done = false;
   const finish = () => { done = true; try { r.stop(); } catch (e) {} r.onresult = r.onerror = r.onend = null; };
   r.onresult = (ev) => {
     const t = djNorm((ev.results[ev.results.length - 1][0] || {}).transcript || '');
     if (done) return;
-    if (/^(sim|quero|pode|ok|claro|remove|apaga|confir)/.test(t)) { finish(); djSpeak('Perfeito! Removendo as duplicadas.'); deleteDupes(ids); }
-    else if (/^(nao|cancela)/.test(t)) { finish(); djSpeak('Tudo bem, não removo nada.'); }
+    if (/^(sim|quero|pode|ok|claro|remove|apaga|confir|yes|si\b|adelante)/.test(t)) { finish(); djSpeak(L('dupYes')); deleteDupes(ids); }
+    else if (/^(nao|cancela|no\b)/.test(t)) { finish(); djSpeak(L('dupNo')); }
   };
   r.onerror = () => { if (!done) toast('Não consegui ouvir — toque em "Remover".'); };
   r.onend = () => { if (!done) { try { r.start(); } catch (e) { finish(); } } };
@@ -2756,6 +3276,7 @@ async function reloadAll() {
 }
 async function init() {
   try { registerTabs(); } catch (e) { console.warn('tabs', e); }
+  applyLang();
   try {
     state.db = await openDB();
   } catch (e) {
@@ -2773,6 +3294,8 @@ async function init() {
     if (nick) { state.nick = nick; $('profile-avatar').textContent = initials(nick); }
     const theme = await getKV('theme');
     if (theme) { state.theme = theme; applyTheme(); }
+    const accent = await getKV('accent');
+    if (accent && ACCENTS.includes(accent)) { state.accent = accent; applyTheme(); }
     const visStyle = await getKV('visStyle');
     if (visStyle && VIS_STYLES.includes(visStyle)) {
       state.visStyle = visStyle;
@@ -2798,7 +3321,7 @@ async function init() {
     }
   } catch (e) {}
   document.addEventListener('pointerdown', function djWelcome() {
-    if (state.djVoice) djSpeak('Bem-vindo(a)! Eu sou a TAMI, sua DJ virtual.');
+    if (state.djVoice) djSpeak(L('welcome'));
   }, { once: true, passive: true });
   document.addEventListener('pointerdown', () => { ensureVis(); }, { passive: true });
   try { startVis(); } catch (e) {}
