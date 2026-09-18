@@ -2088,8 +2088,8 @@ function addLyrStyles() {
   const css = `#lyr-scroll{max-height:52vh;overflow-y:auto;padding:4px 2px;scroll-behavior:smooth}
   .lyr-col{display:flex;flex-direction:column;gap:2px}
   .lyr-line{padding:5px 10px;border-radius:10px;transition:all .25s;border-left:3px solid transparent}
-  .lyr-o{font-size:15px;line-height:1.4}.lyr-t{font-size:13px;opacity:.78;margin-top:2px;color:var(--primary,#22c55e)}
-  .lyr-line.lyr-now{background:var(--primary,#22c55e22);border-left-color:var(--primary,#22c55e)}
+  .lyr-o{font-size:15px;line-height:1.4}.lyr-t{font-size:13px;opacity:.95;margin-top:2px;color:var(--primary,#22c55e);color:color-mix(in srgb,var(--primary,#22c55e) 62%,var(--text,#EAF6FF))}
+  .lyr-line.lyr-now{background:rgba(127,127,127,.16);background:color-mix(in srgb,var(--primary,#22c55e) 16%,transparent);border-left-color:var(--primary,#22c55e)}
   .lyr-line.lyr-now .lyr-o{font-weight:700;font-size:16px}`;
   const st = document.createElement('style'); st.id = 'lyr-css'; st.textContent = css; document.head.appendChild(st);
 }
@@ -3854,6 +3854,11 @@ const CHANGELOG = {
     pt: ['No modo rádio, as curiosidades agora são sobre a banda ou a música, buscadas na Wikipédia no idioma do app', 'Os fatos genéricos ficam só no card "Fato"', 'A TAMI ganhou várias falas novas: toque no avatar para ouvir'],
     en: ['In radio mode, facts are now about the band or the song, pulled from Wikipedia in the app language', 'Generic facts now live only in the "Fact" card', 'TAMI got several new lines: tap the avatar to hear them'],
     es: ['En modo radio, las curiosidades ahora son sobre la banda o la canción, tomadas de Wikipedia en el idioma de la app', 'Los datos genéricos quedan solo en el card "Dato"', 'TAMI estrenó varias frases nuevas: toca el avatar para escucharlas']
+  },
+  '1.26': {
+    pt: ['Corrige a tradução das letras que ficava ilegível sobre o destaque azul: agora o destaque é azul clarinho e a tradução aparece num tom mais claro'],
+    en: ['Fixes lyric translation being unreadable over the blue highlight: the highlight is now light blue and the translation shows in a lighter tone'],
+    es: ['Corrige la traducción de letras ilegible sobre el resaltado azul: ahora el resaltado es azul claro y la traducción aparece en un tono más claro']
   }
 };
 function changelogList(ver) {
