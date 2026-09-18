@@ -505,6 +505,7 @@ body::after {
     <button class="pc big primary" id="p-play" onclick="togglePlay()">▶</button>
     <button class="pc" onclick="pjNext()">⏭</button>
     <button class="pc primary" id="p-repeat" onclick="toggleRepeat()">🔁</button>
+    <button class="pc" id="p-upnext" onclick="openUpNext()" title="Fila / tocar a seguir">⤴<span id="p-upnext-count" style="font-size:9px;vertical-align:top;margin-left:1px"></span></button>
     <button class="pc" id="p-dj" onclick="djMix()" title="DJ TAMI">🎛</button>
     <button class="pc" id="p-djvoice" onclick="djVoiceToggle()" title="Voz da DJ TAMI">🗣</button>
     <button class="pc" id="p-djmic" onclick="pjMicToggle()" title="Comando de voz (TAMI)">🎙</button>
@@ -535,7 +536,7 @@ body::after {
 const state = {
   songs: [], videos: [], playlists: [],
   tab: 'songs', detail: null, // {type:'album'|'artist'|'playlist', ...}
-  queue: [], queueIndex: -1, current: null,
+  queue: [], queueIndex: -1, current: null, upNext: [],
   shuffle: false, repeat: 0, favs: new Set(), nick: '', theme: 'dark', accent: 'cyan', visStyle: 'hearts',
   djMode: false, djVoice: true, djMic: false, learn: {},
   radio: false, djLocutor: false,
@@ -620,6 +621,12 @@ const I18N = {
   dayStart: { pt: 'Vamos começar o seu dia com essa música:', en: 'Let\'s start your day with this song:', es: '¡Empecemos tu día con esta canción!' },
   afterStart: { pt: 'Vamos começar a sua tarde com essa música:', en: 'Let\'s start your afternoon with this song:', es: '¡Empecemos tu tarde con esta canción!' },
   nightStart: { pt: 'Vamos começar a sua noite com essa música:', en: 'Let\'s start your evening with this song:', es: '¡Empecemos tu noche con esta canción!' },
+  upNextAdd: { pt: 'Vai tocar a seguir: {t}', en: 'Up next: {t}', es: 'Sonará a continuación: {t}' },
+  upNextCur: { pt: 'Essa já está tocando!', en: 'That\'s already playing!', es: '¡Esa ya está sonando!' },
+  upNextTitle: { pt: 'Fila · Tocar a seguir', en: 'Queue · Up next', es: 'Fila · A continuación' },
+  upNextEmpty: { pt: 'Nenhuma música na fila. Toque em ⏭ numa música para ela tocar logo após a atual.', en: 'No songs queued. Tap ⏭ on a song to play it right after the current one.', es: 'Ninguna canción en la fila. Toca ⏭ en una canción para que suene justo después de la actual.' },
+  upNextClear: { pt: 'Limpar fila', en: 'Clear queue', es: 'Vaciar fila' },
+  upNextAddBtn: { pt: '⏭ Tocar a seguir', en: '⏭ Play next', es: '⏭ A continuación' },
   radioNeed: { pt: 'Importe músicas para a Rádio TAMI tocar.', en: 'Import some songs so Radio TAMI can play.', es: 'Importa canciones para que Radio TAMI toque.' },
   radioOff: { pt: 'Rádio desligada.', en: 'Radio off.', es: 'Radio apagada.' },
   micListen: { pt: 'Oi! Eu sou a TAMI. Estou ouvindo: fale TAMI, próxima música.', en: 'Hi! I\'m TAMI. I\'m listening: say TAMI, next song.', es: '¡Hola! Soy TAMI. Estoy escuchando: di TAMI, siguiente canción.' },
@@ -1412,10 +1419,12 @@ function renderSongs(list, container, favOnly) {
     row.innerHTML = `<div class="art" id="a-${s.id}"></div>
       <div class="mid"><div class="it-title">${esc(s.title)}</div><div class="it-sub">${esc(s.artist)} · ${esc(s.album)}</div></div>
       <button class="like ${state.favs.has(s.id) ? 'fav' : ''}" data-fav="${s.id}">${state.favs.has(s.id) ? '♥' : '♡'}</button>
+      <button class="like" data-next="${s.id}" title="Tocar a seguir">⏭</button>
       <button class="like" data-info="${s.id}" title="Detalhes">ⓘ</button>
       <button class="like" data-del="${s.id}" title="Excluir">🗑</button>`;
     row.onclick = () => playList(list, s);
     row.querySelector('[data-fav]').onclick = (e) => { e.stopPropagation(); toggleFav(s); };
+    row.querySelector('[data-next]').onclick = (e) => { e.stopPropagation(); addUpNext(s); };
     row.querySelector('[data-info]').onclick = (e) => { e.stopPropagation(); songDetails(s); };
     row.querySelector('[data-del]').onclick = (e) => { e.stopPropagation(); delSong(s.id); };
     renderArt(row.childNodes[0], s);
@@ -1958,13 +1967,14 @@ function songDetails(s) {
     ${durTxt ? `<div class="me-row"><span class="me-k">${L('detDur')}</span><span class="me-v">${durTxt}</span></div>` : ''}
     ${codecTxt ? `<div class="me-row"><span class="me-k">${L('detCodec')}</span><span class="me-v">${codecTxt}</span></div>` : ''}
     <div class="me-row"><span class="me-k">${L('detSource')}</span><span class="me-v">${srcTxt}</span></div>
-    <div id="modal-actions"><button class="btn secondary" onclick="closeModal()">${L('detClose')}</button></div>`;
+    <div id="modal-actions"><button class="btn" onclick="addUpNextId(${JSON.stringify(s.id)});closeModal()">${L('upNextAddBtn')}</button><button class="btn secondary" onclick="closeModal()">${L('detClose')}</button></div>`;
   const modal = $('modal');
   const wrap = $('modal-wrap');
   modal.innerHTML = html;
   addModalStyles();
   wrap.classList.add('show');
 }
+
 function addModalStyles() {
   const css = '#modal .me-row{display:flex;justify-content:space-between;gap:12px;padding:9px 2px;border-bottom:1px solid var(--border,#00000022)}' +
     '#modal .me-k{opacity:.6;font-size:13px;white-space:nowrap}' +
@@ -2982,8 +2992,69 @@ function toggleRepeat() {
 function next(user) {
   if (!state.queue.length) return;
   if (state.repeat === 2 && !user) { audio.currentTime = 0; safePlay(audio); return; }
+  if (state.upNext.length) { playUpNext(); return; }
   state.queueIndex = (state.queueIndex + 1) % state.queue.length;
   playCurrent();
+}
+function addUpNext(s) {
+  if (!s) return;
+  if (state.current && state.current.id === s.id) { toast(L('upNextCur')); return; }
+  state.upNext = state.upNext.filter((x) => x.id !== s.id);
+  state.upNext.push(s);
+  toast(L('upNextAdd', { t: s.title || s.name || '' }));
+  syncUpNextBtn();
+}
+function addUpNextId(id) {
+  const s = state.songs.find((x) => String(x.id) === String(id));
+  if (s) addUpNext(s);
+}
+function playUpNext() {
+  if (!state.upNext.length) return false;
+  const s = state.upNext.shift();
+  if (!s) return false;
+  let curIdx = state.queue.indexOf(state.current);
+  if (curIdx < 0) curIdx = state.queueIndex;
+  const pos = state.queue.indexOf(s);
+  if (pos >= 0) state.queue.splice(pos, 1);
+  if (pos >= 0 && pos <= curIdx) curIdx--;
+  if (curIdx < 0) curIdx = 0;
+  state.queue.splice(curIdx + 1, 0, s);
+  state.queueIndex = curIdx + 1;
+  playCurrent();
+  syncUpNextBtn();
+  return true;
+}
+function syncUpNextBtn() {
+  const b = $('p-upnext');
+  if (b) b.style.color = state.upNext.length ? 'var(--primary)' : 'var(--text)';
+  const c = $('p-upnext-count');
+  if (c) c.textContent = state.upNext.length ? String(state.upNext.length) : '';
+}
+function openUpNext() {
+  const modal = $('modal');
+  const wrap = $('modal-wrap');
+  if (!state.upNext.length) {
+    modal.innerHTML = `<h3>${L('upNextTitle')}</h3><p style="opacity:.65">${L('upNextEmpty')}</p>
+      <div id="modal-actions"><button class="btn secondary" onclick="closeModal()">${L('detClose')}</button></div>`;
+  } else {
+    modal.innerHTML = `<h3>⤴ ${L('upNextTitle')} (${state.upNext.length})</h3>
+      <div class="list" style="max-height:56vh;overflow-y:auto;padding:0">` +
+      state.upNext.map((s, i) => `<div class="mrow">
+        <span class="art small ${grad((s.title || '?').length % 6 + 1)}">${esc(initials(s.artist || s.title || '?'))}</span>
+        <div class="mid"><div class="it-title">${esc(s.title || s.name || '')}</div><div class="it-sub">${esc(s.artist || '')}${s.album ? ' · ' + esc(s.album) : ''}</div></div>
+        <button class="like" data-un="${i}" title="Remover">✕</button>
+      </div>`).join('') +
+      `</div>
+      <div id="modal-actions">
+        <button class="btn secondary" onclick="closeModal()">${L('detClose')}</button>
+        <button class="btn" onclick="state.upNext=[];openUpNext()">${L('upNextClear')}</button>
+      </div>`;
+  }
+  addModalStyles();
+  wrap.classList.add('show');
+  modal.querySelectorAll('[data-un]').forEach((btn) => {
+    btn.onclick = () => { state.upNext.splice(+btn.dataset.un, 1); syncUpNextBtn(); openUpNext(); };
+  });
 }
 function prev() {
   if (!state.queue.length) return;
@@ -2993,7 +3064,7 @@ function prev() {
 }
 audio.addEventListener('ended', () => {
   if (state.repeat === 2) { if (audio.currentTime) { audio.currentTime = 0; } safePlay(audio); return; }
-  if (state.repeat === 1 || state.queueIndex < state.queue.length - 1) next();
+  if (state.repeat === 1 || state.queueIndex < state.queue.length - 1 || state.upNext.length) next();
 });
 audio.addEventListener('timeupdate', updateProgress);
 audio.addEventListener('play', () => { renderPlayer(); if ('mediaSession' in navigator) navigator.mediaSession.playbackState = 'playing'; updateAvatarMood(); syncNativeNow(true); });
@@ -3004,6 +3075,7 @@ video.addEventListener('pause', () => { renderPlayer(); updateAvatarMood(); sync
 video.addEventListener('ended', () => {
   if (state.current && state.current.type === 'video') {
     if (state.repeat === 2) { video.currentTime = 0; video.play().catch(() => {}); return; }
+    if (state.upNext.length) { next(); return; }
     if (state.queue.length > 1 && state.queueIndex < state.queue.length - 1) { next(); return; }
     closePlayer();
     return;
@@ -3316,6 +3388,11 @@ const CHANGELOG = {
     pt: ['Rádio TAMI com hora e clima: ao ligar, ela diz bom dia/tarde/noite, que horas são e o clima do dia, e começa com o nome da música', 'A cada hora cheia, o rádio repete a hora e o clima e fala a música que começa', 'Toda música que toca tem o nome anunciado'],
     en: ['TAMI Radio with time and weather: when you turn it on, she greets by the time of day, tells the time and today\'s weather, then starts with the track name', 'Every hour on the hour the radio repeats time/weather and names the next song', 'Every playing track gets announced'],
     es: ['Radio TAMI con hora y clima: al encenderla saluda según el momento, dice la hora y el clima del día, y arranca diciendo la canción', 'Cada hora en punto repite hora/clima y anuncia la siguiente canción', 'Toda canción que suena se anuncia']
+  },
+  '1.23': {
+    pt: ['Nova função "Fila / tocar a seguir": toque em ⏭ numa música e ela toca logo depois da atual', 'Botão ⤴ no player mostra a fila; dá para remover músicas ou limpar a fila inteira'],
+    en: ['New "Queue / play next": tap ⏭ on a song and it plays right after the current one', 'The ⤴ button in the player shows the queue; you can remove songs or clear it all'],
+    es: ['Nueva función "Fila / tocar a continuación": toca ⏭ en una canción y sonará justo después de la actual', 'El botón ⤴ en el reproductor muestra la fila; puedes quitar canciones o vaciarla por completo']
   }
 };
 function changelogList(ver) {
