@@ -955,7 +955,19 @@ const I18N_MORE = {
     pt: 'Não consegui tocar essa — pulando pra próxima.',
     en: "Couldn't play this one — skipping to next.",
     es: 'No pude reproducirla — saltando a la siguiente.'
-  }
+  },
+  detTitle: { pt: 'Detalhes da música', en: 'Song details', es: 'Detalles de la canción' },
+  detTitle2: { pt: 'Título', en: 'Title', es: 'Título' },
+  detArtist: { pt: 'Artista', en: 'Artist', es: 'Artista' },
+  detAlbum: { pt: 'Álbum', en: 'Album', es: 'Álbum' },
+  detFile: { pt: 'Arquivo', en: 'File', es: 'Archivo' },
+  detSize: { pt: 'Tamanho', en: 'Size', es: 'Tamaño' },
+  detDur: { pt: 'Duração', en: 'Duration', es: 'Duración' },
+  detCodec: { pt: 'Formato / codec', en: 'Format / codec', es: 'Formato / códec' },
+  detSource: { pt: 'Origem', en: 'Source', es: 'Origen' },
+  detSourceImported: { pt: 'Arquivo importado', en: 'Imported file', es: 'Archivo importado' },
+  detSourceDevice: { pt: 'Aparelho (MediaStore)', en: 'Device (MediaStore)', es: 'Dispositivo (MediaStore)' },
+  detClose: { pt: 'Fechar', en: 'Close', es: 'Cerrar' }
 };
 Object.assign(I18N, I18N_MORE);
 let REMOTE = '';
@@ -1271,9 +1283,11 @@ function renderSongs(list, container, favOnly) {
     row.innerHTML = `<div class="art" id="a-${s.id}"></div>
       <div class="mid"><div class="it-title">${esc(s.title)}</div><div class="it-sub">${esc(s.artist)} · ${esc(s.album)}</div></div>
       <button class="like ${state.favs.has(s.id) ? 'fav' : ''}" data-fav="${s.id}">${state.favs.has(s.id) ? '♥' : '♡'}</button>
+      <button class="like" data-info="${s.id}" title="Detalhes">ⓘ</button>
       <button class="like" data-del="${s.id}" title="Excluir">🗑</button>`;
     row.onclick = () => playList(list, s);
     row.querySelector('[data-fav]').onclick = (e) => { e.stopPropagation(); toggleFav(s); };
+    row.querySelector('[data-info]').onclick = (e) => { e.stopPropagation(); songDetails(s); };
     row.querySelector('[data-del]').onclick = (e) => { e.stopPropagation(); delSong(s.id); };
     renderArt(row.childNodes[0], s);
     container.appendChild(row);
@@ -1729,9 +1743,101 @@ function importPrompt() { $('fileSongs').click(); }
 let objectUrlCache = new Map();
 let coverUrlCache = new Map();
 function objUrl(s) {
-  if (s.url) return s.url;
+  if (!s.blob) return s.url || '';
   if (!objectUrlCache.has(s.id)) objectUrlCache.set(s.id, URL.createObjectURL(s.blob));
   return objectUrlCache.get(s.id);
+}
+function readSongChunk(url, start, len) {
+  try {
+    const chunk = window.TamiNative && window.TamiNative.readSong ? window.TamiNative.readSong(url, start, len) : '';
+    if (!chunk) return null;
+    const bin = atob(chunk);
+    const arr = new Uint8Array(bin.length);
+    for (let i = 0; i < bin.length; i++) arr[i] = bin.charCodeAt(i);
+    return arr;
+  } catch (e) { console.warn('readSongChunk', e); return null; }
+}
+async function blobForSong(s) {
+  if (!s || s.blob) return true;
+  if (!s.url) return false;
+  if (window.TamiNative && window.TamiNative.songSize) {
+    try {
+      const size = Number(window.TamiNative.songSize(s.url)) || 0;
+      if (size <= 0) return false;
+      const CH = 512 * 1024;
+      let off = 0;
+      const parts = [];
+      while (off < size) {
+        const data = readSongChunk(s.url, off, Math.min(CH, size - off));
+        if (!data || !data.length) return false;
+        parts.push(data);
+        off += data.length;
+      }
+      s.blob = new Blob(parts, { type: '' });
+      return true;
+    } catch (e) { console.warn('native blob', e); }
+  }
+  try {
+    const r = await fetch(s.url);
+    if (!r.ok) return false;
+    const b = await r.blob();
+    if (!b || !b.size) return false;
+    s.blob = b;
+    return true;
+  } catch (e) { console.warn('fetch blob', s.url, e); return false; }
+}
+function songDetails(s) {
+  let sizeTxt = '', codecTxt = '', fileTxt = '', durTxt = '', srcTxt = L('detSourceImported');
+  if (s.blob) {
+    sizeTxt = fmtBytes(s.blob.size);
+    if (s.name) fileTxt = esc(s.name);
+    if (s.durationMs) durTxt = fmtMs(s.durationMs);
+  } else if (s.url && window.TamiNative && window.TamiNative.mediaInfo) {
+    try {
+      const info = JSON.parse(window.TamiNative.mediaInfo(s.url));
+      if (info && typeof info === 'object') {
+        sizeTxt = (info.s && Number(info.s) > 0) ? fmtBytes(Number(info.s)) : '';
+        codecTxt = info.c || '';
+        fileTxt = info.n ? esc(info.n) : '';
+        if (info.m) codecTxt += (codecTxt ? ' · ' : '') + esc(info.m);
+        if (info.d && Number(info.d) > 0) durTxt = fmtMs(Number(info.d));
+        srcTxt = L('detSourceDevice');
+      }
+    } catch (e) {}
+  }
+  const html = `<h3>${L('detTitle')}</h3>
+    <div class="me-row"><span class="me-k">${L('detTitle2')}</span><span class="me-v">${esc(s.title)}</span></div>
+    <div class="me-row"><span class="me-k">${L('detArtist')}</span><span class="me-v">${esc(s.artist)}</span></div>
+    <div class="me-row"><span class="me-k">${L('detAlbum')}</span><span class="me-v">${esc(s.album)}</span></div>
+    ${fileTxt ? `<div class="me-row"><span class="me-k">${L('detFile')}</span><span class="me-v">${fileTxt}</span></div>` : ''}
+    ${sizeTxt ? `<div class="me-row"><span class="me-k">${L('detSize')}</span><span class="me-v">${sizeTxt}</span></div>` : ''}
+    ${durTxt ? `<div class="me-row"><span class="me-k">${L('detDur')}</span><span class="me-v">${durTxt}</span></div>` : ''}
+    ${codecTxt ? `<div class="me-row"><span class="me-k">${L('detCodec')}</span><span class="me-v">${codecTxt}</span></div>` : ''}
+    <div class="me-row"><span class="me-k">${L('detSource')}</span><span class="me-v">${srcTxt}</span></div>
+    <div id="modal-actions"><button class="btn secondary" onclick="closeModal()">${L('detClose')}</button></div>`;
+  const modal = $('modal');
+  const wrap = $('modal-wrap');
+  modal.innerHTML = html;
+  addModalStyles();
+  wrap.classList.add('show');
+}
+function addModalStyles() {
+  const css = '#modal .me-row{display:flex;justify-content:space-between;gap:12px;padding:9px 2px;border-bottom:1px solid var(--border,#00000022)}' +
+    '#modal .me-k{opacity:.6;font-size:13px;white-space:nowrap}' +
+    '#modal .me-v{text-align:right;word-break:break-word}';
+  if (!document.getElementById('modal-details-style')) { const st = document.createElement('style'); st.id = 'modal-details-style'; st.textContent = css; document.head.appendChild(st); }
+}
+function fmtBytes(n) {
+  if (!(n > 0)) return '';
+  const un = ['B', 'KB', 'MB', 'GB'];
+  let i = 0, v = n;
+  while (v >= 1024 && i < un.length - 1) { v /= 1024; i++; }
+  return (v >= 100 ? Math.round(v) : v.toFixed(1)) + ' ' + un[i];
+}
+function fmtMs(ms) {
+  const s = Math.round(ms / 1000);
+  const m = Math.floor(s / 60), r = s % 60;
+  return m + ':' + (r < 10 ? '0' : '') + r;
 }
 function coverUrl(s) {
   if (!s || !s.cover) return null;
@@ -2281,6 +2387,13 @@ function playCurrent() {
   video.pause();
   video.removeAttribute('src');
   video.style.display = 'none';
+  if (s.type !== 'video' && s.url && !s.blob) {
+    blobForSong(s).finally(() => { if (state.current === s) setAudioSource(s); });
+    return;
+  }
+  setAudioSource(s);
+}
+function setAudioSource(s) {
   audio.src = objUrl(s);
   audio.play().then(() => updateMediaSession()).catch(() => {});
   if (state.db) putKV('lastSong', { id: s.id });

@@ -97,6 +97,62 @@ class MainActivity : AppCompatActivity() {
         }
 
         @JavascriptInterface
+        fun songSize(url: String): Long {
+            return try {
+                val pfd = contentResolver.openFileDescriptor(Uri.parse(url), "r")
+                if (pfd == null) 0L else pfd.statSize.also { pfd.close() }
+            } catch (e: Exception) {
+                0L
+            }
+        }
+
+        @JavascriptInterface
+        fun readSong(url: String, start: Long, len: Int): String {
+            return try {
+                val pfd = contentResolver.openFileDescriptor(Uri.parse(url), "r") ?: return ""
+                val out = java.io.ByteArrayOutputStream()
+                pfd.use { fd ->
+                    val total = fd.statSize
+                    if (start >= total) return ""
+                    val n = minOf(len.toLong(), total - start).toInt()
+                    val ins = ParcelFileDescriptor.AutoCloseInputStream(fd)
+                    if (!skipFully(ins, start)) return ""
+                    val buf = ByteArray(8192)
+                    var remaining = n
+                    while (remaining > 0) {
+                        val r = ins.read(buf, 0, minOf(buf.size, remaining))
+                        if (r < 0) break
+                        out.write(buf, 0, r)
+                        remaining -= r
+                    }
+                }
+                android.util.Base64.encodeToString(out.toByteArray(), android.util.Base64.NO_WRAP)
+            } catch (e: Exception) {
+                ""
+            }
+        }
+
+        @JavascriptInterface
+        fun mediaInfo(url: String): String {
+            return try {
+                val uri = Uri.parse(url)
+                val pfd = contentResolver.openFileDescriptor(uri, "r") ?: return "{}"
+                val mime = resolveMime(uri, pfd)
+                pfd.use { fd ->
+                    val size = fd.statSize
+                    val name = contentResolver.query(uri, arrayOf(MediaStore.Audio.Media.DISPLAY_NAME), null, null, null)
+                        ?.use { if (it.moveToFirst()) it.getString(0) else null } ?: ""
+                    val dur = contentResolver.query(uri, arrayOf(MediaStore.Audio.Media.DURATION), null, null, null)
+                        ?.use { if (it.moveToFirst()) it.getLong(0) else 0L } ?: 0L
+                    val codec = codecLabel(fd, mime)
+                    "{\"n\":${jsEsc(name)},\"s\":$size,\"m\":${jsEsc(mime)},\"c\":${jsEsc(codec)},\"d\":$dur}"
+                }
+            } catch (e: Exception) {
+                "{}"
+            }
+        }
+
+        @JavascriptInterface
         fun scanMusic(): String {
             if (!hasReadPermission()) {
                 runOnUiThread { requestReadPermission() }
@@ -228,16 +284,7 @@ class MainActivity : AppCompatActivity() {
         return try {
             val pfd = contentResolver.openFileDescriptor(uri, "r") ?: return null
             val total = pfd.statSize
-            val sniffed = sniffMime(pfd)
-            val mime = when {
-                sniffed != null -> sniffed
-                else -> queryDisplayNameMime(uri).ifEmpty {
-                    when (val t = contentResolver.getType(uri) ?: "") {
-                        "", "application/octet-stream", "*/*" -> "audio/mpeg"
-                        else -> normalizeMime(t)
-                    }
-                }
-            }
+            val mime = resolveMime(uri, pfd)
             val stream = ParcelFileDescriptor.AutoCloseInputStream(pfd)
             if (rangeHeader != null && total > 0) {
                 val m = Regex("bytes=(\\d+)-(\\d*)").find(rangeHeader)
@@ -278,6 +325,7 @@ class MainActivity : AppCompatActivity() {
                         s(0, 4) == "OggS" -> "audio/ogg"
                         s(0, 4) == "fLaC" -> "audio/flac"
                         s(0, 4) == "RIFF" && s(8, 4) == "WAVE" -> "audio/wav"
+                        s(0, 4) == "RIFF" && s(8, 4) == "WMA " -> "audio/x-ms-wma"
                         s(0, 4) == "#!AM" && b(4) == 'R'.code -> "audio/amr"
                         b(0) == 0xFF && b(1).and(0xE0) == 0xE0 -> "audio/mpeg"
                         b(0) == 0xFF && b(1).and(0xF6) == 0xF0 -> "audio/aac"
@@ -287,6 +335,49 @@ class MainActivity : AppCompatActivity() {
             }
         } catch (e: Exception) {
             null
+        }
+    }
+
+    private fun resolveMime(uri: Uri, pfd: ParcelFileDescriptor): String {
+        val sniffed = sniffMime(pfd)
+        if (sniffed != null) return sniffed
+        return queryDisplayNameMime(uri).ifEmpty {
+            when (val t = contentResolver.getType(uri) ?: "") {
+                "", "application/octet-stream", "*/*" -> "audio/mpeg"
+                else -> normalizeMime(t)
+            }
+        }
+    }
+
+    private fun codecLabel(pfd: ParcelFileDescriptor, mime: String?): String {
+        return try {
+            val head = pfd.dup().use { d ->
+                ParcelFileDescriptor.AutoCloseInputStream(d).use { ins ->
+                    val buf = ByteArray(1024 * 1024)
+                    val n = ins.read(buf, 0, buf.size)
+                    if (n <= 0) "" else String(buf, 0, n, Charsets.ISO_8859_1)
+                }
+            }
+            when (mime) {
+                "audio/mpeg" -> "MP3"
+                "audio/aac" -> "AAC"
+                "audio/flac" -> "FLAC"
+                "audio/wav" -> "WAV / PCM"
+                "audio/x-ms-wma" -> "WMA (sem suporte no WebView)"
+                "audio/amr" -> "AMR (sem suporte no WebView)"
+                "audio/ogg" -> if (head.contains("OpusHead")) "Opus (Ogg)" else "Vorbis (Ogg)"
+                "audio/mp4" -> when {
+                    head.contains("alac") -> "ALAC (MOV)"
+                    head.contains("OpusHead") -> "Opus (MP4)"
+                    head.contains(".mp3") -> "MP3 (em MP4)"
+                    head.contains("ac-3") -> "AC-3"
+                    head.contains("ec-3") -> "E-AC-3"
+                    else -> "AAC (MP4)"
+                }
+                else -> "Container desconhecido"
+            }
+        } catch (e: Exception) {
+            "Container desconhecido"
         }
     }
 
