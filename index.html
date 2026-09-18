@@ -2804,9 +2804,6 @@ function togglePlay() {
   renderPlayer();
 }
 let interruptionPaused = false;
-function nativeFocus(mode) {
-  try { if (window.TamiNative && window.TamiNative.audioFocus) window.TamiNative.audioFocus(mode); } catch (e) {}
-}
 function pauseForInterruption() {
   const el = state.current && state.current.type === 'video' ? video : audio;
   if (!state.current || !el.src || el.paused) return;
@@ -2851,11 +2848,11 @@ audio.addEventListener('ended', () => {
   if (state.repeat === 1 || state.queueIndex < state.queue.length - 1) next();
 });
 audio.addEventListener('timeupdate', updateProgress);
-audio.addEventListener('play', () => { nativeFocus('play'); renderPlayer(); if ('mediaSession' in navigator) navigator.mediaSession.playbackState = 'playing'; updateAvatarMood(); });
-audio.addEventListener('pause', () => { nativeFocus('pause'); renderPlayer(); if ('mediaSession' in navigator) navigator.mediaSession.playbackState = 'paused'; updateAvatarMood(); });
+audio.addEventListener('play', () => { renderPlayer(); if ('mediaSession' in navigator) navigator.mediaSession.playbackState = 'playing'; updateAvatarMood(); });
+audio.addEventListener('pause', () => { renderPlayer(); if ('mediaSession' in navigator) navigator.mediaSession.playbackState = 'paused'; updateAvatarMood(); });
 video.addEventListener('timeupdate', updateProgress);
-video.addEventListener('play', () => { nativeFocus('play'); renderPlayer(); updateAvatarMood(); });
-video.addEventListener('pause', () => { nativeFocus('pause'); renderPlayer(); updateAvatarMood(); });
+video.addEventListener('play', () => { renderPlayer(); updateAvatarMood(); });
+video.addEventListener('pause', () => { renderPlayer(); updateAvatarMood(); });
 video.addEventListener('ended', () => {
   if (state.current && state.current.type === 'video') {
     if (state.repeat === 2) { video.currentTime = 0; video.play().catch(() => {}); return; }

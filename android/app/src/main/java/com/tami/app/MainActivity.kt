@@ -28,9 +28,8 @@ import android.webkit.WebSettings
 import android.webkit.WebView
 import android.webkit.WebViewClient
 import android.widget.Toast
-import android.media.AudioAttributes
-import android.media.AudioFocusRequest
-import android.media.AudioManager
+import android.telephony.PhoneStateListener
+import android.telephony.TelephonyManager
 import androidx.activity.result.contract.ActivityResultContracts
 import androidx.appcompat.app.AppCompatActivity
 import androidx.core.app.ActivityCompat
@@ -51,20 +50,16 @@ class MainActivity : AppCompatActivity() {
     private var filePathCallback: ValueCallback<Array<Uri>>? = null
     private var pendingApk: File? = null
     private var pendingNotifApk: File? = null
-    private var audioFocusRequest: AudioFocusRequest? = null
-    private var interruptedByFocus = false
-    private val audioManager by lazy { getSystemService(AUDIO_SERVICE) as AudioManager }
-    private val focusListener = AudioManager.OnAudioFocusChangeListener { change ->
-        when (change) {
-            AudioManager.AUDIOFOCUS_LOSS, AudioManager.AUDIOFOCUS_LOSS_TRANSIENT -> {
-                interruptedByFocus = true
-                runOnUiThread { try { webView.evaluateJavascript("window.pauseForInterruption&&window.pauseForInterruption();", null) } catch (e: Exception) {} }
-            }
-            AudioManager.AUDIOFOCUS_GAIN -> {
-                if (interruptedByFocus) {
-                    interruptedByFocus = false
+    private var phonePermAsked = false
+    private val telephonyManager by lazy { getSystemService(TELEPHONY_SERVICE) as TelephonyManager }
+    @Suppress("DEPRECATION")
+    private val callStateListener = object : PhoneStateListener() {
+        override fun onCallStateChanged(state: Int, phoneNumber: String?) {
+            when (state) {
+                TelephonyManager.CALL_STATE_RINGING, TelephonyManager.CALL_STATE_OFFHOOK ->
+                    runOnUiThread { try { webView.evaluateJavascript("window.pauseForInterruption&&window.pauseForInterruption();", null) } catch (e: Exception) {} }
+                TelephonyManager.CALL_STATE_IDLE ->
                     runOnUiThread { try { webView.evaluateJavascript("window.resumeFromInterruption&&window.resumeFromInterruption();", null) } catch (e: Exception) {} }
-                }
             }
         }
     }
@@ -300,11 +295,6 @@ class MainActivity : AppCompatActivity() {
                 "error"
             }
         }
-
-        @JavascriptInterface
-        fun audioFocus(mode: String) {
-            if (mode == "play") requestMusicFocus() else abandonMusicFocus()
-        }
     }
 
     private fun copyApkToDownloads(src: File): Uri? {
@@ -349,35 +339,24 @@ class MainActivity : AppCompatActivity() {
         }
     }
 
-    private fun requestMusicFocus() {
+    private fun registerCallListener() {
         try {
-            if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.O) {
-                val req = audioFocusRequest ?: AudioFocusRequest.Builder(AudioManager.AUDIOFOCUS_GAIN)
-                    .setAudioAttributes(
-                        AudioAttributes.Builder()
-                            .setUsage(AudioAttributes.USAGE_MEDIA)
-                            .setContentType(AudioAttributes.CONTENT_TYPE_MUSIC)
-                            .build()
-                    )
-                    .setOnAudioFocusChangeListener(focusListener)
-                    .build()
-                    .also { audioFocusRequest = it }
-                audioManager.requestAudioFocus(req)
-            } else {
-                @Suppress("DEPRECATION")
-                audioManager.requestAudioFocus(focusListener, AudioManager.STREAM_MUSIC, AudioManager.AUDIOFOCUS_GAIN)
+            if (ContextCompat.checkSelfPermission(this, Manifest.permission.READ_PHONE_STATE) != PackageManager.PERMISSION_GRANTED) {
+                if (!phonePermAsked) {
+                    phonePermAsked = true
+                    ActivityCompat.requestPermissions(this, arrayOf(Manifest.permission.READ_PHONE_STATE), 3)
+                }
+                return
             }
+            @Suppress("DEPRECATION")
+            telephonyManager.listen(callStateListener, PhoneStateListener.LISTEN_CALL_STATE)
         } catch (e: Exception) {}
     }
 
-    private fun abandonMusicFocus() {
+    private fun unregisterCallListener() {
         try {
-            if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.O) {
-                audioFocusRequest?.let { audioManager.abandonAudioFocusRequest(it) }
-            } else {
-                @Suppress("DEPRECATION")
-                audioManager.abandonAudioFocus(focusListener)
-            }
+            @Suppress("DEPRECATION")
+            telephonyManager.listen(callStateListener, PhoneStateListener.LISTEN_NONE)
         } catch (e: Exception) {}
     }
 
@@ -704,10 +683,16 @@ class MainActivity : AppCompatActivity() {
 
     override fun onResume() {
         super.onResume()
+        registerCallListener()
         val apk = pendingApk
         if (apk != null && Build.VERSION.SDK_INT >= Build.VERSION_CODES.O && packageManager.canRequestPackageInstalls()) {
             installApk(apk)
         }
+    }
+
+    override fun onPause() {
+        super.onPause()
+        unregisterCallListener()
     }
 
     override fun onSaveInstanceState(outState: Bundle) {
