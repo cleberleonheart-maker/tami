@@ -2187,7 +2187,7 @@ function renderVirgin() {
   }
   if (!state.djMode) {
     html += `<div class="v-actions">
-      <button class="btn" onclick="hasSongs&&djMix()||$('fileSongs').click()" style="flex:1">${hasSongs ? '🎛 Iniciar TAMI' : '＋ Importar músicas'}</button>
+      <button class="btn" onclick="state.songs.length?djMix():$('fileSongs').click()" style="flex:1">${hasSongs ? '🎛 Iniciar TAMI' : '＋ Importar músicas'}</button>
     </div>`;
     if (hasSongs) {
       html += `<div class="v-actions">
