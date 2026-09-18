@@ -3905,7 +3905,14 @@ const CHANGELOG = {
   }
 };
 function changelogList(ver) {
-  const c = CHANGELOG[String(ver)];
+  let c = CHANGELOG[String(ver)];
+  if (!c) {
+    let best = '';
+    for (const k in CHANGELOG) {
+      if (Object.prototype.hasOwnProperty.call(CHANGELOG, k) && versionNewer(k, best)) best = k;
+    }
+    c = CHANGELOG[best];
+  }
   if (!c) return [];
   const arr = c[state.lang] || c.pt;
   return Array.isArray(arr) ? arr : [];
