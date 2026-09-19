@@ -553,7 +553,8 @@ async function stateJSON(req) {
   return {
     dev: inst && inst.dev ? inst.dev : os.hostname(),
     state: inst ? { ...(inst.state || {}), ts: inst.ts } : null,
-    songs: { songs, videos }
+    songs: { songs, videos },
+    server: { url: baseURL(req), publicUrl: PUBLIC_URL || baseURL(req) }
   };
 }
 
@@ -572,7 +573,9 @@ function LAN_IP() {
 const PUBLIC_URL = (process.env.TAMI_PUBLIC_URL || '').trim().replace(/\/+$/, '');
 function baseURL(req) {
   if (PUBLIC_URL) return PUBLIC_URL;
-  const proto = req.headers['x-forwarded-proto'] || (req.socket.encrypted ? 'https' : 'http');
+  let proto = req.headers['x-forwarded-proto'] || (req.socket.encrypted ? 'https' : 'http');
+  const cfv = req.headers['cf-visitor'];
+  if (cfv) { try { proto = (JSON.parse(String(cfv)).scheme || proto).toString(); } catch (e) {} }
   const host = String(req.headers['x-forwarded-host'] || req.headers.host || '').split(',')[0].trim();
   if (host) return `${proto}://${host}`;
   return `http://${LAN_IP()}:${PORT}`;
@@ -615,7 +618,8 @@ function roomSnapshot(code) {
     playing: r.playing,
     positionMs: r.positionMs,
     ts: r.ts,
-    members: [...r.members.keys()].map((k) => ({ nick: k }))
+    members: [...r.members.keys()].map((k) => ({ nick: k })),
+    messages: r.messages
   };
 }
 function roomPush(code, obj) {
@@ -649,7 +653,7 @@ const server = http.createServer((req, res) => {
   if (req.method === 'OPTIONS') { sendCORS(res); res.writeHead(204); res.end(); return; }
 
   if (p === '/__companion__') {
-    sendJSON(res, 200, { name: 'tami-companion', port: PORT });
+    sendJSON(res, 200, { name: 'tami-companion', port: PORT, url: baseURL(req), publicUrl: PUBLIC_URL || baseURL(req) });
     return;
   }
 
@@ -706,7 +710,7 @@ const server = http.createServer((req, res) => {
     return;
   }
 
-  const rm = p.match(/^\/api\/room(?:\/([A-Z0-9]+))?(\/(?:join|leave|cmd|events|ping))?$/);
+  const rm = p.match(/^\/api\/room(?:\/([A-Z0-9]+))?(\/(?:join|leave|cmd|msg|events|ping))?$/);
   if (rm) {
     if (!rm[1] && req.method === 'POST') {
       let body = '';
@@ -723,7 +727,8 @@ const server = http.createServer((req, res) => {
             code, key,
             host: { nick },
             media: null, playing: false, positionMs: 0, ts: 0,
-            lastSeen: Date.now(), members, subs: new Set()
+            lastSeen: Date.now(), members, subs: new Set(),
+            messages: []
           });
           sendJSON(res, 200, { ok: true, code, key });
         } catch (e) { sendJSON(res, 400, { error: 'bad' }); }
@@ -772,6 +777,18 @@ const server = http.createServer((req, res) => {
         r.members.delete(String(d.nick || ''));
         r.lastSeen = Date.now();
         sendJSON(res, 200, { ok: true });
+        return;
+      }
+      if (rm[2] === '/msg') {
+        const nick = String(d.nick || '').trim().slice(0, 32);
+        const text = String(d.text || '').trim().slice(0, 500);
+        if (!nick || !text) { sendJSON(res, 400, { error: 'empty' }); return; }
+        const msg = { t: Date.now(), nick, text };
+        r.messages.push(msg);
+        if (r.messages.length > 150) r.messages = r.messages.slice(-150);
+        r.lastSeen = Date.now();
+        roomPush(code, { cmd: 'msg', ...msg });
+        sendJSON(res, 200, { ok: true, msg });
         return;
       }
       if (rm[2] === '/ping') {

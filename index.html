@@ -378,6 +378,12 @@ html[data-accent="laranja"].light { --primary:#EE812B; --primary-dark:#CD6B1E; }
 }
 #room-view .p-bar { height: 100%; background: var(--primary, #7c4dff); border-radius: 4px; transition: width .6s linear; }
 #room-view .sub-hint { font-size: 12px; color: var(--text2, #999); padding: 2px 2px 8px; }
+#room-view .rt-box { max-height: 150px; overflow-y: auto; border: 1px solid var(--divider, #333); border-radius: 10px; background: var(--surface-v, #1b1b24); padding: 8px; margin: 2px 2px 8px; }
+#room-view .rt-msg { font-size: 13px; line-height: 1.45; padding: 1px 0; word-break: break-word; }
+#room-view .rt-msg b { color: var(--primary, #7c4dff); font-weight: 700; }
+#room-view .rt-msg .rt-time { color: var(--text2, #888); font-size: 10.5px; margin-left: 5px; }
+#room-view .rt-row { display: flex; gap: 6px; margin: 0 2px 12px; }
+#room-view .rt-row input { flex: 1; min-width: 0; padding: 8px 10px; border: 1px solid var(--divider, #333); border-radius: 10px; background: var(--bg2, #16161d); color: var(--text, #eee); font-size: 13px; }
 </style>
 <style id="redesign-futuro">
 /* Futurista sci-fi: fundo em grade neon animado + glassmorphism neon em todos os painéis Virgin Virgin */
@@ -559,8 +565,8 @@ const state = {
   radio: false, djLocutor: false,
   amb: { id: null, vol: 0.4, playing: false },
   sleep: 0, sleepId: null,
-  phone: { dev: '', online: false, state: null, songs: null, videos: null, syncing: false },
-  room: { role: 'off', code: '', key: '', nick: '', media: null, playing: false, positionMs: 0, members: [], sse: null, timer: 0, poll: 0 },
+  phone: { dev: '', online: false, state: null, songs: null, videos: null, server: null, syncing: false },
+  room: { role: 'off', code: '', key: '', nick: '', media: null, playing: false, positionMs: 0, members: [], messages: [], sse: null, timer: 0, poll: 0 },
   db: null,
   lang: (() => { try { return ['pt', 'en', 'es'].includes(localStorage.getItem('tami-lang')) ? localStorage.getItem('tami-lang') : 'pt'; } catch (e) { return 'pt'; } })()
 };
@@ -879,6 +885,13 @@ const I18N = {
   roomHint: { pt: 'Toque para acompanhar', en: 'Tap to follow along', es: 'Toca para seguir' },
   roomGuestStart: { pt: '▶ Seguir agora', en: '▶ Follow now', es: '▶ Seguir ahora' },
   roomAutoLeave: { pt: 'Você saiu da sala.', en: 'You left the room.', es: 'Saliste de la sala.' },
+  roomChat: { pt: '💬 Bate-papo', en: '💬 Chat', es: '💬 Chat' },
+  roomMsgPh: { pt: 'Mensagem…', en: 'Message…', es: 'Mensaje…' },
+  roomSend: { pt: 'Enviar', en: 'Send', es: 'Enviar' },
+  roomNeedMsg: { pt: 'Digite uma mensagem.', en: 'Type a message.', es: 'Escribe un mensaje.' },
+  roomNeedRoom: { pt: 'Crie ou entre numa sala para usar o bate-papo.', en: 'Create or join a room to use the chat.', es: 'Crea o entra en una sala para usar el chat.' },
+  roomFarTip: { pt: 'Amigos de longe: além do código, mande também o link do servidor (aba Celular → copiar link).', en: 'Far-away friends: besides the code, also send the server link (Phone tab → copy link).', es: 'Amigos lejanos: además del código, envía también el enlace del servidor (pestaña Celular → copiar enlace).' },
+  roomLinkCopied: { pt: 'Link do servidor copiado!', en: 'Server link copied!', es: '¡Enlace del servidor copiado!' },
   updTitle: { pt: '🚀 Atualização disponível', en: '🚀 Update available', es: '🚀 Actualización disponible' },
   updBody: { pt: 'Saiu a TAMI <b>{nw}</b> e a sua é a {old}. Quer baixar e instalar agora?', en: 'TAMI <b>{nw}</b> is out and you have {old}. Download and install now?', es: 'Salió TAMI <b>{nw}</b> y tienes {old}. ¿Descargar e instalar ahora?' },
   updLater: { pt: 'Agora não', en: 'Not now', es: 'Ahora no' },
@@ -4061,9 +4074,9 @@ const CHANGELOG = {
     es: ['Pestaña "Celular": búsqueda y cómo ordenar las canciones del PC por título, artista o álbum', 'El servidor acompañante lee título/artista/álbum reales de las canciones del PC (MP3/FLAC/WAV) y detecta solo cuando entra música nueva', 'Lo que sonaba en el PC se puede restaurar en el celular, y las canciones nuevas del PC entran solas a la biblioteca', 'Comandos de voz más fiables: el micrófono ya no reacciona a conversaciones sin decir "TAMI", frases como "deja de sonar", "duerme en 30 minutos" y "pon música" ahora funcionan, y TAMI sostiene el micrófono mientras habla']
   },
 '1.36': {
-    pt: ['O servidor do PC agora serve também vídeos: a aba "Celular" lista os vídeos da pasta e um toque salva ou assiste na hora', 'Nova aba "Sala" (watch party na LAN): crie uma sala e compartilhe o código, ou entre no código de quem criou', 'No palco da sala você escolhe o vídeo/música do servidor (ou cola um link) e todos veem em sincronia — play, pausa e avanço são espelhados na hora', 'A sala mostra quem está junto (lista de participantes) e encerra sozinha se todos saírem'],
-    en: ['The PC server now serves videos too: the "Phone" tab lists the videos in the folder and one tap saves or watches them right away', 'New "Room" tab (LAN watch party): create a room and share the code, or join with someone\'s code', 'On the room\'s stage you pick the server video/song (or paste a link) and everyone watches in sync — play, pause and seeking mirror instantly', 'The room shows who\'s in (participant list) and closes itself once everyone leaves'],
-    es: ['El servidor del PC ahora sirve también vídeos: la pestaña "Celular" lista los vídeos de la carpeta y un toque los guarda o los reproduce al instante', 'Nueva pestaña "Sala" (watch party en la LAN): crea una sala y comparte el código, o entra con el código de quien la creó', 'En el escenario de la sala eliges el vídeo/canción del servidor (o pegas un enlace) y todos lo ven en sincronía — reproducir, pausar y avanzar se reflejan al momento', 'La sala muestra quiénes están (lista de participantes) y se cierra sola si todos se van']
+    pt: ['O servidor do PC agora serve também vídeos: a aba "Celular" lista os vídeos da pasta e um toque salva ou assiste na hora', 'Nova aba "Sala" (watch party na LAN): crie uma sala e compartilhe o código, ou entre no código de quem criou', 'No palco da sala você escolhe o vídeo/música do servidor (ou cola um link) e todos veem em sincronia — play, pausa e avanço são espelhados na hora', 'A sala mostra quem está junto (lista de participantes) e encerra sozinha se todos saírem', 'A sala ganhou bate-papo (chat) ao vivo para combinar o próximo vídeo enquanto todos seguem o palco', 'O servidor agora expõe um link público para as salas: com um túnel (Cloudflare Tunnel/ngrok/bore) amigos de longe entram com o código', 'A aba Celular ganhou "copiar link": um toque pega o endereço (público, se houver túnel) pra mandar pro amigo'],
+    en: ['The PC server now serves videos too: the "Phone" tab lists the videos in the folder and one tap saves or watches them right away', 'New "Room" tab (LAN watch party): create a room and share the code, or join with someone\'s code', 'On the room\'s stage you pick the server video/song (or paste a link) and everyone watches in sync — play, pause and seeking mirror instantly', 'The room shows who\'s in (participant list) and closes itself once everyone leaves', 'The room now has a live chat to agree on the next video while everyone follows the stage', 'The server now exposes a public link for rooms: with a tunnel (Cloudflare Tunnel/ngrok/bore) far-away friends join with the code', 'The Phone tab got "copy link": one tap grabs the address (public, if tunneled) to send to a friend'],
+    es: ['El servidor del PC ahora sirve también vídeos: la pestaña "Celular" lista los vídeos de la carpeta y un toque los guarda o los reproduce al instante', 'Nueva pestaña "Sala" (watch party en la LAN): crea una sala y comparte el código, o entra con el código de quien la creó', 'En el escenario de la sala eliges el vídeo/canción del servidor (o pegas un enlace) y todos lo ven en sincronía — reproducir, pausar y avanzar se reflejan al momento', 'La sala muestra quiénes están (lista de participantes) y se cierra sola si todos se van', 'La sala ahora tiene bate-papo (chat) en vivo para combinar el siguiente vídeo mientras todos siguen el escenario', 'El servidor expone un link público para salas: con un túnel (Cloudflare Tunnel/ngrok/bore) los amigos de lejos entran con el código']
   },
 };
 function changelogList(ver) {
@@ -4386,6 +4399,7 @@ async function pollRemote() {
     state.phone.state = d.state || null;
     state.phone.songs = d.songs && d.songs.songs ? d.songs.songs : null;
     state.phone.videos = d.songs && d.songs.videos ? d.songs.videos : null;
+    state.phone.server = d.server || { url: getRemote(), publicUrl: getRemote() };
     state.phone.online = !!(d.state && d.state.ts && Date.now() / 1000 - d.state.ts < 20);
     renderPhone();
   } catch (e) {
@@ -4470,6 +4484,12 @@ function phoneSet() {
   toast('Servidor definido: ' + v);
   $('phone-addr').value = v;
   pollRemote();
+}
+function phoneCopyLink() {
+  const pub = (state.phone.server && state.phone.server.publicUrl) || getRemote();
+  try {
+    navigator.clipboard.writeText(pub).then(() => toast(L('roomLinkCopied'))).catch(() => {});
+  } catch (e) {}
 }
 function phonePlay() { sendCmd('toggle'); }
 function phonePrev() { sendCmd('prev'); }
@@ -4556,7 +4576,10 @@ function renderPhone() {
       <input id="phone-addr" value="${esc(getRemote())}" placeholder="http://seu-pc:8081" style="flex:1;min-width:0;padding:8px 10px;border:1px solid var(--border,#333);border-radius:10px;background:var(--bg2,#16161d);color:var(--text,#eee);font-size:13px">
       <button class="btn" onclick="phoneSet()" style="flex:0">Conectar</button>
     </div>
-    <div style="font-size:11px;color:var(--text2,#999);margin:-2px 2px 4px">Endereço do PC com o servidor acompanhante — ex.: <b>192.168.1.10:8081</b></div>`;
+    <div style="display:flex;align-items:center;justify-content:space-between;font-size:11px;color:var(--text2,#999);margin:-2px 2px 4px">
+      <span>Endereço do PC com o servidor acompanhante — ex.: <b>192.168.1.10:8081</b></span>
+      <span style="white-space:nowrap" class="elink" onclick="phoneCopyLink()">🔗 ${esc(L('roomCopy'))}</span>
+    </div>`;
 
   if (cur) {
     const playing = phonePlaying();
@@ -4763,7 +4786,7 @@ async function roomCmd(payload) {
 }
 function roomReset(closed) {
   roomStopStream();
-  state.room = { role: 'off', code: '', key: '', nick: '', media: null, playing: false, positionMs: 0, members: [], sse: null, timer: 0, poll: 0 };
+  state.room = { role: 'off', code: '', key: '', nick: '', media: null, playing: false, positionMs: 0, members: [], messages: [], sse: null, timer: 0, poll: 0 };
   if ($('room-view')) roomRender();
   if (closed) toast(L('roomClosed'));
 }
@@ -4793,6 +4816,11 @@ async function roomPoll() {
     if (!res.ok) { if (res.status === 404) roomReset(true); return; }
     const snap = await res.json();
     r.members = snap.members || [];
+    if (Array.isArray(snap.messages)) {
+      const has = new Set(snap.messages.map((m) => m.nick + '|' + m.text));
+      const extra = (r.messages || []).filter((m) => !has.has(m.nick + '|' + m.text));
+      r.messages = extra.concat(snap.messages).slice(-150);
+    }
     if (snap.media) r.media = snap.media;
     r.playing = !!snap.playing;
     r.positionMs = Number(snap.positionMs) || 0;
@@ -4806,7 +4834,9 @@ async function roomPoll() {
   } catch (e) {}
 }
 function roomGuestBackend(evt) {
-  if (!evt || !evt.cmd || state.room.role === 'host' || state.room.role === 'off') return;
+  if (!evt || !evt.cmd) return;
+  if (evt.cmd === 'msg') { roomAddMsg(evt); return; }
+  if (state.room.role === 'host' || state.room.role === 'off') return;
   const r = state.room;
   if (evt.cmd === 'media') {
     const m = evt.media || {};
@@ -4874,7 +4904,7 @@ function roomCreateApply(nick) {
       });
       if (!res.ok) { toast(L('roomNoConn')); return; }
       const d = await res.json();
-      state.room = { role: 'host', code: d.code, key: d.key, nick, media: null, playing: false, positionMs: 0, members: [{ nick }], sse: null, timer: 0, poll: 0 };
+      state.room = { role: 'host', code: d.code, key: d.key, nick, media: null, playing: false, positionMs: 0, members: [{ nick }], messages: [], sse: null, timer: 0, poll: 0 };
       roomSub();
       state.room.poll = setInterval(roomPoll, 2500);
       state.room.timer = setInterval(roomHostTick, 1000);
@@ -4892,7 +4922,7 @@ function roomJoinApply(code, nick) {
       });
       if (!res.ok) { toast(L('roomNotFind')); return; }
       const snap = await res.json();
-      state.room = { role: 'guest', code, key: '', nick, media: snap.media || null, playing: snap.playing, positionMs: snap.positionMs || 0, members: snap.members || [], sse: null, timer: 0, poll: 0 };
+      state.room = { role: 'guest', code, key: '', nick, media: snap.media || null, playing: snap.playing, positionMs: snap.positionMs || 0, members: snap.members || [], messages: snap.messages || [], sse: null, timer: 0, poll: 0 };
       roomSub();
       state.room.poll = setInterval(roomPoll, 2500);
       selectTab('room');
@@ -5061,6 +5091,55 @@ function roomGuestTap() {
   if (el.paused) safePlay(el); else el.pause();
   roomRender();
 }
+function roomAddMsg(m) {
+  if (!m || !m.text) return;
+  const r = state.room;
+  if (r.role === 'off') return;
+  const dup = (r.messages || []).some((x) => x.nick === m.nick && x.text === m.text);
+  if (!dup) r.messages = (r.messages || []).concat([{ t: m.t, nick: m.nick, text: m.text }]).slice(-150);
+  renderChat();
+}
+function roomClock(t) {
+  if (!t) return '';
+  const d = new Date(t);
+  return ('0' + d.getHours()).slice(-2) + ':' + ('0' + d.getMinutes()).slice(-2);
+}
+function renderChat() {
+  const bx = $('rt-msgs');
+  if (!bx) return;
+  const near = bx.scrollHeight - bx.scrollTop - bx.clientHeight < 40;
+  bx.innerHTML = (state.room.messages || []).map((m) => `<div class="rt-msg"><b>${esc(m.nick || '?')}</b> ${esc(m.text)}<span class="rt-time">${roomClock(m.t)}</span></div>`).join('') || '';
+  if (near) bx.scrollTop = bx.scrollHeight;
+}
+async function roomSendMsg() {
+  const r = state.room;
+  if (!r.code || r.role === 'off') { toast(L('roomNeedRoom')); return; }
+  const inp = $('rt-input');
+  if (!inp) return;
+  const text = (inp.value || '').trim().slice(0, 500);
+  if (!text) { toast(L('roomNeedMsg')); return; }
+  inp.value = '';
+  roomAddMsg({ t: Date.now(), nick: r.nick || '?', text, local: true });
+  let res;
+  try {
+    res = await fetch(getRemote() + '/api/room/' + encodeURIComponent(r.code) + '/msg', {
+      method: 'POST', headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ nick: r.nick, text })
+    });
+  } catch (e) { res = null; }
+  if (!res || !res.ok) {
+    r.messages = (r.messages || []).filter((m) => !(m.local && m.nick === r.nick && m.text === text));
+    renderChat();
+    toast(L('roomNoConn'));
+    return;
+  }
+  const echo = await res.json().catch(() => null);
+  if (echo && echo.msg && echo.msg.t) {
+    const dup = (r.messages || []).some((x) => x.nick === echo.msg.nick && x.text === echo.msg.text);
+    if (dup) r.messages = (r.messages || []).map((x) => (x.nick === echo.msg.nick && x.text === echo.msg.text ? { t: echo.msg.t, nick: x.nick, text: x.text } : x));
+    renderChat();
+  }
+}
 function roomRender() {
   const cv = $('room-view');
   if (!cv) return;
@@ -5111,8 +5190,26 @@ function roomRender() {
         <button class="btn secondary" style="flex:0" onclick="roomLeave()">${esc(L('roomLeave'))}</button>
       </div>`;
     }
+    html += `<div class="section">${esc(L('roomChat'))}</div>
+      <div class="rt-box"><div id="rt-msgs"></div></div>
+      <div class="rt-row">
+        <input id="rt-input" placeholder="${esc(L('roomMsgPh'))}">
+        <button class="btn" onclick="roomSendMsg()">${esc(L('roomSend'))}</button>
+      </div>`;
+    if (host) html += `<div class="sub-hint">${esc(L('roomFarTip'))}</div>`;
   }
+  const hadInput = !!$('rt-input');
+  const prevVal = hadInput ? $('rt-input').value : '';
+  const keepFocus = document.activeElement && document.activeElement.id === 'rt-input';
   cv.innerHTML = html;
+  renderChat();
+  const ri = $('rt-input');
+  if (ri) {
+    ri.value = prevVal;
+    if (keepFocus) { try { ri.focus(); } catch (e) {} }
+    ri.addEventListener('keydown', (e) => { if (e.key === 'Enter' && !e.isComposing) roomSendMsg(); });
+    ri.addEventListener('pointerdown', (e) => { e.stopPropagation(); });
+  }
 }
 
 // ---------- Boot ----------
