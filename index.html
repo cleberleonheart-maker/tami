@@ -552,6 +552,7 @@ body::after {
 
 <audio id="audio" style="display:none"></audio>
 <video id="video" playsinline controls style="display:none"></video>
+<div id="ytbox" style="display:none;width:100%;height:100%;background:#000"></div>
 
 <script>
 'use strict';
@@ -573,6 +574,79 @@ const state = {
 
 const $ = (id) => document.getElementById(id);
 const audio = $('audio'), video = $('video');
+let ytPlayer = null, ytApiQueued = false, ytApiReadyCbs = [];
+function isYtMedia(m) {
+  if (!m) return false;
+  if (m.youtube || m.videoId) return true;
+  const u = String(m.url || '');
+  return /youtube\.com|youtu\.be/i.test(u) && !!ytParseId(u);
+}
+function ytParseId(input) {
+  const v = String(input || '').trim();
+  const m = v.match(/(?:youtu\.be\/|youtube\.com\/(?:watch\?[^#\s]*v=|embed\/|shorts\/|live\/))([\w-]{11})/) || v.match(/^([\w-]{11})$/);
+  return m ? m[1] : '';
+}
+function loadYtApi(cb) {
+  ytApiReadyCbs.push(cb);
+  if (window.YT && YT.Player) { const q = ytApiReadyCbs.splice(0); q.forEach((f) => f()); return; }
+  if (ytApiQueued) return;
+  ytApiQueued = true;
+  const prev = window.onYouTubeIframeAPIReady;
+  window.onYouTubeIframeAPIReady = () => {
+    if (prev) prev();
+    const q = ytApiReadyCbs.splice(0);
+    q.forEach((f) => { try { f(); } catch (e) { console.warn('yt init', e); } });
+  };
+  const s = document.createElement('script');
+  s.src = 'https://www.youtube.com/iframe_api';
+  document.head.appendChild(s);
+}
+function ytEnsureDom() {
+  if (!document.getElementById('ytbox')) {
+    const b = document.createElement('div');
+    b.id = 'ytbox';
+    b.style.cssText = 'display:none;width:100%;height:100%;background:#000';
+    document.body.appendChild(b);
+  }
+}
+function ytStop() {
+  if (ytPlayer && ytPlayer.stopVideo) { try { ytPlayer.stopVideo(); } catch (e) {} }
+  ytEnsureDom();
+  const b = $('ytbox');
+  if (b) b.style.display = 'none';
+}
+function ytHide() { ytStop(); }
+function ytMount(videoId, positionMs, autoplay) {
+  if (!videoId) return;
+  loadYtApi(() => {
+    if (!state.current || !isYtMedia(state.current)) return;
+    const b = $('ytbox');
+    if (!b) return;
+    b.style.display = 'block';
+    if (ytPlayer && ytPlayer.loadVideoById) {
+      const cur = (() => { try { return ytPlayer.getVideoData && ytPlayer.getVideoData().video_id; } catch (e) { return ''; } })();
+      if (cur && cur !== videoId) ytPlayer.loadVideoById(videoId, positionMs / 1000);
+      else try { ytPlayer.seekTo(positionMs / 1000, true); } catch (e) {}
+      if (autoplay) { try { ytPlayer.playVideo(); } catch (e) {} } else { try { ytPlayer.pauseVideo(); } catch (e) {} }
+      return;
+    }
+    const pv = { playsinline: 1, rel: 0, modestbranding: 1 };
+    if (location.origin && location.origin !== 'null') pv.origin = location.origin;
+    ytPlayer = new YT.Player('ytbox', {
+      videoId,
+      width: '100%',
+      height: '100%',
+      playerVars: pv,
+      events: {
+        onReady: () => {
+          try { if (positionMs > 0) ytPlayer.seekTo(positionMs / 1000, true); } catch (e) {}
+          if (autoplay) { try { ytPlayer.playVideo(); } catch (e) {} }
+        },
+        onError: () => { try { toast(L('ytBad')); } catch (e) {} }
+      }
+    });
+  });
+}
 const UNKNOWN = 'Desconhecido';
 let mediaSkipGuard = {};
 function mediaError(ev, reason) {
@@ -877,6 +951,9 @@ const I18N = {
   roomPickTitle: { pt: 'Escolher mídia do servidor', en: 'Pick media from the server', es: 'Elegir medio del servidor' },
   roomServerEmpty: { pt: 'Conecte o celular (aba Celular) para escolher do servidor, ou cole um link de vídeo.', en: 'Connect the phone (Phone tab) to pick from the server, or paste a video link.', es: 'Conecta el celular (pestaña Celular) para elegir del servidor, o pega un enlace de vídeo.' },
   roomPasteUrl: { pt: 'Colar link de vídeo/áudio', en: 'Paste video/audio link', es: 'Pegar enlace de vídeo/audio' },
+  roomYt: { pt: '🔴 YouTube (link ou ID do vídeo)', en: '🔴 YouTube (video link or ID)', es: '🔴 YouTube (enlace o ID del vídeo)' },
+  roomYtPh: { pt: 'https://youtube.com/watch?v=… ou só o ID', en: 'https://youtube.com/watch?v=… or just the ID', es: 'https://youtube.com/watch?v=… o solo el ID' },
+  ytBad: { pt: 'Link do YouTube inválido.', en: 'Invalid YouTube link.', es: 'Enlace de YouTube inválido.' },
   roomUrlPh: { pt: 'https://…/video.mp4', en: 'https://…/video.mp4', es: 'https://…/video.mp4' },
   roomTitlePh: { pt: 'Nome (opcional)', en: 'Name (optional)', es: 'Nombre (opcional)' },
   roomFollow: { pt: 'Seguindo o anfitrião', en: 'Following the host', es: 'Siguiendo al anfitrión' },
@@ -3202,6 +3279,7 @@ function playList(list, song) {
 }
 function playVideo(v) {
   djExit();
+  ytStop();
   audio.pause();
   if (state.videoUrl) URL.revokeObjectURL(state.videoUrl);
   state.current = v;
@@ -3217,12 +3295,13 @@ function playVideo(v) {
   video.play().catch(() => {});
 }
 function showEl(id) {
-  if (id === 'audio') { video.pause(); video.removeAttribute('src'); video.style.display = 'none'; audio.style.display = 'block'; }
-  else { audio.pause(); audio.style.display = 'none'; video.style.display = 'block'; }
+  if (id === 'audio') { video.pause(); video.removeAttribute('src'); video.style.display = 'none'; ytHide(); audio.style.display = 'block'; }
+  else { ytHide(); audio.pause(); audio.style.display = 'none'; video.style.display = 'block'; }
 }
 function playCurrent() {
   const s = state.queue[state.queueIndex];
   if (!s) return;
+  ytStop();
   state.current = s;
   if (state.videoUrl) { URL.revokeObjectURL(state.videoUrl); state.videoUrl = null; }
   renderPlayer();
@@ -3765,10 +3844,30 @@ function closePlayer() {
 function renderPlayer() {
   const s = state.current;
   if (!s) return;
-  const isVideo = s.type === 'video';
+  const isYt = isYtMedia(s);
   $('player-title').textContent = s.title || s.name || '';
   $('player-sub').textContent = (s.artist || s.album || 'TAMI') + (s.artist && s.album ? ' · ' + s.album : '');
   const art = $('player-art');
+  if (isYt) {
+    const b = $('ytbox');
+    if (b) {
+      if (art.querySelector('#ytbox')) b.style.display = 'block';
+      else { art.innerHTML = ''; art.appendChild(b); b.style.display = 'block'; }
+    }
+    const yPlaying = !!(ytPlayer && ytPlayer.getPlayerState && ytPlayer.getPlayerState() === 1);
+    $('p-play').textContent = yPlaying ? '⏸' : '▶';
+    $('mini-play').textContent = yPlaying ? '⏸' : '▶';
+    $('p-shuffle').style.color = state.shuffle ? 'var(--primary)' : 'var(--text)';
+    $('p-repeat').textContent = state.repeat === 2 ? '🔂' : '🔁';
+    $('p-repeat').style.color = state.repeat ? 'var(--primary)' : 'var(--text)';
+    $('mini-shuffle').style.color = state.shuffle ? 'var(--primary)' : 'var(--text)';
+    $('p-dj').style.color = state.djMode ? 'var(--primary)' : 'var(--text)';
+    $('p-djvoice').style.color = state.djVoice ? 'var(--primary)' : 'var(--text)';
+    $('p-djmic').style.color = state.djMic ? 'var(--primary)' : 'var(--text)';
+    return;
+  }
+  ytHide();
+  const isVideo = s.type === 'video';
   if (isVideo) {
     if (art.querySelector('#video')) {
       video.style.display = 'block';
@@ -4083,9 +4182,9 @@ const CHANGELOG = {
     es: ['Pestaña "Celular": búsqueda y cómo ordenar las canciones del PC por título, artista o álbum', 'El servidor acompañante lee título/artista/álbum reales de las canciones del PC (MP3/FLAC/WAV) y detecta solo cuando entra música nueva', 'Lo que sonaba en el PC se puede restaurar en el celular, y las canciones nuevas del PC entran solas a la biblioteca', 'Comandos de voz más fiables: el micrófono ya no reacciona a conversaciones sin decir "TAMI", frases como "deja de sonar", "duerme en 30 minutos" y "pon música" ahora funcionan, y TAMI sostiene el micrófono mientras habla']
   },
 '1.36': {
-    pt: ['O servidor do PC agora serve também vídeos: a aba "Celular" lista os vídeos da pasta e um toque salva ou assiste na hora', 'Nova aba "Sala" (watch party na LAN): crie uma sala e compartilhe o código, ou entre no código de quem criou', 'No palco da sala você escolhe o vídeo/música do servidor (ou cola um link) e todos veem em sincronia — play, pausa e avanço são espelhados na hora', 'A sala mostra quem está junto (lista de participantes) e encerra sozinha se todos saírem', 'A sala ganhou bate-papo (chat) ao vivo para combinar o próximo vídeo enquanto todos seguem o palco', 'O servidor agora expõe um link público para as salas: com um túnel (Cloudflare Tunnel/ngrok/bore) amigos de longe entram com o código', 'A aba Celular virou um centro do servidor: mostra claramente o estado da conexão, o endereço em uso, o link público pra convidar amigos (com copiar/compartilhar) e o acesso às Salas', 'A aba Celular ganhou "copiar link": um toque pega o endereço (público, se houver túnel) pra mandar pro amigo'],
-    en: ['The PC server now serves videos too: the "Phone" tab lists the videos in the folder and one tap saves or watches them right away', 'New "Room" tab (LAN watch party): create a room and share the code, or join with someone\'s code', 'On the room\'s stage you pick the server video/song (or paste a link) and everyone watches in sync — play, pause and seeking mirror instantly', 'The room shows who\'s in (participant list) and closes itself once everyone leaves', 'The room now has a live chat to agree on the next video while everyone follows the stage', 'The server now exposes a public link for rooms: with a tunnel (Cloudflare Tunnel/ngrok/bore) far-away friends join with the code', 'The Phone tab got "copy link": one tap grabs the address (public, if tunneled) to send to a friend'],
-    es: ['El servidor del PC ahora sirve también vídeos: la pestaña "Celular" lista los vídeos de la carpeta y un toque los guarda o los reproduce al instante', 'Nueva pestaña "Sala" (watch party en la LAN): crea una sala y comparte el código, o entra con el código de quien la creó', 'En el escenario de la sala eliges el vídeo/canción del servidor (o pegas un enlace) y todos lo ven en sincronía — reproducir, pausar y avanzar se reflejan al momento', 'La sala muestra quiénes están (lista de participantes) y se cierra sola si todos se van', 'La sala ahora tiene bate-papo (chat) en vivo para combinar el siguiente vídeo mientras todos siguen el escenario', 'El servidor expone un link público para salas: con un túnel (Cloudflare Tunnel/ngrok/bore) los amigos de lejos entran con el código']
+    pt: ['O servidor do PC agora serve também vídeos: a aba "Celular" lista os vídeos da pasta e um toque salva ou assiste na hora', 'Nova aba "Sala" (watch party na LAN): crie uma sala e compartilhe o código, ou entre no código de quem criou', 'No palco da sala você escolhe o vídeo/música do servidor (ou cola um link) e todos veem em sincronia — play, pausa e avanço são espelhados na hora', 'A sala mostra quem está junto (lista de participantes) e encerra sozinha se todos saírem', 'A sala ganhou bate-papo (chat) ao vivo para combinar o próximo vídeo enquanto todos seguem o palco', 'O servidor agora expõe um link público para as salas: com um túnel (Cloudflare Tunnel/ngrok/bore) amigos de longe entram com o código', 'A sala virou um centro do servidor: mostra claramente o estado da conexão, o endereço em uso, o link público pra convidar amigos (com copiar/compartilhar) e o acesso às Salas', 'No palco dá pra escolher também vídeos do YouTube colando o link ou o ID: todos assistem na própria conta do YouTube, em sincronia com o resto da sala', 'A aba Celular ganhou "copiar link": um toque pega o endereço (público, se houver túnel) pra mandar pro amigo'],
+    en: ['The PC server now serves videos too: the "Phone" tab lists the videos in the folder and one tap saves or watches them right away', 'New "Room" tab (LAN watch party): create a room and share the code, or join with someone\'s code', 'On the room\'s stage you pick the server video/song (or paste a link) and everyone watches in sync — play, pause and seeking mirror instantly', 'The room shows who\'s in (participant list) and closes itself once everyone leaves', 'The room now has a live chat to agree on the next video while everyone follows the stage', 'The server now exposes a public link for rooms: with a tunnel (Cloudflare Tunnel/ngrok/bore) far-away friends join with the code', 'The Phone tab became a server center: it clearly shows connection state, the address in use, the public link to invite friends (copy/share) and access to Rooms', 'On the stage you can also pick YouTube videos by pasting the link or the ID: everyone watches on their own YouTube account, in sync with the rest of the room', 'The Phone tab got "copy link": one tap grabs the address (public, if tunneled) to send to a friend'],
+    es: ['El servidor del PC ahora sirve también vídeos: la pestaña "Celular" lista los vídeos de la carpeta y un toque los guarda o los reproduce al instante', 'Nueva pestaña "Sala" (watch party en la LAN): crea una sala y comparte el código, o entra con el código de quien la creó', 'En el escenario de la sala eliges el vídeo/canción del servidor (o pegas un enlace) y todos lo ven en sincronía — reproducir, pausar y avanzar se reflejan al momento', 'La sala muestra quiénes están (lista de participantes) y se cierra sola si todos se van', 'La sala ahora tiene bate-papo (chat) en vivo para combinar el siguiente vídeo mientras todos siguen el escenario', 'El servidor expone un link público para salas: con un túnel (Cloudflare Tunnel/ngrok/bore) los amigos de lejos entran con el código', 'La pestaña Celular se volvió un centro del servidor: muestra el estado de la conexión, la dirección en uso, el enlace público para invitar amigos (copiar/compartir) y el acceso a Salas', 'En el escenario también puedes elegir vídeos de YouTube pegando el enlace o el ID: todos ven en su propia cuenta de YouTube, en sincronía con el resto de la sala']
   },
 };
 function changelogList(ver) {
@@ -4831,6 +4930,7 @@ async function roomCmd(payload) {
 }
 function roomReset(closed) {
   roomStopStream();
+  ytStop();
   state.room = { role: 'off', code: '', key: '', nick: '', media: null, playing: false, positionMs: 0, members: [], messages: [], sse: null, timer: 0, poll: 0 };
   if ($('room-view')) roomRender();
   if (closed) toast(L('roomClosed'));
@@ -4869,10 +4969,22 @@ async function roomPoll() {
     if (snap.media) r.media = snap.media;
     r.playing = !!snap.playing;
     r.positionMs = Number(snap.positionMs) || 0;
-    if (r.role === 'guest' && r.media && r.media.url) {
-      const el = roomEl();
-      if (el && el.src && state.current && state.current.url === r.media.url) {
-        applyRoomSync(r.playing, r.positionMs);
+    if (r.role === 'guest' && r.media && (r.media.url || r.media.videoId)) {
+      const cur = state.current;
+      const yout = isYtMedia(r.media);
+      const needLoad = !cur || (yout ? cur.videoId !== (r.media.videoId || ytParseId(r.media.url)) || cur.url !== r.media.url : cur.url !== r.media.url);
+      if (needLoad) {
+        loadRoomMedia(r.media, false);
+      } else if (yout) {
+        if (r.playing !== r._lastSyncPlay || r.positionMs !== r._lastSyncPos) {
+          r._lastSyncPlay = r.playing; r._lastSyncPos = r.positionMs;
+          applyRoomSync(r.playing, r.positionMs);
+        }
+      } else {
+        const el = roomEl();
+        if (el && el.src && state.current && state.current.url === r.media.url) {
+          applyRoomSync(r.playing, r.positionMs);
+        }
       }
     }
     roomRender();
@@ -4885,16 +4997,23 @@ function roomGuestBackend(evt) {
   const r = state.room;
   if (evt.cmd === 'media') {
     const m = evt.media || {};
-    if (!m.url) return;
-    r.media = { url: m.url, title: m.title || 'Mídia', artist: m.artist || '', durationMs: m.durationMs || 0, video: !!m.video };
+    if (!m.url && !m.videoId) return;
+    const yt = isYtMedia(m);
+    r.media = { url: m.url || (m.videoId ? 'https://www.youtube.com/watch?v=' + m.videoId : ''), title: m.title || 'Mídia', artist: m.artist || '', durationMs: m.durationMs || 0, video: true, youtube: yt, videoId: m.videoId || ytParseId(m.url) };
     r.playing = false;
     r.positionMs = Number(evt.positionMs) || 0;
-    loadRoomMedia(m, false);
+    loadRoomMedia(r.media, false);
     roomRender();
     return;
   }
   if (evt.cmd === 'sync') {
-    if (!r.media || !r.media.url) return;
+    if (!r.media || (!r.media.url && !r.media.videoId)) return;
+    if (isYtMedia(r.media)) {
+      if (evt.durationMs && !r.media.durationMs) { r.media.durationMs = evt.durationMs; }
+      applyRoomSync(!!evt.playing, Number(evt.positionMs) || 0);
+      roomRender();
+      return;
+    }
     applyRoomSync(!!evt.playing, Number(evt.positionMs) || 0);
     roomRender();
     return;
@@ -4903,6 +5022,29 @@ function roomGuestBackend(evt) {
 }
 function applyRoomSync(playing, pos) {
   const r = state.room;
+  if (isYtMedia(r.media)) {
+    const p = ytPlayer;
+    if (!p || !p.getPlayerState || !p.getCurrentTime) { r.playing = !!playing; r.positionMs = pos; return; }
+    const t = pos / 1000;
+    try {
+      const cur = p.getCurrentTime() || 0;
+      const drift = Math.abs(cur - t);
+      if (playing) {
+        if (p.getPlayerState() !== 1) {
+          p.seekTo(t, true);
+          p.playVideo();
+        } else if (drift > 1.5) {
+          p.seekTo(t, true);
+        }
+      } else {
+        if (p.getPlayerState() === 1) p.pauseVideo();
+        if (drift > 1.5) p.seekTo(t, true);
+      }
+    } catch (e) {}
+    r.playing = !!playing;
+    r.positionMs = pos;
+    return;
+  }
   const el = roomEl();
   if (!el || !el.src) return;
   const t = pos / 1000;
@@ -4928,12 +5070,18 @@ function loadRoomMedia(m, autoplay) {
   const it = {
     id: 'room-' + Math.random().toString(36).slice(2, 10),
     title: m.title || 'Mídia', artist: m.artist || '', album: '',
-    durationMs: m.durationMs || 0, type: m.video ? 'video' : 'song',
-    url: m.url, blob: null
+    durationMs: m.durationMs || 0, type: 'video',
+    url: m.url || (m.videoId ? 'https://www.youtube.com/watch?v=' + m.videoId : ''),
+    blob: null, youtube: !!(m.youtube || m.videoId), videoId: m.videoId || ytParseId(m.url || '')
   };
   state.current = it;
   openPlayer();
   renderPlayer();
+  if (it.youtube && it.videoId) {
+    const t = (Number(m.positionMs) || 0) / 1000;
+    ytMount(it.videoId, t, autoplay);
+    return;
+  }
   const el = it.type === 'video' ? video : audio;
   showEl(it.type === 'video' ? 'video' : 'audio');
   const t = (Number(m.positionMs) || 0) / 1000;
@@ -4968,6 +5116,7 @@ function roomJoinApply(code, nick) {
       if (!res.ok) { toast(L('roomNotFind')); return; }
       const snap = await res.json();
       state.room = { role: 'guest', code, key: '', nick, media: snap.media || null, playing: snap.playing, positionMs: snap.positionMs || 0, members: snap.members || [], messages: snap.messages || [], sse: null, timer: 0, poll: 0 };
+      if (snap.media && (snap.media.url || snap.media.videoId)) loadRoomMedia(snap.media, false);
       roomSub();
       state.room.poll = setInterval(roomPoll, 2500);
       selectTab('room');
@@ -5040,10 +5189,14 @@ function roomCopyCode() {
 }
 async function roomSendMedia(item) {
   if (state.room.role !== 'host') return;
+  const yt = !!(item.videoId || isYtMedia(item));
   const media = {
-    url: item.url, title: item.title || item.name || 'Mídia',
+    url: item.url || (item.videoId ? 'https://www.youtube.com/watch?v=' + item.videoId : ''),
+    title: item.title || item.name || 'Mídia',
     artist: item.artist || '', durationMs: item.durationMs || 0,
-    video: !!(item.video || item.type === 'video')
+    video: !!(item.video || item.type === 'video') || yt,
+    youtube: yt,
+    videoId: item.videoId || ytParseId(item.url || '')
   };
   const ok = await roomCmd({ cmd: 'media', media, positionMs: 0 });
   if (!ok) return;
@@ -5079,13 +5232,19 @@ function roomPickMedia() {
     });
   }
   html += `</div>
-    <div style="padding:6px 0">
+    <div style="padding:6px 0;display:flex;flex-direction:column;gap:6px">
       <button class="btn secondary" style="width:100%" id="r-urlbtn">⤴ ${esc(L('roomPasteUrl'))}</button>
+      <button class="btn secondary" style="width:100%" id="r-ytbtn">🔴 ${esc(L('roomYt'))}</button>
     </div>
     <div id="r-urlbox" style="display:none;gap:8px;padding:2px 0">
       <input id="r-urlin" placeholder="${esc(L('roomUrlPh'))}" class="inp">
       <input id="r-title" placeholder="${esc(L('roomTitlePh'))}" class="inp">
       <button class="btn" id="r-urlgo" style="width:100%">OK</button>
+    </div>
+    <div id="r-ytbox" style="display:none;gap:8px;padding:2px 0">
+      <input id="r-yturl" placeholder="${esc(L('roomYtPh'))}" class="inp">
+      <input id="r-yttitle" placeholder="${esc(L('roomTitlePh'))}" class="inp">
+      <button class="btn" id="r-ytgo" style="width:100%">OK</button>
     </div>
     <div id="modal-actions"><button class="btn secondary" onclick="closeModal()">${esc(L('detClose'))}</button></div>`;
   modal.innerHTML = html;
@@ -5099,6 +5258,15 @@ function roomPickMedia() {
     };
   });
   $('r-urlbtn').onclick = () => { const b = $('r-urlbox'); b.style.display = 'grid'; };
+  $('r-ytbtn').onclick = () => { const b = $('r-ytbox'); b.style.display = 'grid'; };
+  $('r-ytgo').onclick = () => {
+    const v = ($('r-yturl').value || '').trim();
+    const id = ytParseId(v);
+    if (!id) { toast(L('ytBad')); return; }
+    const title = ($('r-yttitle').value || '').trim();
+    closeModal();
+    roomSendMedia({ videoId: id, url: 'https://www.youtube.com/watch?v=' + id, title: title || '', video: true });
+  };
   $('r-urlgo').onclick = () => {
     const url = ($('r-urlin').value || '').trim();
     if (!url) { toast(L('roomNeedCode')); return; }
@@ -5111,17 +5279,25 @@ function roomPickMedia() {
 function roomHostTick() {
   const r = state.room;
   if (r.role !== 'host' || !r.media) return;
-  const el = roomEl();
-  if (!el || !el.src) return;
-  const playing = !el.paused && !el.ended && !!el.src;
-  const pos = Math.round((el.currentTime || 0) * 1000);
+  let playing, pos;
+  if (isYtMedia(r.media)) {
+    const p = ytPlayer;
+    if (!p || !p.getPlayerState || !p.getCurrentTime) return;
+    try { playing = p.getPlayerState() === 1; pos = Math.round((p.getCurrentTime() || 0) * 1000); } catch (e) { return; }
+    try { const d = p.getDuration && p.getDuration(); if (d && !r.media.durationMs) r.media.durationMs = Math.round(d * 1000); } catch (e) {}
+  } else {
+    const el = roomEl();
+    if (!el || !el.src) return;
+    playing = !el.paused && !el.ended && !!el.src;
+    pos = Math.round((el.currentTime || 0) * 1000);
+  }
   r.playing = playing; r.positionMs = pos;
   const bar = $('room-bar');
   if (bar && r.media.durationMs) bar.style.width = Math.min(100, (pos / r.media.durationMs) * 100) + '%';
   if (playing !== r._sentPlaying || Math.abs(pos - (r._sentPos || 0)) > 800) {
     r._sentPlaying = playing;
     r._sentPos = pos;
-    roomCmd({ cmd: 'sync', playing, positionMs: pos });
+    roomCmd({ cmd: 'sync', playing, positionMs: pos, durationMs: r.media.durationMs || 0 });
   }
   if (!r._lastRender || Date.now() - r._lastRender > 2000) {
     r._lastRender = Date.now();
@@ -5129,8 +5305,25 @@ function roomHostTick() {
   }
 }
 async function roomToggle() {
+  const r = state.room;
+  if (!r.media) { toast(L('roomPickMediaFirst')); return; }
+  if (isYtMedia(r.media)) {
+    const p = ytPlayer;
+    if (!p || !p.getPlayerState || !p.getCurrentTime) { toast(L('roomPickMediaFirst')); return; }
+    let playing;
+    try {
+      const playingNow = p.getPlayerState() === 1;
+      if (playingNow) p.pauseVideo(); else p.playVideo();
+      playing = !playingNow;
+      r.playing = playing;
+      r.positionMs = Math.round((p.getCurrentTime() || 0) * 1000);
+    } catch (e) { return; }
+    await roomCmd({ cmd: 'sync', playing, positionMs: r.positionMs, durationMs: r.media.durationMs || 0 });
+    roomRender();
+    return;
+  }
   const el = roomEl();
-  if (!state.room.media || !el || !el.src) { toast(L('roomPickMediaFirst')); return; }
+  if (!el || !el.src) { toast(L('roomPickMediaFirst')); return; }
   if (el.paused || el.ended) safePlay(el); else el.pause();
   state.room.playing = !el.paused && !el.ended && !!el.src;
   state.room.positionMs = Math.round((el.currentTime || 0) * 1000);
@@ -5138,6 +5331,15 @@ async function roomToggle() {
   roomRender();
 }
 function roomGuestTap() {
+  const r = state.room;
+  if (isYtMedia(r.media)) {
+    const p = ytPlayer;
+    if (!p || !p.getPlayerState || !p.getCurrentTime) return;
+    const playingNow = p.getPlayerState() === 1;
+    try { if (playingNow) p.pauseVideo(); else p.playVideo(); } catch (e) {}
+    roomRender();
+    return;
+  }
   const el = roomEl();
   if (!el || !el.src) return;
   if (el.paused) safePlay(el); else el.pause();
@@ -5215,12 +5417,16 @@ function roomRender() {
       `</div>`;
     html += `<div class="section">🎬 ${esc(L('roomPalco'))}</div>`;
     if (media) {
+      const yout = isYtMedia(media);
       const playingNow = host
-        ? (() => { const el = roomEl(); return !!(el && el.src && !el.paused && state.current && state.current.url === media.url); })()
+        ? (yout
+          ? (() => { const p = ytPlayer; return !!(p && p.getPlayerState && p.getPlayerState() === 1); })()
+          : (() => { const el = roomEl(); return !!(el && el.src && !el.paused && state.current && state.current.url === media.url); })())
         : r.playing;
+      const srcIcon = yout ? '<span style="color:#FF0000;font-weight:800">▶</span>' : (media.video ? '▷' : '♪');
       html += `<div class="item">
-        <div class="art small ${media.video ? 'grad-c' : 'grad-e'}">${media.video ? '▷' : '♪'}</div>
-        <div class="mid"><div class="it-title">${esc(media.title)}</div><div class="it-sub">${esc(media.artist || '')}${media.durationMs ? ' · ' + fmtClock(media.durationMs) : ''}</div></div>
+        <div class="art small grad-c">${srcIcon}</div>
+        <div class="mid"><div class="it-title">${esc(media.title)}</div><div class="it-sub">${esc(media.artist || '')}${media.durationMs ? ' · ' + fmtClock(media.durationMs) : ''}${yout ? ' · YouTube' : ''}</div></div>
       </div>
       <div style="display:flex;align-items:center;gap:10px;padding:6px 2px">
         <button class="pmain" ${host ? 'onclick="roomToggle()"' : 'onclick="roomGuestTap()"'} title="${esc(host ? L('roomPlay') : L('roomGuestStart'))}" style="min-width:52px;height:52px">${playingNow ? '⏸' : '▶'}</button>
