@@ -1404,6 +1404,29 @@ async function cacheHandoffPath(file, id) {
 function deleteHandoffCache(s) {
   try { if (s && s.handoffPath && window.TamiNative && window.TamiNative.cacheDelete) window.TamiNative.cacheDelete(s.handoffPath); } catch (e) {}
 }
+const handoffBusy = new Set();
+async function ensureHandoffPath(s) {
+  try {
+    if (!s || s.handoffPath || s.type === 'video') return;
+    if (!(window.TamiNative && window.TamiNative.cacheStart && window.TamiNative.cacheAppend)) return;
+    if (!s.blob || !s.blob.size || handoffBusy.has(s.id)) return;
+    handoffBusy.add(s.id);
+    try {
+      const base = (s.name || s.title || 'music').replace(/[^A-Za-z0-9._ -]/g, '_');
+      const path = window.TamiNative.cacheStart(base + '-' + String(s.id).replace(/[^A-Za-z0-9_-]/g, ''));
+      if (!path) return;
+      const CH = 512 * 1024;
+      for (let off = 0; off < s.blob.size; off += CH) {
+        const b64 = await fileReaderB64(s.blob.slice(off, off + CH));
+        if (!b64 || !window.TamiNative.cacheAppend(path, b64)) return;
+      }
+      s.handoffPath = path;
+      try { await putSong(s); } catch (e) {}
+    } finally {
+      handoffBusy.delete(s.id);
+    }
+  } catch (e) {}
+}
 async function importFiles(fileList, kind) {
   const existing = new Set();
   const seeds = kind === 'song' ? state.songs : state.videos;
@@ -3068,6 +3091,7 @@ function setAudioSource(s) {
   if (state.codec) nativeCodecStop();
   audio.src = objUrl(s);
   audio.play().then(() => updateMediaSession()).catch(() => {});
+  ensureHandoffPath(s);
   if (state.db) putKV('lastSong', { id: s.id });
   if (state.djMode) {
     if (s.id !== djLastId) { djLearnSet(s.id, { plays: djLearnGet(s.id).plays + 1 }); djLastId = s.id; }
@@ -3899,9 +3923,9 @@ const CHANGELOG = {
     es: ['La traducción de letras ahora usa un tono claro que siempre se ve, incluso en la línea resaltada']
   },
   '1.28': {
-    pt: ['Os botões do player ficavam grandes demais e o play (e outros) sumiam da tela: agora a fileira desliza pro lado com o dedo e todo botão aparece', 'Corrige a música que parava ao fechar o app quando tocava uma música importada: ela agora é copiada na hora e continua no player nativo; o app também recupera a música sozinho se for fechado com força'],
-    en: ['The player buttons were too big and the play (and others) hid off screen: now the row slides sideways with your finger and every button shows up', 'Fixes music stopping when closing the app while an imported song played: it is now copied to the native player and keeps playing; the app also recovers the song by itself if closed forcefully'],
-    es: ['Los botones del reproductor eran demasiado grandes y el play (y otros) quedaban ocultos: ahora la fila se desliza de lado con el dedo y se ve cada botón', 'Corrige la música que se detenía al cerrar la app con una canción importada: ahora se copia al reproductor nativo y sigue sonando; la app también recupera la canción sola si se cierra a la fuerza']
+    pt: ['Os botões do player ficavam grandes demais e o play (e outros) sumiam da tela: agora a fileira desliza pro lado com o dedo e todo botão aparece', 'Corrige a música que parava ao fechar o app quando tocava uma música importada: ela agora é copiada na hora e continua no player nativo; o app também recupera a música sozinho se for fechado com força', 'Músicas importadas antes dessa versão também continuam ao fechar: a cópia é criada sozinha na primeira vez que a música toca'],
+    en: ['The player buttons were too big and the play (and others) hid off screen: now the row slides sideways with your finger and every button shows up', 'Fixes music stopping when closing the app while an imported song played: it is now copied to the native player and keeps playing; the app also recovers the song by itself if closed forcefully', 'Songs imported before this version also keep playing when closing: the copy is created automatically the first time the song plays'],
+    es: ['Los botones del reproductor eran demasiado grandes y el play (y otros) quedaban ocultos: ahora la fila se desliza de lado con el dedo y se ve cada botón', 'Corrige la música que se detenía al cerrar la app con una canción importada: ahora se copia al reproductor nativo y sigue sonando; la app también recupera la canción sola si se cierra a la fuerza', 'Las canciones importadas antes de esta versión también siguen sonando al cerrar: la copia se crea sola la primera vez que suena']
   }
 };
 function changelogList(ver) {
