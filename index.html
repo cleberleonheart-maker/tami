@@ -367,6 +367,17 @@ html[data-accent="laranja"].light { --primary:#EE812B; --primary-dark:#CD6B1E; }
   color: var(--primary); cursor: pointer; font-size: 13px; font-weight: 700;
   padding: 6px; display: inline-flex; align-items: center; gap: 6px;
 }
+#room-view .member-chip {
+  display: inline-flex; align-items: center; gap: 6px;
+  padding: 6px 12px; border-radius: 999px;
+  background: var(--surface-v, #1b1b24); border: 1px solid var(--divider, #333);
+  color: var(--text, #eee); font-size: 13px;
+}
+#room-view .p-progress {
+  height: 5px; border-radius: 4px; background: var(--divider, #333); overflow: hidden;
+}
+#room-view .p-bar { height: 100%; background: var(--primary, #7c4dff); border-radius: 4px; transition: width .6s linear; }
+#room-view .sub-hint { font-size: 12px; color: var(--text2, #999); padding: 2px 2px 8px; }
 </style>
 <style id="redesign-futuro">
 /* Futurista sci-fi: fundo em grade neon animado + glassmorphism neon em todos os painéis Virgin Virgin */
@@ -458,6 +469,9 @@ body::after {
     <section class="tab" id="tab-phone">
       <div class="list" id="phone-view"></div>
     </section>
+    <section class="tab" id="tab-room">
+      <div class="list" id="room-view"></div>
+    </section>
     <section class="tab" id="tab-detail">
       <div class="list" id="detail-list"></div>
     </section>
@@ -481,6 +495,7 @@ body::after {
     <button data-tab="videos" data-icon="▷" data-label="tVideos" onclick="selectTab('videos')"><span class="ic">▷</span>Vídeos</button>
     <button data-tab="amb" data-icon="🌿" data-label="tSom" onclick="selectTab('amb')"><span class="ic">🌿</span>Som</button>
     <button data-tab="phone" data-icon="📱" data-label="tPhone" onclick="selectTab('phone')"><span class="ic">📱</span>Celular</button>
+    <button data-tab="room" data-icon="🫂" data-label="roomTab" onclick="selectTab('room')"><span class="ic">🫂</span>Sala</button>
   </nav>
 </div>
 
@@ -544,7 +559,8 @@ const state = {
   radio: false, djLocutor: false,
   amb: { id: null, vol: 0.4, playing: false },
   sleep: 0, sleepId: null,
-  phone: { dev: '', online: false, state: null, songs: null, syncing: false },
+  phone: { dev: '', online: false, state: null, songs: null, videos: null, syncing: false },
+  room: { role: 'off', code: '', key: '', nick: '', media: null, playing: false, positionMs: 0, members: [], sse: null, timer: 0, poll: 0 },
   db: null,
   lang: (() => { try { return ['pt', 'en', 'es'].includes(localStorage.getItem('tami-lang')) ? localStorage.getItem('tami-lang') : 'pt'; } catch (e) { return 'pt'; } })()
 };
@@ -824,6 +840,45 @@ const I18N = {
   phSortAlbum: { pt: 'Álbum', en: 'Album', es: 'Álbum' },
   phEmptySearch: { pt: 'Nenhuma música encontrada.', en: 'No songs found.', es: 'Ninguna canción encontrada.' },
   phAutoImport: { pt: '{n} música(s) nova(s) da pasta importada(s).', en: '{n} new song(s) imported from the folder.', es: '{n} canción(es) nueva(s) de la carpeta importada(s).' },
+  phVideoSec: { pt: 'Vídeos do computador', en: 'PC videos', es: 'Vídeos del PC' },
+  phVideoSave: { pt: '＋ salvar todos', en: '＋ save all', es: '＋ guardar todos' },
+  phVideoNone: { pt: 'Nenhum vídeo no servidor.', en: 'No videos on the server.', es: 'No hay vídeos en el servidor.' },
+  phVideoSaved: { pt: '{n} vídeo(s) do servidor salvo(s) na aba Vídeos.', en: '{n} server video(s) saved to the Videos tab.', es: '{n} vídeo(s) del servidor guardado(s) en la pestaña Vídeos.' },
+  phVideoAlready: { pt: 'Vídeos do servidor já estão todos aqui.', en: 'Server videos are already all here.', es: 'Los vídeos del servidor ya están todos aquí.' },
+  phNoVidServer: { pt: 'Nenhum vídeo no servidor.', en: 'No videos on the server.', es: 'No hay vídeos en el servidor.' },
+  roomTab: { pt: 'Sala', en: 'Room', es: 'Sala' },
+  roomIntro: { pt: 'Assistam juntos na mesma rede: crie uma sala e compartilhe o código, ou entre no código de quem criou. Música e vídeo tocam em sincronia para todos.', en: 'Watch together on the same network: create a room and share the code, or join with someone\'s code. Music and video play in sync for everyone.', es: 'Vean juntos en la misma red: crea una sala y comparte el código, o entra con el código de quien la creó. La música y los vídeos suenan en sincronía para todos.' },
+  roomCreate: { pt: 'Criar sala', en: 'Create room', es: 'Crear sala' },
+  roomJoin: { pt: 'Entrar', en: 'Join', es: 'Entrar' },
+  roomLeave: { pt: 'Sair da sala', en: 'Leave room', es: 'Salir de la sala' },
+  roomMembers: { pt: 'Na sala', en: 'In the room', es: 'En la sala' },
+  roomHost: { pt: 'Anfitrião', en: 'Host', es: 'Anfitrión' },
+  roomCodeLbl: { pt: 'código', en: 'code', es: 'código' },
+  roomCopy: { pt: 'copiar', en: 'copy', es: 'copiar' },
+  roomCopied: { pt: 'Código copiado!', en: 'Code copied!', es: '¡Código copiado!' },
+  roomPalco: { pt: 'Palco', en: 'Stage', es: 'Escenario' },
+  roomNoMedia: { pt: 'Nenhuma mídia escolhida.', en: 'No media chosen.', es: 'Ningún medio elegido.' },
+  roomPick: { pt: 'Trocar mídia', en: 'Change media', es: 'Cambiar medio' },
+  roomPickTitle: { pt: 'Escolher mídia do servidor', en: 'Pick media from the server', es: 'Elegir medio del servidor' },
+  roomServerEmpty: { pt: 'Conecte o celular (aba Celular) para escolher do servidor, ou cole um link de vídeo.', en: 'Connect the phone (Phone tab) to pick from the server, or paste a video link.', es: 'Conecta el celular (pestaña Celular) para elegir del servidor, o pega un enlace de vídeo.' },
+  roomPasteUrl: { pt: 'Colar link de vídeo/áudio', en: 'Paste video/audio link', es: 'Pegar enlace de vídeo/audio' },
+  roomUrlPh: { pt: 'https://…/video.mp4', en: 'https://…/video.mp4', es: 'https://…/video.mp4' },
+  roomTitlePh: { pt: 'Nome (opcional)', en: 'Name (optional)', es: 'Nombre (opcional)' },
+  roomFollow: { pt: 'Seguindo o anfitrião', en: 'Following the host', es: 'Siguiendo al anfitrión' },
+  roomWaiting: { pt: 'Escolha o palco para todos acompanharem.', en: 'Set the stage so everyone follows.', es: 'Elige el escenario para que todos sigan.' },
+  roomClosed: { pt: 'A sala foi encerrada.', en: 'The room has been closed.', es: 'La sala se ha cerrado.' },
+  roomNeedNick: { pt: 'Digite seu nome.', en: 'Type your name.', es: 'Escribe tu nombre.' },
+  roomNeedCode: { pt: 'Digite o código da sala.', en: 'Type the room code.', es: 'Escribe el código de la sala.' },
+  roomNotFind: { pt: 'Sala não encontrada.', en: 'Room not found.', es: 'Sala no encontrada.' },
+  roomNickLbl: { pt: 'Seu nome', en: 'Your name', es: 'Tu nombre' },
+  roomGo: { pt: 'Entrar na sala', en: 'Join the room', es: 'Entrar a la sala' },
+  roomCreateGo: { pt: 'Criar e entrar', en: 'Create and join', es: 'Crear y entrar' },
+  roomNoConn: { pt: 'Sem conexão com o servidor da sala.', en: 'No connection to the room server.', es: 'Sin conexión con el servidor de la sala.' },
+  roomPickMediaFirst: { pt: 'Escolha uma mídia primeiro.', en: 'Pick a media first.', es: 'Elige un medio primero.' },
+  roomPlay: { pt: '▶ Tocar para todos', en: '▶ Play for everyone', es: '▶ Reproducir para todos' },
+  roomHint: { pt: 'Toque para acompanhar', en: 'Tap to follow along', es: 'Toca para seguir' },
+  roomGuestStart: { pt: '▶ Seguir agora', en: '▶ Follow now', es: '▶ Seguir ahora' },
+  roomAutoLeave: { pt: 'Você saiu da sala.', en: 'You left the room.', es: 'Saliste de la sala.' },
   updTitle: { pt: '🚀 Atualização disponível', en: '🚀 Update available', es: '🚀 Actualización disponible' },
   updBody: { pt: 'Saiu a TAMI <b>{nw}</b> e a sua é a {old}. Quer baixar e instalar agora?', en: 'TAMI <b>{nw}</b> is out and you have {old}. Download and install now?', es: 'Salió TAMI <b>{nw}</b> y tienes {old}. ¿Descargar e instalar ahora?' },
   updLater: { pt: 'Agora não', en: 'Not now', es: 'Ahora no' },
@@ -1631,8 +1686,9 @@ function renderVideos(container) {
   for (const v of list) {
     const row = document.createElement('div');
     row.className = 'item';
+    const sizeTxt = v.sizeBytes ? (v.sizeBytes / 1048576).toFixed(1) + ' MB' : 'servidor';
     row.innerHTML = `<div class="art grad-c">▷</div>
-      <div class="mid"><div class="it-title">${esc(v.title)}</div><div class="it-sub">${fmtTime(v.durationMs)} · ${(v.sizeBytes / 1048576).toFixed(1)} MB</div></div>
+      <div class="mid"><div class="it-title">${esc(v.title)}</div><div class="it-sub">${fmtTime(v.durationMs)} · ${sizeTxt}</div></div>
       <button class="like" onclick="delVideo('${v.id}')">🗑</button>`;
     row.onclick = () => playVideo(v);
     container.appendChild(row);
@@ -2605,7 +2661,7 @@ function renderUILabels() {
 }
 function updateTitle() {
   if (state.detail) { $('title').textContent = state.detail.name || ''; return; }
-  const key = { virgin: 'TAMI', songs: 'tSongs', albums: 'tAlbums', artists: 'tArtists', playlists: 'tPlaylists', favs: 'tFavs', videos: 'tVideos', amb: 'tAmb', phone: 'tPhone' }[state.tab];
+  const key = { virgin: 'TAMI', songs: 'tSongs', albums: 'tAlbums', artists: 'tArtists', playlists: 'tPlaylists', favs: 'tFavs', videos: 'tVideos', amb: 'tAmb', phone: 'tPhone', room: 'roomTab' }[state.tab];
   $('title').textContent = key === 'TAMI' ? 'TAMI' : L(key);
 }
 function djAnnounceTrack(s) {
@@ -3127,10 +3183,15 @@ function playVideo(v) {
   audio.pause();
   if (state.videoUrl) URL.revokeObjectURL(state.videoUrl);
   state.current = v;
-  state.videoUrl = URL.createObjectURL(v.blob);
   openPlayer();
   renderPlayer();
-  video.src = state.videoUrl;
+  if (v.blob) {
+    state.videoUrl = URL.createObjectURL(v.blob);
+    video.src = state.videoUrl;
+  } else {
+    state.videoUrl = null;
+    video.src = v.url || '';
+  }
   video.play().catch(() => {});
 }
 function showEl(id) {
@@ -3999,6 +4060,11 @@ const CHANGELOG = {
     en: ['"Phone" tab: search and sort the computer\'s songs by title, artist or album', 'The companion server reads real title/artist/album from the PC music (MP3/FLAC/WAV) and detects new songs on its own', 'What was playing on the PC can be restored on the phone, and new PC songs join the library automatically', 'More reliable voice commands: the mic no longer reacts to speech without saying "TAMI", phrases like "stop playing", "sleep in 30 minutes" and "pon música" now work, and TAMI holds the mic while she speaks'],
     es: ['Pestaña "Celular": búsqueda y cómo ordenar las canciones del PC por título, artista o álbum', 'El servidor acompañante lee título/artista/álbum reales de las canciones del PC (MP3/FLAC/WAV) y detecta solo cuando entra música nueva', 'Lo que sonaba en el PC se puede restaurar en el celular, y las canciones nuevas del PC entran solas a la biblioteca', 'Comandos de voz más fiables: el micrófono ya no reacciona a conversaciones sin decir "TAMI", frases como "deja de sonar", "duerme en 30 minutos" y "pon música" ahora funcionan, y TAMI sostiene el micrófono mientras habla']
   },
+'1.36': {
+    pt: ['O servidor do PC agora serve também vídeos: a aba "Celular" lista os vídeos da pasta e um toque salva ou assiste na hora', 'Nova aba "Sala" (watch party na LAN): crie uma sala e compartilhe o código, ou entre no código de quem criou', 'No palco da sala você escolhe o vídeo/música do servidor (ou cola um link) e todos veem em sincronia — play, pausa e avanço são espelhados na hora', 'A sala mostra quem está junto (lista de participantes) e encerra sozinha se todos saírem'],
+    en: ['The PC server now serves videos too: the "Phone" tab lists the videos in the folder and one tap saves or watches them right away', 'New "Room" tab (LAN watch party): create a room and share the code, or join with someone\'s code', 'On the room\'s stage you pick the server video/song (or paste a link) and everyone watches in sync — play, pause and seeking mirror instantly', 'The room shows who\'s in (participant list) and closes itself once everyone leaves'],
+    es: ['El servidor del PC ahora sirve también vídeos: la pestaña "Celular" lista los vídeos de la carpeta y un toque los guarda o los reproduce al instante', 'Nueva pestaña "Sala" (watch party en la LAN): crea una sala y comparte el código, o entra con el código de quien la creó', 'En el escenario de la sala eliges el vídeo/canción del servidor (o pegas un enlace) y todos lo ven en sincronía — reproducir, pausar y avanzar se reflejan al momento', 'La sala muestra quiénes están (lista de participantes) y se cierra sola si todos se van']
+  },
 };
 function changelogList(ver) {
   let c = CHANGELOG[String(ver)];
@@ -4319,6 +4385,7 @@ async function pollRemote() {
     state.phone.dev = d.dev || '';
     state.phone.state = d.state || null;
     state.phone.songs = d.songs && d.songs.songs ? d.songs.songs : null;
+    state.phone.videos = d.songs && d.songs.videos ? d.songs.videos : null;
     state.phone.online = !!(d.state && d.state.ts && Date.now() / 1000 - d.state.ts < 20);
     renderPhone();
   } catch (e) {
@@ -4567,6 +4634,21 @@ function renderPhone() {
   }
   html += `</div>`;
 
+  const pvids = p.videos || [];
+  html += `<div class="section" style="display:flex;align-items:center;justify-content:space-between">${esc(L('phVideoSec'))}${pvids.length ? ' · ' + pvids.length : ''}${pvids.length ? `<span class="elink" style="font-size:12px" onclick="autoImportCompanionVideos()">${esc(L('phVideoSave'))}</span>` : ''}</div>
+  <div id="phone-videos">`;
+  if (pvids.length) {
+    pvids.forEach((x, i) => {
+      html += `<div class="item" data-pvi="${i}">
+        <div class="art small grad-c">▷</div>
+        <div class="mid"><div class="it-title">${esc(x.title)}</div><div class="it-sub">${esc(x.artist || '')}${x.durationMs ? ' · ' + fmtClock(x.durationMs) : ''}</div></div>
+      </div>`;
+    });
+  } else {
+    html += `<div class="empty" style="padding:14px 8px">${esc(L('phVideoNone'))}</div>`;
+  }
+  html += `</div>`;
+
   cv.innerHTML = html;
   const sk = $('phone-seek');
   if (sk) {
@@ -4590,6 +4672,12 @@ function renderPhone() {
     so.onchange = () => { phoneSort = so.value; renderPhone(); };
     so.onpointerup = (e) => { e.stopPropagation(); };
   }
+  cv.querySelectorAll('[data-pvi]').forEach((row) => {
+    row.onclick = () => {
+      const x = pvids[+row.dataset.pvi];
+      if (x && x.url) playRemoteItem({ url: x.url, title: x.title, artist: x.artist || '', durationMs: x.durationMs || 0, video: true });
+    };
+  });
 }
 let phoneSearch = '';
 let phoneSort = 'orig';
@@ -4612,6 +4700,419 @@ function startPhonePoll() {
   clearInterval(phoneTimer);
   phoneTimer = setInterval(pollRemote, 3000);
   pollRemote();
+}
+
+// ---------- Vídeos do computador (servidor) ----------
+function playRemoteItem(item) {
+  if (!item || !item.url) return;
+  try { djExit(); } catch (e) {}
+  audio.pause(); video.pause();
+  if (state.videoUrl) { URL.revokeObjectURL(state.videoUrl); state.videoUrl = null; }
+  const it = {
+    id: 'rem-' + Math.random().toString(36).slice(2, 10),
+    title: item.title || 'Mídia', artist: item.artist || '',
+    album: item.album || UNKNOWN, durationMs: item.durationMs || 0,
+    type: item.video ? 'video' : 'song', url: item.url, blob: null
+  };
+  state.current = it;
+  openPlayer();
+  renderPlayer();
+  const el = it.type === 'video' ? video : audio;
+  showEl(it.type === 'video' ? 'video' : 'audio');
+  el.src = item.url;
+  el.play().catch(() => {});
+}
+async function autoImportCompanionVideos(list) {
+  try {
+    const r = await fetch(getRemote() + '/remote', { cache: 'no-store' });
+    if (!r.ok) return;
+    const d = await r.json();
+    const vids = list || (d.songs && d.songs.videos) || [];
+    if (!vids.length) { toast(L('phNoVidServer')); return; }
+    const existing = new Set((state.videos || []).map((v) => v.url).filter(Boolean));
+    let added = 0;
+    for (const x of vids) {
+      if (!x.url || existing.has(x.url)) continue;
+      try {
+        await putVideo({
+          id: 'r' + seedHash(x.url).toString(36) + '-' + Math.random().toString(36).slice(2, 8),
+          title: x.title || 'Vídeo', artist: x.artist || '',
+          album: x.album || UNKNOWN, durationMs: x.durationMs || 0,
+          sizeBytes: 0, type: 'video', url: x.url,
+          name: (x.title || 'Vídeo') + '.mp4', createdAt: Date.now() + added
+        });
+        existing.add(x.url);
+        added++;
+      } catch (e) { console.warn('autoimport video', e); }
+    }
+    if (added > 0) { await reloadAll(); toast(L('phVideoSaved').replace('{n}', added)); }
+    else toast(L('phVideoAlready'));
+  } catch (e) { toast(L('phNoConn')); }
+}
+
+// ---------- Salas (watch party na LAN) ----------
+function roomEl() { return state.current && state.current.type === 'video' ? video : audio; }
+async function roomCmd(payload) {
+  try {
+    const r = await fetch(getRemote() + '/api/room/' + state.room.code + '/cmd', {
+      method: 'POST', headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ key: state.room.key, evt: payload })
+    });
+    return r.ok;
+  } catch (e) { toast(L('roomNoConn')); return false; }
+}
+function roomReset(closed) {
+  roomStopStream();
+  state.room = { role: 'off', code: '', key: '', nick: '', media: null, playing: false, positionMs: 0, members: [], sse: null, timer: 0, poll: 0 };
+  if ($('room-view')) roomRender();
+  if (closed) toast(L('roomClosed'));
+}
+function roomStopStream() {
+  if (state.room.sse) { try { state.room.sse.close(); } catch (e) {} state.room.sse = null; }
+  if (state.room.timer) { clearInterval(state.room.timer); state.room.timer = 0; }
+  if (state.room.poll) { clearInterval(state.room.poll); state.room.poll = 0; }
+  state.room._sentPlaying = undefined; state.room._sentPos = 0;
+}
+function roomSub() {
+  roomStopStream();
+  try {
+    const es = new EventSource(getRemote() + '/api/room/' + state.room.code + '/events');
+    es.onmessage = (ev) => { try { roomGuestBackend(JSON.parse(ev.data)); } catch (e) {} };
+    es.onerror = () => {
+      try { es.close(); } catch (e) {}
+      if (state.room.role !== 'off') setTimeout(roomSub, 3000);
+    };
+    state.room.sse = es;
+  } catch (e) {}
+}
+async function roomPoll() {
+  const r = state.room;
+  if (r.role === 'off' || !r.code) return;
+  try {
+    const res = await fetch(getRemote() + '/api/room/' + r.code, { cache: 'no-store' });
+    if (!res.ok) { if (res.status === 404) roomReset(true); return; }
+    const snap = await res.json();
+    r.members = snap.members || [];
+    if (snap.media) r.media = snap.media;
+    r.playing = !!snap.playing;
+    r.positionMs = Number(snap.positionMs) || 0;
+    if (r.role === 'guest' && r.media && r.media.url) {
+      const el = roomEl();
+      if (el && el.src && state.current && state.current.url === r.media.url) {
+        applyRoomSync(r.playing, r.positionMs);
+      }
+    }
+    roomRender();
+  } catch (e) {}
+}
+function roomGuestBackend(evt) {
+  if (!evt || !evt.cmd || state.room.role === 'host' || state.room.role === 'off') return;
+  const r = state.room;
+  if (evt.cmd === 'media') {
+    const m = evt.media || {};
+    if (!m.url) return;
+    r.media = { url: m.url, title: m.title || 'Mídia', artist: m.artist || '', durationMs: m.durationMs || 0, video: !!m.video };
+    r.playing = false;
+    r.positionMs = Number(evt.positionMs) || 0;
+    loadRoomMedia(m, false);
+    roomRender();
+    return;
+  }
+  if (evt.cmd === 'sync') {
+    if (!r.media || !r.media.url) return;
+    applyRoomSync(!!evt.playing, Number(evt.positionMs) || 0);
+    roomRender();
+    return;
+  }
+  if (evt.cmd === 'close' || evt.cmd === 'roomClosed') roomReset(true);
+}
+function applyRoomSync(playing, pos) {
+  const r = state.room;
+  const el = roomEl();
+  if (!el || !el.src) return;
+  const t = pos / 1000;
+  const drift = Math.abs((el.currentTime || 0) - t);
+  if (playing) {
+    if (el.paused) {
+      try { el.currentTime = t; } catch (e) {}
+      const p = el.play();
+      if (p && p.catch) p.catch(() => {});
+    } else if (drift > 1.5) {
+      try { el.currentTime = t; } catch (e) {}
+    }
+  } else {
+    if (!el.paused) { try { el.pause(); } catch (e) {} }
+    if (drift > 1.5) { try { el.currentTime = t; } catch (e) {} }
+  }
+  r.playing = !!playing;
+  r.positionMs = pos;
+}
+function loadRoomMedia(m, autoplay) {
+  audio.pause(); video.pause();
+  if (state.videoUrl) { URL.revokeObjectURL(state.videoUrl); state.videoUrl = null; }
+  const it = {
+    id: 'room-' + Math.random().toString(36).slice(2, 10),
+    title: m.title || 'Mídia', artist: m.artist || '', album: '',
+    durationMs: m.durationMs || 0, type: m.video ? 'video' : 'song',
+    url: m.url, blob: null
+  };
+  state.current = it;
+  openPlayer();
+  renderPlayer();
+  const el = it.type === 'video' ? video : audio;
+  showEl(it.type === 'video' ? 'video' : 'audio');
+  const t = (Number(m.positionMs) || 0) / 1000;
+  el.src = m.url;
+  try { el.currentTime = t; } catch (e) {}
+  if (autoplay) el.play().catch(() => {}); else el.pause();
+}
+function roomCreateApply(nick) {
+  (async () => {
+    try {
+      const res = await fetch(getRemote() + '/api/room', {
+        method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ nick })
+      });
+      if (!res.ok) { toast(L('roomNoConn')); return; }
+      const d = await res.json();
+      state.room = { role: 'host', code: d.code, key: d.key, nick, media: null, playing: false, positionMs: 0, members: [{ nick }], sse: null, timer: 0, poll: 0 };
+      roomSub();
+      state.room.poll = setInterval(roomPoll, 2500);
+      state.room.timer = setInterval(roomHostTick, 1000);
+      selectTab('room');
+      roomRender();
+      toast('Sala criada: ' + d.code);
+    } catch (e) { toast(L('roomNoConn')); }
+  })();
+}
+function roomJoinApply(code, nick) {
+  (async () => {
+    try {
+      const res = await fetch(getRemote() + '/api/room/' + encodeURIComponent(code) + '/join', {
+        method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ nick })
+      });
+      if (!res.ok) { toast(L('roomNotFind')); return; }
+      const snap = await res.json();
+      state.room = { role: 'guest', code, key: '', nick, media: snap.media || null, playing: snap.playing, positionMs: snap.positionMs || 0, members: snap.members || [], sse: null, timer: 0, poll: 0 };
+      roomSub();
+      state.room.poll = setInterval(roomPoll, 2500);
+      selectTab('room');
+      roomRender();
+    } catch (e) { toast(L('roomNoConn')); }
+  })();
+}
+function roomCreate() {
+  const modal = $('modal');
+  modal.innerHTML = `<h3>＋ ${esc(L('roomCreate'))}</h3>
+    <div style="display:grid;gap:8px;padding:6px 0">
+      <input id="r-nick" placeholder="${esc(L('roomNickLbl'))}" value="${esc(state.nick || '')}" class="inp">
+    </div>
+    <div id="modal-actions">
+      <button class="btn secondary" onclick="closeModal()">${esc(L('detClose'))}</button>
+      <button class="btn" id="r-go">${esc(L('roomCreateGo'))}</button>
+    </div>`;
+  $('modal-wrap').classList.add('show');
+  $('r-go').onclick = () => {
+    const nick = ($('r-nick').value || '').trim().slice(0, 32);
+    if (!nick) { toast(L('roomNeedNick')); return; }
+    closeModal();
+    roomCreateApply(nick);
+  };
+  setTimeout(() => { const n = $('r-nick'); if (n) n.focus(); }, 60);
+}
+function roomJoin() {
+  const modal = $('modal');
+  modal.innerHTML = `<h3>🫂 ${esc(L('roomJoin'))}</h3>
+    <div style="display:grid;gap:8px;padding:6px 0">
+      <input id="r-code" placeholder="${esc(L('roomCodeLbl'))} — ABCD" maxlength="4" style="text-transform:uppercase" class="inp">
+      <input id="r-nick" placeholder="${esc(L('roomNickLbl'))}" value="${esc(state.nick || '')}" class="inp">
+    </div>
+    <div id="modal-actions">
+      <button class="btn secondary" onclick="closeModal()">${esc(L('detClose'))}</button>
+      <button class="btn" id="r-go">${esc(L('roomGo'))}</button>
+    </div>`;
+  $('modal-wrap').classList.add('show');
+  $('r-go').onclick = () => {
+    const code = ($('r-code').value || '').trim().toUpperCase().replace(/[^A-Z0-9]/g, '').slice(0, 4);
+    const nick = ($('r-nick').value || '').trim().slice(0, 32);
+    if (!code) { toast(L('roomNeedCode')); return; }
+    if (!nick) { toast(L('roomNeedNick')); return; }
+    closeModal();
+    roomJoinApply(code, nick);
+  };
+  setTimeout(() => { const c = $('r-code'); if (c) c.focus(); }, 60);
+}
+function roomLeave() {
+  const r = state.room;
+  if (r.role === 'guest' && r.code) {
+    try { fetch(getRemote() + '/api/room/' + r.code + '/leave', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ nick: r.nick }) }).catch(() => {}); } catch (e) {}
+  } else if (r.role === 'host' && r.code) {
+    roomCmd({ cmd: 'close' });
+  }
+  roomReset(false);
+  toast(L('roomAutoLeave'));
+}
+function roomCopyCode() {
+  try {
+    navigator.clipboard.writeText(state.room.code).then(() => toast(L('roomCopied'))).catch(() => {});
+  } catch (e) {}
+}
+async function roomSendMedia(item) {
+  if (state.room.role !== 'host') return;
+  const media = {
+    url: item.url, title: item.title || item.name || 'Mídia',
+    artist: item.artist || '', durationMs: item.durationMs || 0,
+    video: !!(item.video || item.type === 'video')
+  };
+  const ok = await roomCmd({ cmd: 'media', media, positionMs: 0 });
+  if (!ok) return;
+  state.room.media = media;
+  state.room.playing = false;
+  state.room.positionMs = 0;
+  loadRoomMedia(media, false);
+  const el = roomEl();
+  if (el && el.src) { try { el.pause(); } catch (e) {} }
+  closeModal();
+  if (state.tab !== 'room') selectTab('room');
+  roomRender();
+}
+function roomPickMedia() {
+  if (state.room.role !== 'host') return;
+  const songs = state.phone.songs || [];
+  const vids = state.phone.videos || [];
+  const modal = $('modal');
+  let html = `<h3>🎬 ${esc(L('roomPickTitle'))}</h3><div class="list" style="max-height:52vh;overflow-y:auto;padding:0">`;
+  if (!songs.length && !vids.length) {
+    html += `<div class="empty" style="padding:14px 8px">${esc(L('roomServerEmpty'))}</div>`;
+  }
+  if (vids.length) {
+    html += `<div class="section">▶ ${esc(L('phVideoSec'))}</div>`;
+    vids.forEach((x, i) => {
+      html += `<div class="mrow" data-pvm="v${i}"><span class="art small grad-c">▷</span><div class="mid"><div class="it-title">${esc(x.title)}</div></div></div>`;
+    });
+  }
+  if (songs.length) {
+    html += `<div class="section">♪ ${esc(L('phSongsSec'))}</div>`;
+    songs.forEach((x, i) => {
+      html += `<div class="mrow" data-pvm="s${i}"><span class="art small grad-e">♪</span><div class="mid"><div class="it-title">${esc(x.title)}</div><div class="it-sub">${esc(x.artist || '')}</div></div></div>`;
+    });
+  }
+  html += `</div>
+    <div style="padding:6px 0">
+      <button class="btn secondary" style="width:100%" id="r-urlbtn">⤴ ${esc(L('roomPasteUrl'))}</button>
+    </div>
+    <div id="r-urlbox" style="display:none;gap:8px;padding:2px 0">
+      <input id="r-urlin" placeholder="${esc(L('roomUrlPh'))}" class="inp">
+      <input id="r-title" placeholder="${esc(L('roomTitlePh'))}" class="inp">
+      <button class="btn" id="r-urlgo" style="width:100%">OK</button>
+    </div>
+    <div id="modal-actions"><button class="btn secondary" onclick="closeModal()">${esc(L('detClose'))}</button></div>`;
+  modal.innerHTML = html;
+  $('modal-wrap').classList.add('show');
+  modal.querySelectorAll('[data-pvm]').forEach((row) => {
+    row.onclick = () => {
+      const t = row.dataset.pvm;
+      const i = +t.slice(1);
+      const item = t[0] === 'v' ? vids[i] : songs[i];
+      if (item && item.url) roomSendMedia(item);
+    };
+  });
+  $('r-urlbtn').onclick = () => { const b = $('r-urlbox'); b.style.display = 'grid'; };
+  $('r-urlgo').onclick = () => {
+    const url = ($('r-urlin').value || '').trim();
+    if (!url) { toast(L('roomNeedCode')); return; }
+    const title = ($('r-title').value || '').trim();
+    const video = /\.(mp4|mkv|webm|m4v|mov|avi)(\?|#|$)/i.test(url);
+    closeModal();
+    roomSendMedia({ url, title: title || url.split('/').pop() || 'Mídia', video });
+  };
+}
+function roomHostTick() {
+  const r = state.room;
+  if (r.role !== 'host' || !r.media) return;
+  const el = roomEl();
+  if (!el || !el.src) return;
+  const playing = !el.paused && !el.ended && !!el.src;
+  const pos = Math.round((el.currentTime || 0) * 1000);
+  r.playing = playing; r.positionMs = pos;
+  const bar = $('room-bar');
+  if (bar && r.media.durationMs) bar.style.width = Math.min(100, (pos / r.media.durationMs) * 100) + '%';
+  if (playing !== r._sentPlaying || Math.abs(pos - (r._sentPos || 0)) > 800) {
+    r._sentPlaying = playing;
+    r._sentPos = pos;
+    roomCmd({ cmd: 'sync', playing, positionMs: pos });
+  }
+  if (!r._lastRender || Date.now() - r._lastRender > 2000) {
+    r._lastRender = Date.now();
+    roomRender();
+  }
+}
+async function roomToggle() {
+  const el = roomEl();
+  if (!state.room.media || !el || !el.src) { toast(L('roomPickMediaFirst')); return; }
+  if (el.paused || el.ended) safePlay(el); else el.pause();
+  state.room.playing = !el.paused && !el.ended && !!el.src;
+  state.room.positionMs = Math.round((el.currentTime || 0) * 1000);
+  await roomCmd({ cmd: 'sync', playing: state.room.playing, positionMs: state.room.positionMs });
+  roomRender();
+}
+function roomGuestTap() {
+  const el = roomEl();
+  if (!el || !el.src) return;
+  if (el.paused) safePlay(el); else el.pause();
+  roomRender();
+}
+function roomRender() {
+  const cv = $('room-view');
+  if (!cv) return;
+  const r = state.room;
+  let html = '';
+  if (r.role === 'off') {
+    html = `<div class="section">🫂 ${esc(L('roomTab'))}</div>
+      <div class="empty" style="padding:18px 8px"><div class="big">🫂</div>${esc(L('roomIntro'))}</div>
+      <div style="display:flex;gap:8px;padding:0 2px 10px">
+        <button class="btn" style="flex:1" onclick="roomCreate()">＋ ${esc(L('roomCreate'))}</button>
+        <button class="btn secondary" style="flex:1" onclick="roomJoin()">${esc(L('roomJoin'))}</button>
+      </div>`;
+  } else {
+    const host = r.role === 'host';
+    const media = r.media;
+    html = `<div class="section" style="display:flex;align-items:center;justify-content:space-between">🫂 ${esc(L('roomMembers'))}${host ? ' · <b>' + esc(r.code) + '</b>' : ''}
+        <span class="elink" style="font-size:12px" onclick="${host ? 'roomCopyCode()' : 'roomLeave()'}">${esc(host ? L('roomCopy') : L('roomLeave'))}</span></div>`;
+    const members = r.members && r.members.length ? r.members : [{ nick: host ? r.nick : '…' }];
+    html += `<div style="display:flex;flex-wrap:wrap;gap:6px;padding:2px 2px 8px">` +
+      members.map((m) => `<span class="member-chip">${esc(m.nick)}</span>`).join('') +
+      `</div>`;
+    html += `<div class="section">🎬 ${esc(L('roomPalco'))}</div>`;
+    if (media) {
+      const playingNow = host
+        ? (() => { const el = roomEl(); return !!(el && el.src && !el.paused && state.current && state.current.url === media.url); })()
+        : r.playing;
+      html += `<div class="item">
+        <div class="art small ${media.video ? 'grad-c' : 'grad-e'}">${media.video ? '▷' : '♪'}</div>
+        <div class="mid"><div class="it-title">${esc(media.title)}</div><div class="it-sub">${esc(media.artist || '')}${media.durationMs ? ' · ' + fmtClock(media.durationMs) : ''}</div></div>
+      </div>
+      <div style="display:flex;align-items:center;gap:10px;padding:6px 2px">
+        <button class="pmain" ${host ? 'onclick="roomToggle()"' : 'onclick="roomGuestTap()"'} title="${esc(host ? L('roomPlay') : L('roomGuestStart'))}" style="min-width:52px;height:52px">${playingNow ? '⏸' : '▶'}</button>
+        <div style="flex:1;min-width:0">
+          <div class="p-time" style="display:flex;justify-content:space-between;font-size:11.5px;color:var(--text2) !important;padding:0 2px">
+            <span>${fmtClock(state.room.positionMs)}</span><span>${media.durationMs ? fmtClock(media.durationMs) : ''}</span>
+          </div>
+          <div class="p-progress"><div class="p-bar" id="room-bar" style="width:${media.durationMs ? Math.min(100, (state.room.positionMs / media.durationMs) * 100) : 0}%"></div></div>
+        </div>
+      </div>`;
+      html += `<div class="sub-hint">${host ? esc(L('roomWaiting')) : '◉ ' + esc(L('roomFollow'))}</div>`;
+    } else {
+      html += `<div class="empty" style="padding:14px 8px">${esc(L('roomNoMedia'))}</div>`;
+      if (host) html += `<div class="sub-hint">${esc(L('roomWaiting'))}</div>`;
+    }
+    if (host) {
+      html += `<div style="display:flex;gap:8px;margin:6px 2px 12px">
+        <button class="btn" style="flex:1" onclick="roomPickMedia()">🎬 ${esc(L('roomPick'))}</button>
+        <button class="btn secondary" style="flex:0" onclick="roomLeave()">${esc(L('roomLeave'))}</button>
+      </div>`;
+    }
+  }
+  cv.innerHTML = html;
 }
 
 // ---------- Boot ----------
@@ -4762,6 +5263,7 @@ function createFab() {
       <div class="mrow" onclick="importPrompt()"><span class="art grad-e">♪</span><div class="mid"><div class="it-title">Músicas</div><div class="it-sub">Selecionar arquivos de áudio</div></div></div>
       <div class="mrow" onclick="scanDeviceMusic()"><span class="art grad-d">📂</span><div class="mid"><div class="it-title">Músicas do aparelho</div><div class="it-sub">Ler tudo automaticamente (Android)</div></div></div>
       <div class="mrow" onclick="$('fileVideos').click()"><span class="art grad-c">▷</span><div class="mid"><div class="it-title">Vídeos</div><div class="it-sub">Selecionar arquivos de vídeo</div></div></div>
+      <div class="mrow" onclick="autoImportCompanionVideos()"><span class="art grad-c">🖥</span><div class="mid"><div class="it-title">Vídeos do computador</div><div class="it-sub">Salvar os vídeos do servidor na aba Vídeos</div></div></div>
       <div class="mrow" onclick="pickFolder()"><span class="art grad-b">📁</span><div class="mid"><div class="it-title">Pasta inteira</div><div class="it-sub">Chrome/Edge no Windows</div></div></div>
       <div class="mrow" onclick="pickNovidades()"><span class="art grad-b">🔎</span><div class="mid"><div class="it-title">Buscar novidades na pasta</div><div class="it-sub">Reler a pasta e importar só o que é novo</div></div></div>
       <div class="mrow" onclick="checkNovidades()"><span class="art grad-e">✨</span><div class="mid"><div class="it-title">Buscar novidades de versão</div><div class="it-sub">Verifica atualização do app no GitHub</div></div></div>

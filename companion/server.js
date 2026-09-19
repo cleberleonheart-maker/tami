@@ -33,10 +33,13 @@ const MAX_SONGS = 500;
 const METADATA_CACHE_MAX = 1200;
 
 const AUDIO_EXT = new Set(['.mp3', '.m4a', '.aac', '.ogg', '.opus', '.wav', '.flac', '.wma']);
+const VIDEO_EXT = new Set(['.mp4', '.mkv', '.webm', '.mov', '.m4v', '.avi']);
 const MIME = {
   '.html': 'text/html', '.js': 'text/javascript', '.css': 'text/css',
   '.json': 'application/json', '.svg': 'image/svg+xml', '.png': 'image/png',
-  '.ico': 'image/x-icon', '.apk': 'application/vnd.android.package-archive'
+  '.ico': 'image/x-icon', '.apk': 'application/vnd.android.package-archive',
+  '.mp4': 'video/mp4', '.m4v': 'video/mp4', '.mkv': 'video/x-matroska',
+  '.webm': 'video/webm', '.mov': 'video/quicktime', '.avi': 'video/x-msvideo'
 };
 
 let lastState = null;
@@ -383,7 +386,8 @@ function scanMusic() {
         const full = path.join(dir, e.name);
         if (e.isDirectory()) { walk(full); continue; }
         const ext = path.extname(e.name).toLowerCase();
-        if (!AUDIO_EXT.has(ext)) continue;
+        const vExt = VIDEO_EXT.has(ext);
+        if (!AUDIO_EXT.has(ext) && !vExt) continue;
         let st = null;
         try { st = fs.statSync(full); } catch (e) { continue; }
         const base = e.name.slice(0, -ext.length).trim();
@@ -393,7 +397,7 @@ function scanMusic() {
         out.push({
           id: String(out.length),
           title: fallbackTitle, artist: fallbackArtist, album: '',
-          durationMs: 0, type: 'song',
+          durationMs: 0, type: vExt ? 'video' : 'song',
           name: e.name, size: st.size, path: full, mtimeMs: st.mtimeMs, _done: false
         });
       }
@@ -410,16 +414,19 @@ function scanMusic() {
     if (fresh.length) {
       for (const s of fresh) knownPaths.add(s.path);
       saveLib();
-      const evt = {
-        cmd: 'newlib',
-        value: {
-          count: fresh.length,
-          ids: fresh.map((s) => s.id),
-          names: fresh.map((s) => s.name).slice(0, 8)
-        }
-      };
-      if (subs.size) pushEvent(evt);
-      else pendingNewlib = evt;
+      const freshAudio = fresh.filter((s) => s.type === 'song');
+      if (freshAudio.length) {
+        const evt = {
+          cmd: 'newlib',
+          value: {
+            count: freshAudio.length,
+            ids: freshAudio.map((s) => s.id),
+            names: freshAudio.map((s) => s.name).slice(0, 8)
+          }
+        };
+        if (subs.size) pushEvent(evt);
+        else pendingNewlib = evt;
+      }
     }
   }
   return out;
@@ -494,14 +501,16 @@ function serveStatic(req, res, p) {
   fs.createReadStream(file).pipe(res);
 }
 
-function serveAudio(req, res, p) {
-  const m = p.match(/^\/api\/audio\/(\d+)$/);
-  if (!m) { sendJSON(res, 404, { error: 'not found' }); return; }
-  const songs = scanMusic();
-  const song = songs.find((s) => s.id === m[1]);
-  if (!song) { sendJSON(res, 404, { error: 'not found' }); return; }
+function serveMedia(req, res, p, kind) {
+  const m = p.match(/^\/api\/(audio|video)\/(\d+)$/);
+  if (!m || (kind && m[1] !== kind)) { sendJSON(res, 404, { error: 'not found' }); return; }
+  const items = scanMusic();
+  const want = m[1] === 'audio' ? 'song' : 'video';
+  const item = items.find((s) => s.id === m[2] && s.type === want);
+  if (!item) { sendJSON(res, 404, { error: 'not found' }); return; }
   let st;
-  try { st = fs.statSync(song.path); } catch (e) { sendJSON(res, 404, { error: 'not found' }); return; }
+  try { st = fs.statSync(item.path); } catch (e) { sendJSON(res, 404, { error: 'not found' }); return; }
+  const ctype = MIME[path.extname(item.path).toLowerCase()] || 'application/octet-stream';
   const range = req.headers.range;
   sendCORS(res);
   if (range) {
@@ -513,33 +522,38 @@ function serveAudio(req, res, p) {
       if (start < st.size && start <= end) {
         const len = end - start + 1;
         res.writeHead(206, {
-          'content-type': 'application/octet-stream',
+          'content-type': ctype,
           'accept-ranges': 'bytes',
           'content-range': `bytes ${start}-${end}/${st.size}`,
           'content-length': len
         });
-        fs.createReadStream(song.path, { start, end }).pipe(res);
+        fs.createReadStream(item.path, { start, end }).pipe(res);
         return;
       }
     }
   }
-  res.writeHead(200, { 'content-type': 'application/octet-stream', 'content-length': st.size, 'accept-ranges': 'bytes' });
-  fs.createReadStream(song.path).pipe(res);
+  res.writeHead(200, { 'content-type': ctype, 'content-length': st.size, 'accept-ranges': 'bytes' });
+  fs.createReadStream(item.path).pipe(res);
 }
 
 async function stateJSON(req) {
   const all = scanMusic();
   await fillMeta(all);
-  const songs = all.map((s) => ({
+  const songs = all.filter((s) => s.type === 'song').map((s) => ({
     id: s.id, title: s.title, artist: s.artist, album: s.album,
     durationMs: s.durationMs, type: 'song',
     url: songURL(req, s.id)
+  }));
+  const videos = all.filter((s) => s.type === 'video').map((s) => ({
+    id: s.id, title: s.title, artist: s.artist, album: s.album,
+    durationMs: s.durationMs, type: 'video',
+    url: songURL(req, s.id, 'video')
   }));
   const inst = lastState;
   return {
     dev: inst && inst.dev ? inst.dev : os.hostname(),
     state: inst ? { ...(inst.state || {}), ts: inst.ts } : null,
-    songs: { songs }
+    songs: { songs, videos }
   };
 }
 
@@ -563,7 +577,71 @@ function baseURL(req) {
   if (host) return `${proto}://${host}`;
   return `http://${LAN_IP()}:${PORT}`;
 }
-function songURL(req, id) { return `${baseURL(req)}/api/audio/${id}`; }
+function songURL(req, id, kind) {
+  return `${baseURL(req)}/api/${kind === 'video' ? 'video' : 'audio'}/${id}`;
+}
+
+// ---------------------------------------------------------------------------
+// Salas (watch party na LAN)
+//   host cria a sala (POST /api/room), convidados entram por código.
+//   O host publica o "palco" (vídeo do servidor ou URL) e relay de play/pause/seek.
+// ---------------------------------------------------------------------------
+
+const ROOM_IDLE_MS = 10 * 60 * 1000;
+const ROOM_CODE_CHARS = 'ABCDEFGHJKLMNPQRSTUVWXYZ23456789'; // sem I/O/L/0/1
+const rooms = new Map();
+
+function roomCode() {
+  let s;
+  do {
+    s = '';
+    for (let i = 0; i < 4; i++) s += ROOM_CODE_CHARS[Math.floor(Math.random() * ROOM_CODE_CHARS.length)];
+  } while (rooms.has(s));
+  return s;
+}
+function roomKey() {
+  const cs = 'abcdef0123456789';
+  let s = '';
+  for (let i = 0; i < 32; i++) s += cs[Math.floor(Math.random() * cs.length)];
+  return s;
+}
+function roomSnapshot(code) {
+  const r = rooms.get(code);
+  if (!r) return null;
+  return {
+    code: r.code,
+    host: r.host,
+    media: r.media,
+    playing: r.playing,
+    positionMs: r.positionMs,
+    ts: r.ts,
+    members: [...r.members.keys()].map((k) => ({ nick: k }))
+  };
+}
+function roomPush(code, obj) {
+  const r = rooms.get(code);
+  if (!r) return;
+  const data = `data: ${JSON.stringify(obj)}\n\n`;
+  for (const s of r.subs) { try { s.write(data); } catch (e) { r.subs.delete(s); } }
+}
+function roomClose(code) {
+  const r = rooms.get(code);
+  if (!r) return;
+  roomPush(code, { cmd: 'roomClosed' });
+  for (const s of r.subs) { try { s.end(); } catch (e) {} }
+  r.subs.clear();
+  rooms.delete(code);
+}
+function roomExpiry() {
+  const now = Date.now();
+  for (const [code, r] of rooms) {
+    if (now - r.lastSeen > ROOM_IDLE_MS) {
+      roomPush(code, { cmd: 'roomClosed' });
+      for (const s of r.subs) { try { s.end(); } catch (e) {} }
+      rooms.delete(code);
+    }
+  }
+}
 
 const server = http.createServer((req, res) => {
   const p = new URL(req.url, 'http://x').pathname;
@@ -628,12 +706,114 @@ const server = http.createServer((req, res) => {
     return;
   }
 
-  if (p.startsWith('/api/audio/')) { serveAudio(req, res, p); return; }
+  const rm = p.match(/^\/api\/room(?:\/([A-Z0-9]+))?(\/(?:join|leave|cmd|events|ping))?$/);
+  if (rm) {
+    if (!rm[1] && req.method === 'POST') {
+      let body = '';
+      req.on('data', (c) => { body += c; if (body.length > 8192) req.destroy(); });
+      req.on('end', () => {
+        try {
+          const d = JSON.parse(body || '{}');
+          const code = roomCode();
+          const key = roomKey();
+          const nick = String(d.nick || 'Anfitrião').slice(0, 32);
+          const members = new Map();
+          members.set(nick, Date.now());
+          rooms.set(code, {
+            code, key,
+            host: { nick },
+            media: null, playing: false, positionMs: 0, ts: 0,
+            lastSeen: Date.now(), members, subs: new Set()
+          });
+          sendJSON(res, 200, { ok: true, code, key });
+        } catch (e) { sendJSON(res, 400, { error: 'bad' }); }
+      });
+      return;
+    }
+
+    const code = rm[1];
+    const r = rooms.get(code);
+    if (!r) { sendJSON(res, 404, { error: 'no room' }); return; }
+
+    if (req.method === 'GET') {
+      if (rm[2] === '/events') {
+        sendCORS(res);
+        res.writeHead(200, {
+          'content-type': 'text/event-stream',
+          'cache-control': 'no-cache',
+          connection: 'keep-alive'
+        });
+        res.write(': connected\n\n');
+        r.subs.add(res);
+        const ping = setInterval(() => { try { res.write(': ping\n\n'); } catch (e) {} }, 15000);
+        req.on('close', () => { clearInterval(ping); r.subs.delete(res); });
+        return;
+      }
+      sendJSON(res, 200, roomSnapshot(code));
+      return;
+    }
+
+    let body = '';
+    req.on('data', (c) => { body += c; if (body.length > 8192) req.destroy(); });
+    req.on('end', () => {
+      let d = {};
+      try { d = JSON.parse(body || '{}'); } catch (e) {}
+      if (rm[2] === '/join') {
+        const nick = String(d.nick || 'Convidado').slice(0, 32);
+        if (!r.members.has(nick)) {
+          if (r.members.size >= 32) r.members.delete([...r.members.keys()][0]);
+          r.members.set(nick, Date.now());
+        }
+        r.lastSeen = Date.now();
+        sendJSON(res, 200, roomSnapshot(code));
+        return;
+      }
+      if (rm[2] === '/leave') {
+        r.members.delete(String(d.nick || ''));
+        r.lastSeen = Date.now();
+        sendJSON(res, 200, { ok: true });
+        return;
+      }
+      if (rm[2] === '/ping') {
+        if (d.key !== r.key) { sendJSON(res, 403, { error: 'no' }); return; }
+        r.lastSeen = Date.now();
+        sendJSON(res, 200, { ok: true });
+        return;
+      }
+      if (rm[2] === '/cmd') {
+        if (d.key !== r.key) { sendJSON(res, 403, { error: 'no' }); return; }
+        const ev = d.evt || null;
+        if (ev && ev.cmd) {
+          if (ev.cmd === 'media') {
+            r.media = ev.media || null;
+            r.playing = false;
+            r.positionMs = Number(ev.positionMs) || 0;
+            r.ts = Date.now();
+          } else if (ev.cmd === 'sync') {
+            r.playing = !!ev.playing;
+            r.positionMs = Number(ev.positionMs) || 0;
+            r.ts = Date.now();
+          }
+          r.lastSeen = Date.now();
+          roomPush(code, ev);
+          if (ev.cmd === 'close') roomClose(code);
+        }
+        sendJSON(res, 200, { ok: true });
+        return;
+      }
+      sendJSON(res, 404, { error: 'no' });
+    });
+    return;
+  }
+
+  if (p.startsWith('/api/audio/')) { serveMedia(req, res, p, 'audio'); return; }
+  if (p.startsWith('/api/video/')) { serveMedia(req, res, p, 'video'); return; }
 
   serveStatic(req, res, p);
 });
 
 setInterval(scanMusic, 10000).unref();
+setInterval(roomExpiry, 30000).unref();
 
 server.listen(PORT, () => {
   console.log('TAMI Companion no ar!');
