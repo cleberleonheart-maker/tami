@@ -846,6 +846,15 @@ const I18N = {
   phSortAlbum: { pt: 'Álbum', en: 'Album', es: 'Álbum' },
   phEmptySearch: { pt: 'Nenhuma música encontrada.', en: 'No songs found.', es: 'Ninguna canción encontrada.' },
   phAutoImport: { pt: '{n} música(s) nova(s) da pasta importada(s).', en: '{n} new song(s) imported from the folder.', es: '{n} canción(es) nueva(s) de la carpeta importada(s).' },
+  phoneGo: { pt: 'Conectar', en: 'Connect', es: 'Conectar' },
+  phoneServAddr: { pt: 'Endereço do servidor (em uso agora)', en: 'Server address (in use now)', es: 'Dirección del servidor (en uso ahora)' },
+  phoneServPub: { pt: 'Link público (convidar amigos)', en: 'Public link (invite friends)', es: 'Enlace público (invitar amigos)' },
+  phoneCopy: { pt: 'copiar', en: 'copy', es: 'copiar' },
+  phoneShare: { pt: 'compartilhar', en: 'share', es: 'compartir' },
+  phonePubLan: { pt: 'Você está na rede local: mande o endereço acima pra quem está na MESMA rede. Pra amigos DE LONGE, exponha o servidor num túnel (Cloudflare Tunnel/ngrok/bore) e o link público aparece aqui — o convidado cola em Conectar.', en: 'You are on the local network: send the address above to people on the SAME network. For far-away friends, expose the server through a tunnel (Cloudflare Tunnel/ngrok/bore) and the public link shows here — the guest pastes it into Connect.', es: 'Estás en la red local: envía la dirección de arriba a quien esté en la MISMA red. Para amigos LEJANOS, expón el servidor con un túnel (Cloudflare Tunnel/ngrok/bore) y el enlace público aparece aquí — el invitado lo pega en Conectar.' },
+  phonePubFar: { pt: 'Link público ativo: mande o link acima + o código da sala que amigos de qualquer lugar entram. Eles colam o link em Conectar e usam o código na aba Sala.', en: 'Public link active: send the link above + the room code and friends from anywhere join. They paste the link into Connect and use the code in the Room tab.', es: 'Enlace público activo: envía el enlace de arriba + el código de la sala y amigos desde cualquier lugar entran. Pegan el enlace en Conectar y usan el código en la pestaña Sala.' },
+  phoneServRoom: { pt: 'Salas & bate-papo', en: 'Rooms & chat', es: 'Salas y chat' },
+  phoneServRoomDesc: { pt: 'Crie uma sala, mande o código (e o link, pra quem está longe): todos acompanham músicas e vídeos em sincronia e conversam no bate-papo.', en: 'Create a room, send the code (and the link, for far-away friends): everyone follows music and videos in sync and chats together.', es: 'Crea una sala, envía el código (y el enlace, para los lejanos): todos siguen la música y los vídeos en sincronía y chatean.' },
   phVideoSec: { pt: 'Vídeos do computador', en: 'PC videos', es: 'Vídeos del PC' },
   phVideoSave: { pt: '＋ salvar todos', en: '＋ save all', es: '＋ guardar todos' },
   phVideoNone: { pt: 'Nenhum vídeo no servidor.', en: 'No videos on the server.', es: 'No hay vídeos en el servidor.' },
@@ -4074,7 +4083,7 @@ const CHANGELOG = {
     es: ['Pestaña "Celular": búsqueda y cómo ordenar las canciones del PC por título, artista o álbum', 'El servidor acompañante lee título/artista/álbum reales de las canciones del PC (MP3/FLAC/WAV) y detecta solo cuando entra música nueva', 'Lo que sonaba en el PC se puede restaurar en el celular, y las canciones nuevas del PC entran solas a la biblioteca', 'Comandos de voz más fiables: el micrófono ya no reacciona a conversaciones sin decir "TAMI", frases como "deja de sonar", "duerme en 30 minutos" y "pon música" ahora funcionan, y TAMI sostiene el micrófono mientras habla']
   },
 '1.36': {
-    pt: ['O servidor do PC agora serve também vídeos: a aba "Celular" lista os vídeos da pasta e um toque salva ou assiste na hora', 'Nova aba "Sala" (watch party na LAN): crie uma sala e compartilhe o código, ou entre no código de quem criou', 'No palco da sala você escolhe o vídeo/música do servidor (ou cola um link) e todos veem em sincronia — play, pausa e avanço são espelhados na hora', 'A sala mostra quem está junto (lista de participantes) e encerra sozinha se todos saírem', 'A sala ganhou bate-papo (chat) ao vivo para combinar o próximo vídeo enquanto todos seguem o palco', 'O servidor agora expõe um link público para as salas: com um túnel (Cloudflare Tunnel/ngrok/bore) amigos de longe entram com o código', 'A aba Celular ganhou "copiar link": um toque pega o endereço (público, se houver túnel) pra mandar pro amigo'],
+    pt: ['O servidor do PC agora serve também vídeos: a aba "Celular" lista os vídeos da pasta e um toque salva ou assiste na hora', 'Nova aba "Sala" (watch party na LAN): crie uma sala e compartilhe o código, ou entre no código de quem criou', 'No palco da sala você escolhe o vídeo/música do servidor (ou cola um link) e todos veem em sincronia — play, pausa e avanço são espelhados na hora', 'A sala mostra quem está junto (lista de participantes) e encerra sozinha se todos saírem', 'A sala ganhou bate-papo (chat) ao vivo para combinar o próximo vídeo enquanto todos seguem o palco', 'O servidor agora expõe um link público para as salas: com um túnel (Cloudflare Tunnel/ngrok/bore) amigos de longe entram com o código', 'A aba Celular virou um centro do servidor: mostra claramente o estado da conexão, o endereço em uso, o link público pra convidar amigos (com copiar/compartilhar) e o acesso às Salas', 'A aba Celular ganhou "copiar link": um toque pega o endereço (público, se houver túnel) pra mandar pro amigo'],
     en: ['The PC server now serves videos too: the "Phone" tab lists the videos in the folder and one tap saves or watches them right away', 'New "Room" tab (LAN watch party): create a room and share the code, or join with someone\'s code', 'On the room\'s stage you pick the server video/song (or paste a link) and everyone watches in sync — play, pause and seeking mirror instantly', 'The room shows who\'s in (participant list) and closes itself once everyone leaves', 'The room now has a live chat to agree on the next video while everyone follows the stage', 'The server now exposes a public link for rooms: with a tunnel (Cloudflare Tunnel/ngrok/bore) far-away friends join with the code', 'The Phone tab got "copy link": one tap grabs the address (public, if tunneled) to send to a friend'],
     es: ['El servidor del PC ahora sirve también vídeos: la pestaña "Celular" lista los vídeos de la carpeta y un toque los guarda o los reproduce al instante', 'Nueva pestaña "Sala" (watch party en la LAN): crea una sala y comparte el código, o entra con el código de quien la creó', 'En el escenario de la sala eliges el vídeo/canción del servidor (o pegas un enlace) y todos lo ven en sincronía — reproducir, pausar y avanzar se reflejan al momento', 'La sala muestra quiénes están (lista de participantes) y se cierra sola si todos se van', 'La sala ahora tiene bate-papo (chat) en vivo para combinar el siguiente vídeo mientras todos siguen el escenario', 'El servidor expone un link público para salas: con un túnel (Cloudflare Tunnel/ngrok/bore) los amigos de lejos entran con el código']
   },
@@ -4491,6 +4500,23 @@ function phoneCopyLink() {
     navigator.clipboard.writeText(pub).then(() => toast(L('roomLinkCopied'))).catch(() => {});
   } catch (e) {}
 }
+function phoneShareLink() {
+  const pub = (state.phone.server && (state.phone.server.publicUrl || state.phone.server.url)) || getRemote();
+  try {
+    if (navigator.share) {
+      navigator.share({ title: 'Servidor TAMI', text: 'Servidor TAMI: ' + pub, url: pub }).catch(() => {});
+    } else {
+      navigator.clipboard.writeText(pub).then(() => toast(L('roomLinkCopied'))).catch(() => {});
+    }
+  } catch (e) {}
+}
+function roomInviteText() {
+  const pub = state.phone.server && (state.phone.server.publicUrl || state.phone.server.url);
+  if (!pub) return state.room.code;
+  const host = pub.replace(/^https?:\/\//, '').split(/[:/?#]/)[0];
+  if (/^(10\.|192\.168\.|172\.(1[6-9]|2\d|3[01])\.|127\.|localhost)/.test(host)) return state.room.code;
+  return '🫂 Sala TAMI ' + state.room.code + ' · servidor: ' + pub;
+}
 function phonePlay() { sendCmd('toggle'); }
 function phonePrev() { sendCmd('prev'); }
 function phoneNext() { sendCmd('next'); }
@@ -4570,15 +4596,34 @@ function renderPhone() {
   const cur = s.current || null;
   const q = s.queue && s.queue.length ? s.queue : [];
   const songs = p.songs || [];
+  const pub = (p.server && (p.server.publicUrl || p.server.url)) || getRemote();
+  const pubHost = pub.replace(/^https?:\/\//, '').split(/[:/?#]/)[0];
+  const isPubRemote = /^https:\/\//i.test(pub) || !/^(10\.|192\.168\.|172\.(1[6-9]|2\d|3[01])\.|127\.|localhost)/.test(pubHost);
   let html = `<div class="phone-card">
     <div class="phone-status">${phoneStatusLine()}</div>
     <div style="display:flex;gap:6px;margin:10px 2px 6px">
       <input id="phone-addr" value="${esc(getRemote())}" placeholder="http://seu-pc:8081" style="flex:1;min-width:0;padding:8px 10px;border:1px solid var(--border,#333);border-radius:10px;background:var(--bg2,#16161d);color:var(--text,#eee);font-size:13px">
-      <button class="btn" onclick="phoneSet()" style="flex:0">Conectar</button>
+      <button class="btn" onclick="phoneSet()" style="flex:0">${esc(L('phoneGo'))}</button>
     </div>
-    <div style="display:flex;align-items:center;justify-content:space-between;font-size:11px;color:var(--text2,#999);margin:-2px 2px 4px">
-      <span>Endereço do PC com o servidor acompanhante — ex.: <b>192.168.1.10:8081</b></span>
-      <span style="white-space:nowrap" class="elink" onclick="phoneCopyLink()">🔗 ${esc(L('roomCopy'))}</span>
+    <div style="font-size:11px;color:var(--text2,#999);margin:-2px 2px 6px">Endereço do PC com o servidor acompanhante — ex.: <b>192.168.1.10:8081</b> ou um link público</div>
+    <div style="border:1px solid var(--border,#333);border-radius:12px;background:var(--bg2,#16161d);padding:10px;margin:2px 2px 10px">
+      <div style="font-size:11px;color:var(--text2,#999);padding:0 2px 4px">${esc(L('phoneServAddr'))}</div>
+      <code style="display:block;font-size:12px;color:var(--text,#eee);word-break:break-all;background:var(--surface-v,#1b1b24);border:1px solid var(--divider,#333);border-radius:8px;padding:8px;margin:0 0 8px">${esc(getRemote())}</code>
+      <div style="font-size:11px;color:var(--text2,#999);padding:0 2px 4px">${esc(L('phoneServPub'))}</div>
+      <code style="display:block;font-size:12px;color:var(--text,#eee);word-break:break-all;background:var(--surface-v,#1b1b24);border:1px solid var(--divider,#333);border-radius:8px;padding:8px;margin:0 0 8px">${esc(pub)}</code>
+      <div style="display:flex;gap:6px;padding:0 2px">
+        <button class="btn secondary" style="flex:1" onclick="phoneCopyLink()">🔗 ${esc(L('phoneCopy'))}</button>
+        <button class="btn secondary" style="flex:1" onclick="phoneShareLink()">📤 ${esc(L('phoneShare'))}</button>
+      </div>
+      <div style="font-size:11px;color:var(--text2,#999);padding:8px 2px 0;line-height:1.45">${isPubRemote ? esc(L('phonePubFar')) : esc(L('phonePubLan'))}</div>
+    </div>
+    <div style="border:1px solid var(--border,#333);border-radius:12px;background:var(--bg2,#16161d);padding:10px;margin:0 2px 10px">
+      <div style="font-size:13px;font-weight:700;color:var(--text,#eee);padding:0 2px 6px">🫂 ${esc(L('phoneServRoom'))}</div>
+      <div style="font-size:12px;color:var(--text2,#999);padding:0 2px 6px;line-height:1.45">${esc(L('phoneServRoomDesc'))}</div>
+      <div style="display:flex;gap:6px;padding:0 2px">
+        <button class="btn" style="flex:1" onclick="selectTab('room')">🫂 ${esc(L('roomTab'))}</button>
+        <button class="btn secondary" style="flex:1" onclick="roomJoin()">${esc(L('roomJoin'))}</button>
+      </div>
     </div>`;
 
   if (cur) {
@@ -4982,9 +5027,16 @@ function roomLeave() {
   toast(L('roomAutoLeave'));
 }
 function roomCopyCode() {
+  const pub = state.phone.server && (state.phone.server.publicUrl || state.phone.server.url);
+  const invite = roomInviteText();
+  const share = () => navigator.clipboard.writeText(invite).then(() => toast(L('roomCopied'))).catch(() => {});
   try {
-    navigator.clipboard.writeText(state.room.code).then(() => toast(L('roomCopied'))).catch(() => {});
-  } catch (e) {}
+    if (navigator.share && invite !== state.room.code) {
+      navigator.share({ title: 'Sala TAMI ' + state.room.code, text: invite, url: pub || '' }).catch(share);
+    } else {
+      share();
+    }
+  } catch (e) { share(); }
 }
 async function roomSendMedia(item) {
   if (state.room.role !== 'host') return;
