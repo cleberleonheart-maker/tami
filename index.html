@@ -620,6 +620,7 @@ function ytMount(videoId, positionMs, autoplay) {
   if (!videoId) return;
   loadYtApi(() => {
     if (!state.current || !isYtMedia(state.current)) return;
+    ytEnsureDom();
     const b = $('ytbox');
     if (!b) return;
     b.style.display = 'block';
@@ -3849,6 +3850,7 @@ function renderPlayer() {
   $('player-sub').textContent = (s.artist || s.album || 'TAMI') + (s.artist && s.album ? ' · ' + s.album : '');
   const art = $('player-art');
   if (isYt) {
+    ytEnsureDom();
     const b = $('ytbox');
     if (b) {
       if (art.querySelector('#ytbox')) b.style.display = 'block';
