@@ -2943,6 +2943,7 @@ function djNorm(t) {
 function djCommand(raw) {
   const norm = djNorm(raw);
   const hasWake = /tami|tammi|tammy|tamy|tani|tamni/.test(norm);
+  if (!hasWake) return false;
   const action = /bombar|festa|balada|anima|party|fiesta/.test(norm) ? 'bombar'
     : /relaxa|calma|calm|tranquil|light|relax|suave/.test(norm) ? 'relaxar'
     : /curiosidade|fato curioso|sabia|curios|fact|interesting|dato/.test(norm) ? 'curiosidade'
@@ -2951,12 +2952,12 @@ function djCommand(raw) {
     : /odia|odeio|nao gostei|nao curti|hat[eo]|dislike|no me gusta|detest/.test(norm) ? 'dislike'
     : /duplicad|repetid|duplicate|repeat/.test(norm) ? 'dupes'
     : /mix|mistur|shuffle|embaralha/.test(norm) ? 'mix'
-    : /pula|pular|pule\b|skip\b|saltar/.test(norm) ? 'skip'
+    : /pula|pular|pule\b|salta\b|skip\b|saltar/.test(norm) ? 'skip'
     : /proxim[ao]|passa|passe\b|avanc|next\b|siguiente|adelante/.test(norm) ? 'next'
     : /anterior|volta|voltar|volte\b|back\b|previous|retroced/.test(norm) ? 'prev'
-    : /pausa|pausar|pause|parar|pare\b|stop\b|\bpara a |\bpara o |\bpara tudo|para agora/.test(norm) ? 'pause'
-    : /\btoca\b|\btocar\b|\btoque\b|\bcontinua\b|play\b|roda\b|resume|reanud/.test(norm) ? 'play'
-    : /timer|dormi|dormir|sleep|desligar|desliga|alarma|apagar.*(minut|\d)/.test(norm) ? 'timer'
+    : /pausa|pausar|pause|parar|pare\b|stop\b|\bpara (a|o|de|com|por|tudo)\b|para agora|\bpara\s*$/.test(norm) ? 'pause'
+    : /\btoca\b|\btocar\b|\btoque\b|\bcontinua\b|play\b|roda\b|resume|reanud|\bpon(me)?\b/.test(norm) ? 'play'
+    : /timer|dorme|dormi|dormir|sleep|desligar|desliga|deslig|alarma|apagar.*(minut|\d)|minutos?/.test(norm) ? 'timer'
     : /favorit|curti|gostei|amei|like\b|megusta|favorit[oa]/.test(norm) ? 'fav'
     : /qual|\bessa\b|tocando|\bnome\b|\bo que\b|what|song\b|que suena|cual|info\b/.test(norm) ? 'info'
     : /recomend|suger|sugest|indica|dicas?\b|recommend|suggest|sugiere/.test(norm) ? 'recomenda'
@@ -3992,7 +3993,12 @@ const CHANGELOG = {
     pt: ['Os botões do player ficavam grandes demais e o play (e outros) sumiam da tela: agora a fileira desliza pro lado com o dedo e todo botão aparece', 'Corrige a música que parava ao fechar o app quando tocava uma música importada: ela agora é copiada na hora e continua no player nativo; o app também recupera a música sozinho se for fechado com força', 'Músicas importadas antes dessa versão também continuam ao fechar: a cópia é criada sozinha na primeira vez que a música toca'],
     en: ['The player buttons were too big and the play (and others) hid off screen: now the row slides sideways with your finger and every button shows up', 'Fixes music stopping when closing the app while an imported song played: it is now copied to the native player and keeps playing; the app also recovers the song by itself if closed forcefully', 'Songs imported before this version also keep playing when closing: the copy is created automatically the first time the song plays'],
     es: ['Los botones del reproductor eran demasiado grandes y el play (y otros) quedaban ocultos: ahora la fila se desliza de lado con el dedo y se ve cada botón', 'Corrige la música que se detenía al cerrar la app con una canción importada: ahora se copia al reproductor nativo y sigue sonando; la app también recupera la canción sola si se cierra a la fuerza', 'Las canciones importadas antes de esta versión también siguen sonando al cerrar: la copia se crea sola la primera vez que suena']
-  }
+  },
+'1.34': {
+    pt: ['Aba "Celular": busca e como ordenar as músicas do computador por título, artista ou álbum', 'O servidor acompanhante lê título/artista/álbum de verdade das músicas do PC (MP3/FLAC/WAV) e percebe sozinho quando entra música nova', 'O que estava tocando no PC pode ser restaurado no celular, e as músicas novas do PC entram na biblioteca sozinhas', 'Comandos de voz mais confiáveis: o microfone não reage mais a conversa sem chamar "TAMI", frases como "para de tocar", "dorme em 30 minutos" e "pon música" agora funcionam, e a TAMI segura o microfone enquanto fala'],
+    en: ['"Phone" tab: search and sort the computer\'s songs by title, artist or album', 'The companion server reads real title/artist/album from the PC music (MP3/FLAC/WAV) and detects new songs on its own', 'What was playing on the PC can be restored on the phone, and new PC songs join the library automatically', 'More reliable voice commands: the mic no longer reacts to speech without saying "TAMI", phrases like "stop playing", "sleep in 30 minutes" and "pon música" now work, and TAMI holds the mic while she speaks'],
+    es: ['Pestaña "Celular": búsqueda y cómo ordenar las canciones del PC por título, artista o álbum', 'El servidor acompañante lee título/artista/álbum reales de las canciones del PC (MP3/FLAC/WAV) y detecta solo cuando entra música nueva', 'Lo que sonaba en el PC se puede restaurar en el celular, y las canciones nuevas del PC entran solas a la biblioteca', 'Comandos de voz más fiables: el micrófono ya no reacciona a conversaciones sin decir "TAMI", frases como "deja de sonar", "duerme en 30 minutos" y "pon música" ahora funcionan, y TAMI sostiene el micrófono mientras habla']
+  },
 };
 function changelogList(ver) {
   let c = CHANGELOG[String(ver)];
