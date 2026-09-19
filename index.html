@@ -1225,6 +1225,20 @@ function getKV(k) {
     } catch (e) { clearTimeout(t); res(undefined); }
   });
 }
+function persistLastSong() {
+  if (!state.db || !state.current) return Promise.resolve();
+  let playing = false;
+  if (state.codec) {
+    try {
+      const o = JSON.parse(String(window.TamiNative && window.TamiNative.codecInfo ? window.TamiNative.codecInfo() : '{}') || '{}');
+      playing = !!o.playing;
+    } catch (e) {}
+  } else {
+    const el = state.current.type === 'video' ? video : audio;
+    playing = !el.paused && !el.ended && !!el.src;
+  }
+  return putKV('lastSong', { id: state.current.id, playing });
+}
 function clearStore(store) {
   if (!state.db) return Promise.resolve();
   return new Promise((res, rej) => {
@@ -3092,7 +3106,7 @@ function setAudioSource(s) {
   audio.src = objUrl(s);
   audio.play().then(() => updateMediaSession()).catch(() => {});
   ensureHandoffPath(s);
-  if (state.db) putKV('lastSong', { id: s.id });
+  if (state.db) putKV('lastSong', { id: s.id, playing: true });
   if (state.djMode) {
     if (s.id !== djLastId) { djLearnSet(s.id, { plays: djLearnGet(s.id).plays + 1 }); djLastId = s.id; }
     if (djEntered) djEntered = false;
@@ -3564,8 +3578,8 @@ audio.addEventListener('ended', () => {
   if (state.repeat === 1 || state.queueIndex < state.queue.length - 1 || state.upNext.length) next();
 });
 audio.addEventListener('timeupdate', updateProgress);
-audio.addEventListener('play', () => { renderPlayer(); if ('mediaSession' in navigator) navigator.mediaSession.playbackState = 'playing'; updateAvatarMood(); syncNativeNow(true); });
-audio.addEventListener('pause', () => { if (pendingHandoff) return; renderPlayer(); if ('mediaSession' in navigator) navigator.mediaSession.playbackState = 'paused'; updateAvatarMood(); syncNativeNow(true); });
+audio.addEventListener('play', () => { renderPlayer(); if ('mediaSession' in navigator) navigator.mediaSession.playbackState = 'playing'; updateAvatarMood(); syncNativeNow(true); persistLastSong(); });
+audio.addEventListener('pause', () => { if (pendingHandoff) return; renderPlayer(); if ('mediaSession' in navigator) navigator.mediaSession.playbackState = 'paused'; updateAvatarMood(); syncNativeNow(true); persistLastSong(); });
 video.addEventListener('timeupdate', updateProgress);
 video.addEventListener('play', () => { renderPlayer(); updateAvatarMood(); syncNativeNow(true); });
 video.addEventListener('pause', () => { renderPlayer(); updateAvatarMood(); syncNativeNow(true); });
@@ -4473,7 +4487,7 @@ async function init() {
     const idx = await getKV('lastSong');
     if (idx && state.songs.length) {
       const i = state.songs.findIndex((s) => s.id === idx.id);
-      if (i >= 0) {
+      if (i >= 0 && idx.playing !== false) {
         state.queue = state.songs.slice(i).concat(state.songs.slice(0, i));
         state.queueIndex = 0;
         playCurrent(); syncMini();
