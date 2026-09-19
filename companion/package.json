@@ -1,0 +1,25 @@
+{
+  "name": "tami-companion",
+  "version": "1.32.0",
+  "description": "Companion do TAMI: serve o web app e expõe a biblioteca de música local para o app (Internet/LAN).",
+  "main": "server.js",
+  "bin": "server.js",
+  "directories": { "web": "../" },
+  "scripts": {
+    "start": "node server.js",
+    "build": "sh build.sh"
+  },
+  "engines": { "node": ">=18" },
+  "pkg": {
+    "scripts": [ "server.js" ],
+    "assets": [
+      "../index.html",
+      "../sw.js",
+      "../manifest.json",
+      "../icon.svg",
+      "../version",
+      "../TAMI.apk"
+    ],
+    "targets": [ "node22-linux-arm64", "node22-linux-x64", "node22-win-x64" ]
+  }
+}
