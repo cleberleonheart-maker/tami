@@ -816,6 +816,14 @@ const I18N = {
   phMoreSongs: { pt: '+ {n} mais — atualizar lista', en: '+ {n} more — refresh list', es: '+ {n} más — actualizar lista' },
   phNoLib: { pt: 'O celular ainda não enviou a biblioteca. Aguarde o app sincronizar.', en: 'The phone has not sent its library yet. Wait for the app to sync.', es: 'El celular aún no envió la biblioteca. Espera a que la app sincronice.' },
   phNoConn: { pt: 'Sem conexão com o servidor do celular.', en: 'No connection to the phone server.', es: 'Sin conexión con el servidor del celular.' },
+  phSearch: { pt: '🔎 Buscar músicas neste celular…', en: '🔎 Search songs on this phone…', es: '🔎 Buscar canciones en este celular…' },
+  phSortLabel: { pt: 'Ordem', en: 'Sort', es: 'Orden' },
+  phSortOrig: { pt: 'Original', en: 'Original', es: 'Original' },
+  phSortTitle: { pt: 'Título', en: 'Title', es: 'Título' },
+  phSortArtist: { pt: 'Artista', en: 'Artist', es: 'Artista' },
+  phSortAlbum: { pt: 'Álbum', en: 'Album', es: 'Álbum' },
+  phEmptySearch: { pt: 'Nenhuma música encontrada.', en: 'No songs found.', es: 'Ninguna canción encontrada.' },
+  phAutoImport: { pt: '{n} música(s) nova(s) da pasta importada(s).', en: '{n} new song(s) imported from the folder.', es: '{n} canción(es) nueva(s) de la carpeta importada(s).' },
   updTitle: { pt: '🚀 Atualização disponível', en: '🚀 Update available', es: '🚀 Actualización disponible' },
   updBody: { pt: 'Saiu a TAMI <b>{nw}</b> e a sua é a {old}. Quer baixar e instalar agora?', en: 'TAMI <b>{nw}</b> is out and you have {old}. Download and install now?', es: 'Salió TAMI <b>{nw}</b> y tienes {old}. ¿Descargar e instalar ahora?' },
   updLater: { pt: 'Agora não', en: 'Not now', es: 'Ahora no' },
@@ -2524,6 +2532,7 @@ function pickDjVoice(u) {
 }
 async function djSpeak(text) {
   if (!state.djVoice || !text) return;
+  micHold(text);
   try {
     if (window.TamiNative && window.TamiNative.speak) { window.TamiNative.speak(text); return; }
   } catch (e) {}
@@ -2534,6 +2543,7 @@ async function djSpeak(text) {
     const u = new SpeechSynthesisUtterance(text);
     u.pitch = 1.2; u.rate = 0.95;
     pickDjVoice(u);
+    u.onend = () => micBack();
     speechSynthesis.speak(u);
   } catch (e) {}
 }
@@ -2854,37 +2864,74 @@ function tamiRadio() {
   startRadioClock();
   radioWelcome(L('radioOn', { n: q.length }));
 }
+let micItems = [];
+let micHoldUntil = 0;
+let micLastIdx = -1;
+function micHold(text) {
+  if (!state.djMic) return;
+  micItems.length = 0;
+  micHoldUntil = Date.now() + 250 + 60 * String(text).length;
+}
+function micBack() { micHoldUntil = 0; }
+function micStart() {
+  const SR = window.SpeechRecognition || window.webkitSpeechRecognition;
+  if (!SR || !state.djMic) return;
+  const r = new SR();
+  state.sr = r;
+  r.lang = LANG_LOCALES[state.lang] || 'pt-BR';
+  r.continuous = true;
+  r.interimResults = false;
+  r.maxAlternatives = 1;
+  micItems.length = 0;
+  micLastIdx = -1;
+  let restarted = false;
+  const doStart = () => { restarted = false; try { r.start(); } catch (e) {} };
+  const recycle = (delay) => {
+    if (restarted) return;
+    restarted = true;
+    setTimeout(() => { state.sr = null; micStart(); }, delay);
+  };
+  r.onresult = (ev) => {
+    const now = Date.now();
+    for (let i = Math.max(0, micLastIdx + 1); i < ev.results.length; i++) {
+      const t = ((ev.results[i] && ev.results[i][0] && ev.results[i][0].transcript) || '').trim();
+      if (!t) continue;
+      if (now < micHoldUntil) { micItems.length = 0; continue; }
+      micItems.push({ t, at: now });
+    }
+    micLastIdx = ev.results.length - 1;
+    if (!micItems.length) return;
+    while (micItems.length && now - micItems[0].at > 9000) micItems.shift();
+    if (djCommand(micItems.map((x) => x.t).join(' '))) {
+      micItems.length = 0;
+      micLastIdx = ev.results.length;
+      try { r.abort(); } catch (e) {}
+    }
+  };
+  r.onerror = (ev) => {
+    if (ev.error === 'not-allowed') { toast('Permita o microfone para comandar a TAMI.'); stopDjMic(); return; }
+    if (!state.djMic) return;
+    recycle(600);
+  };
+  r.onend = () => { if (state.djMic) recycle(350); };
+  doStart();
+}
 function pjMicToggle() {
   const SR = window.SpeechRecognition || window.webkitSpeechRecognition;
   if (!SR) { toast('Reconhecimento de voz não suportado neste navegador.'); return; }
   if (state.djMic) { stopDjMic(); return; }
   state.djMic = true;
   $('p-djmic').style.color = 'var(--primary)';
-  const r = new SR();
-  state.sr = r;
-  r.lang = LANG_LOCALES[state.lang] || 'pt-BR';
-  r.continuous = true;
-  r.interimResults = false;
-  r.maxAlternatives = 3;
-  const restart = () => { if (state.djMic) { try { r.start(); } catch (e) {} } };
-  r.onresult = (ev) => {
-    const last = ev.results[ev.results.length - 1];
-    const text = (last && last[0] && last[0].transcript || '').trim();
-    if (text) djCommand(text.toLowerCase());
-  };
-  r.onerror = (ev) => {
-    if (ev.error === 'no-speech' || ev.error === 'aborted' || ev.error === 'network' || ev.error === 'not-allowed') {
-      if (ev.error === 'not-allowed') { toast('Permita o microfone para comandar a TAMI.'); stopDjMic(); return; }
-      setTimeout(restart, 600);
-    }
-  };
-  r.onend = () => { if (state.djMic) setTimeout(restart, 400); };
+  micItems.length = 0;
+  renderVirgin();
   djSpeak(L('micListen'));
-  restart();
+  micStart();
 }
 function stopDjMic() {
   state.djMic = false;
   $('p-djmic').style.color = 'var(--text)';
+  micHoldUntil = 0;
+  micItems.length = 0;
   if (state.sr) { try { state.sr.stop(); } catch (e) {} state.sr = null; }
   renderVirgin();
 }
@@ -2895,29 +2942,31 @@ function djNorm(t) {
 }
 function djCommand(raw) {
   const norm = djNorm(raw);
-  const hasWake = /tami|tammi|tammy|tani/.test(norm);
-  const action = /bombar|festa|balada|anima|party|fiesta|rancear/.test(norm) ? 'bombar'
+  const hasWake = /tami|tammi|tammy|tamy|tani|tamni/.test(norm);
+  const action = /bombar|festa|balada|anima|party|fiesta/.test(norm) ? 'bombar'
     : /relaxa|calma|calm|tranquil|light|relax|suave/.test(norm) ? 'relaxar'
-    : /curiosidade|fato curioso|sabia|curios|fact|interesting|dato|saber/.test(norm) ? 'curiosidade'
-    : /locutor|radio\b|apresenta|announcer|present|anunci/.test(norm) ? 'locutor'
-    : /piada|zoeira|conta|engracad|sorri|joke|funny|laugh|chiste|cuenta/.test(norm) ? 'piada'
-    : /timer|dormi|dormir|sleep|deslig|apaga.*(min|minuto)|alarma|minutos?/.test(norm) ? 'timer'
-    : /mix|mistura|mixa|shuffle/.test(norm) ? 'mix'
-    : /odia|odeio|nao gostei|nao curti|hate|dislike|no me gusta|detesto/.test(norm) ? 'dislike'
+    : /curiosidade|fato curioso|sabia|curios|fact|interesting|dato/.test(norm) ? 'curiosidade'
+    : /locutor|radio\b|apresenta|anunci|announcer|presentador/.test(norm) ? 'locutor'
+    : /piada|zoeira|\bconta\b|\bcontar\b|engracad|sorri|joke|funny|laugh|chiste|cuenta/.test(norm) ? 'piada'
+    : /odia|odeio|nao gostei|nao curti|hat[eo]|dislike|no me gusta|detest/.test(norm) ? 'dislike'
     : /duplicad|repetid|duplicate|repeat/.test(norm) ? 'dupes'
-    : /pula|pular|pule|skip|saltar/.test(norm) ? 'skip'
-    : /proxima|passa|avanc|next|siguiente|adelante/.test(norm) ? 'next'
-    : /anterior|volta|volt|back|previous|retroced/.test(norm) ? 'prev'
-    : /pausa|parar|pare|stop|\bpara (a|o|de|com|por|agora)|pause\b/.test(norm) ? 'pause'
-    : /toca|toque|continua|play|roda|resume|reanud/.test(norm) ? 'play'
-    : /favorit|curti|gostei|amei|like|megusta|fav/.test(norm) ? 'fav'
-    : /qual|essa|tocando|nome|what|playing|song|que suena|cual/.test(norm) ? 'info'
-    : /recomend|suger|sugest|indica|dica|recommend|suggest|sugiere/.test(norm) ? 'recomenda'
+    : /mix|mistur|shuffle|embaralha/.test(norm) ? 'mix'
+    : /pula|pular|pule\b|skip\b|saltar/.test(norm) ? 'skip'
+    : /proxim[ao]|passa|passe\b|avanc|next\b|siguiente|adelante/.test(norm) ? 'next'
+    : /anterior|volta|voltar|volte\b|back\b|previous|retroced/.test(norm) ? 'prev'
+    : /pausa|pausar|pause|parar|pare\b|stop\b|\bpara a |\bpara o |\bpara tudo|para agora/.test(norm) ? 'pause'
+    : /\btoca\b|\btocar\b|\btoque\b|\bcontinua\b|play\b|roda\b|resume|reanud/.test(norm) ? 'play'
+    : /timer|dormi|dormir|sleep|desligar|desliga|alarma|apagar.*(minut|\d)/.test(norm) ? 'timer'
+    : /favorit|curti|gostei|amei|like\b|megusta|favorit[oa]/.test(norm) ? 'fav'
+    : /qual|\bessa\b|tocando|\bnome\b|\bo que\b|what|song\b|que suena|cual|info\b/.test(norm) ? 'info'
+    : /recomend|suger|sugest|indica|dicas?\b|recommend|suggest|sugiere/.test(norm) ? 'recomenda'
     : /obrigad|valeu|thanks|thank|gracias/.test(norm) ? 'thanks'
-    : /oi|ola|hello|hola|hi\b/.test(norm) ? 'hello'
+    : /oi\b|ola\b|hello\b|hola\b|hi\b|e ai\b/.test(norm) ? 'hello'
     : null;
-  if (!hasWake) return;
-  if (!action) { djSpeak(L('comNo')); return; }
+  if (!action) {
+    if (hasWake) { djSpeak(L('comNo')); return true; }
+    return false;
+  }
   const cur = state.current;
   switch (action) {
     case 'bombar': djSpeak(L('actBombar')); setTimeout(() => djMix('bombar'), 1500); break;
@@ -2959,11 +3008,13 @@ function djCommand(raw) {
     case 'pause': {
       const el2 = state.current && state.current.type === 'video' ? video : audio;
       if (el2.src && !el2.paused) { el2.pause(); djSpeak(L('actPause')); }
+      else { djSpeak(L('actNothing')); }
       break;
     }
     case 'play': {
       const el2 = state.current && state.current.type === 'video' ? video : audio;
       if (el2.src && el2.paused) { safePlay(el2); djSpeak('Tocando de novo!'); }
+      else if (!el2.src) { djSpeak(L('actNothing')); }
       break;
     }
     case 'fav':
@@ -2975,6 +3026,7 @@ function djCommand(raw) {
     case 'thanks': djSpeak(L('actThanks')); break;
     case 'hello': djSpeak(L('hello')); break;
   }
+  return true;
 }
 
 // ---------- Recomendações ----------
@@ -4324,7 +4376,14 @@ async function probeCompanion() {
     window.__COMPANION__ = true;
     toast('Modo acompanhante ativo — aba Celular conectada.');
     const es = new EventSource('/api/events');
-    es.onmessage = (ev) => { try { const m = JSON.parse(ev.data); if (m && m.cmd) companionExec(m.cmd, m.value); } catch (e) {} };
+    es.onmessage = (ev) => {
+      try {
+        const m = JSON.parse(ev.data);
+        if (!m || !m.cmd) return;
+        if (m.cmd === 'newlib') { autoImportCompanion(m.value); return; }
+        companionExec(m.cmd, m.value);
+      } catch (e) {}
+    };
     setInterval(publishState, 2500);
     setTimeout(publishState, 1000);
   } catch (e) {}
@@ -4347,9 +4406,72 @@ function phoneVolume(v) { sendCmd('volume', Math.round(+v * 100)); }
 function phoneReload() {
   pollRemote().then(() => toast('Lista do celular atualizada.'));
 }
+async function companionRestore() {
+  try {
+    const r = await fetch(getRemote() + '/remote', { cache: 'no-store' });
+    if (!r.ok) return;
+    const d = await r.json();
+    const st = d.state || {};
+    const q = Array.isArray(st.queue) ? st.queue.filter((x) => x && x.id) : [];
+    if (!q.length || !(state.songs || []).length) return;
+    const pool = new Map(state.songs.map((s) => [s.id, s]));
+    const list = [];
+    for (const x of q) { const sm = pool.get(x.id); if (sm) list.push(sm); }
+    if (!list.length) return;
+    const curId = st.current && st.current.id;
+    let idx = curId ? list.findIndex((s) => s.id === curId) : 0;
+    if (idx < 0) idx = 0;
+    state.queue = list;
+    state.queueIndex = idx;
+    playCurrent();
+    const el = state.current && state.current.type === 'video' ? video : audio;
+    if (el) {
+      const pauseIfPaused = () => { if (st.playing === false) { try { el.pause(); } catch (e) {} } };
+      const pos = (Number(st.positionMs) || 0) / 1000;
+      const applyPos = () => {
+        try { if (pos > 0) el.currentTime = pos; pauseIfPaused(); } catch (e) {}
+      };
+      if (el.readyState >= 1) applyPos();
+      else el.addEventListener('loadedmetadata', applyPos, { once: true });
+      pauseIfPaused();
+    }
+  } catch (e) {}
+}
+async function autoImportCompanion(v) {
+  try {
+    const r = await fetch(getRemote() + '/remote', { cache: 'no-store' });
+    if (!r.ok) return;
+    const d = await r.json();
+    const list = (d.songs && d.songs.songs) || [];
+    if (!list.length) return;
+    const existing = new Set((state.songs || []).map((s) => s.url).filter(Boolean));
+    let added = 0;
+    for (const x of list) {
+      if (!x.url || existing.has(x.url)) continue;
+      try {
+        await putSong({
+          id: 'r' + seedHash(x.url).toString(36) + '-' + Math.random().toString(36).slice(2, 8),
+          title: x.title || 'Música', artist: x.artist || 'Artista desconhecido',
+          album: x.album || UNKNOWN, year: new Date().getFullYear(),
+          durationMs: x.durationMs || 0, type: 'song', url: x.url,
+          name: (x.title || 'Música') + '.mp3', createdAt: Date.now() + added
+        });
+        existing.add(x.url);
+        added++;
+      } catch (e) { console.warn('autoimport', e); }
+    }
+    if (added > 0) {
+      await reloadAll();
+      toast(L('phAutoImport').replace('{n}', added));
+    } else if (v && v.count) {
+      toast(L('phAutoImport').replace('{n}', v.count));
+    }
+  } catch (e) {}
+}
 function renderPhone() {
   const cv = $('phone-view');
   if (!cv) return;
+  const wasQ = document.activeElement && document.activeElement.id === 'phone-q';
   const p = state.phone;
   const s = p.state || {};
   const cur = s.current || null;
@@ -4408,17 +4530,32 @@ function renderPhone() {
   }
   html += `</div>`;
 
-  html += `<div class="section">Músicas do celular${songs.length ? ' · ' + songs.length : ''}</div>
+  html += `<div class="section" style="display:flex;align-items:center;justify-content:space-between">Músicas do celular${songs.length ? ' · ' + songs.length : ''}</div>
+  <div style="display:flex;gap:6px;margin:0 2px 6px">
+    <input id="phone-q" value="${esc(phoneSearch)}" placeholder="${esc(L('phSearch'))}" style="flex:1;min-width:0;padding:8px 10px;border:1px solid var(--border,#333);border-radius:10px;background:var(--bg2,#16161d);color:var(--text,#eee);font-size:13px">
+    <select id="phone-sort" style="padding:8px;border:1px solid var(--border,#333);border-radius:10px;background:var(--bg2,#16161d);color:var(--text,#eee);font-size:13px">
+      <option value="orig"${phoneSort === 'orig' ? ' selected' : ''}>${esc(L('phSortOrig'))}</option>
+      <option value="title"${phoneSort === 'title' ? ' selected' : ''}>${esc(L('phSortTitle'))}</option>
+      <option value="artist"${phoneSort === 'artist' ? ' selected' : ''}>${esc(L('phSortArtist'))}</option>
+      <option value="album"${phoneSort === 'album' ? ' selected' : ''}>${esc(L('phSortAlbum'))}</option>
+    </select>
+  </div>
   <div id="phone-songs">`;
   if (songs.length) {
-    const list = songs.slice(0, 50);
-    for (const x of list) {
-      html += `<div class="item">
-        <div class="art small">${esc(initials((x.album && x.album !== UNKNOWN ? x.album : x.title) || '?'))}</div>
-        <div class="mid"><div class="it-title">${esc(x.title)}</div><div class="it-sub">${esc(x.artist || '')} · ${fmtClock(x.durationMs)}</div></div>
-      </div>`;
+    const filtered = phoneApply(songs);
+    if (filtered.length) {
+      const showAll = !!phoneSearch || filtered.length <= 50;
+      const list = showAll ? filtered : filtered.slice(0, 50);
+      for (const x of list) {
+        html += `<div class="item">
+          <div class="art small">${esc(initials((x.album && x.album !== UNKNOWN ? x.album : x.title) || '?'))}</div>
+          <div class="mid"><div class="it-title">${esc(x.title)}</div><div class="it-sub">${esc(x.artist || '')} · ${fmtClock(x.durationMs)}</div></div>
+        </div>`;
+      }
+      if (!showAll) html += `<div class="elink" style="padding:10px" onclick="phoneReload()">${L('phMoreSongs').replace('{n}', filtered.length - 50)}</div>`;
+    } else {
+      html += `<div class="empty" style="padding:16px 8px">${esc(L('phEmptySearch'))}</div>`;
     }
-    if (songs.length > 50) html += `<div class="elink" style="padding:10px" onclick="phoneReload()">+ ${songs.length - 50} mais — atualizar lista</div>`;
   } else {
     html += `<div class="empty" style="padding:16px 8px">O celular ainda não enviou a biblioteca. Aguarde o app sincronizar.</div>`;
   }
@@ -4435,6 +4572,35 @@ function renderPhone() {
     let t = 0;
     vl.oninput = () => { clearTimeout(t); t = setTimeout(() => phoneVolume(vl.value), 250); };
   }
+  const qe = $('phone-q');
+  if (qe) {
+    qe.value = phoneSearch;
+    qe.oninput = () => { phoneSearch = qe.value; renderPhone(); };
+    qe.onpointerup = (e) => { e.stopPropagation(); };
+    if (wasQ) qe.focus();
+  }
+  const so = $('phone-sort');
+  if (so) {
+    so.onchange = () => { phoneSort = so.value; renderPhone(); };
+    so.onpointerup = (e) => { e.stopPropagation(); };
+  }
+}
+let phoneSearch = '';
+let phoneSort = 'orig';
+function phoneApply(list) {
+  let l = list;
+  if (phoneSearch) {
+    const q = phoneSearch.trim().toLowerCase();
+    l = l.filter((x) =>
+      (x.title || '').toLowerCase().includes(q) ||
+      (x.artist || '').toLowerCase().includes(q) ||
+      (x.album || '').toLowerCase().includes(q));
+  }
+  if (phoneSort !== 'orig') {
+    const key = phoneSort;
+    l = l.slice().sort((a, b) => String(a[key] || '').localeCompare(String(b[key] || ''), 'pt'));
+  }
+  return l;
 }
 function startPhonePoll() {
   clearInterval(phoneTimer);
@@ -4494,6 +4660,10 @@ async function init() {
       }
     }
   } catch (e) { console.warn('restore', e); }
+  try {
+    await Promise.race([Promise.resolve(window.__companionProbe), new Promise((r) => setTimeout(r, 2500))]);
+    if (window.__COMPANION__) await companionRestore();
+  } catch (e) { console.warn('companion restore', e); }
   try { renderAll(); } catch (e) { console.warn('render', e); }
   try { startPhonePoll(); } catch (e) {}
   try {
@@ -4596,7 +4766,7 @@ function createFab() {
   };
   document.body.appendChild(fab);
 }
-probeCompanion();
+window.__companionProbe = probeCompanion();
 init();
 </script>
 </body>
