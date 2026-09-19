@@ -603,6 +603,8 @@ function loadYtApi(cb) {
 }
 function ytEnsureDom() {
   if (!document.getElementById('ytbox')) {
+    if (ytPlayer && ytPlayer.destroy) { try { ytPlayer.destroy(); } catch (e) {} }
+    ytPlayer = null;
     const b = document.createElement('div');
     b.id = 'ytbox';
     b.style.cssText = 'display:none;width:100%;height:100%;background:#000';
