@@ -744,7 +744,7 @@ const I18N = {
   lyrLoc: { pt: 'Traduzindo…', en: 'Translating…', es: 'Traduciendo…' },
   radioNeed: { pt: 'Importe músicas para a Rádio TAMI tocar.', en: 'Import some songs so Radio TAMI can play.', es: 'Importa canciones para que Radio TAMI toque.' },
   radioOff: { pt: 'Rádio desligada.', en: 'Radio off.', es: 'Radio apagada.' },
-  micListen: { pt: 'Oi! Eu sou a TAMI. Estou ouvindo: fale TAMI, próxima música.', en: 'Hi! I\'m TAMI. I\'m listening: say TAMI, next song.', es: '¡Hola! Soy TAMI. Estoy escuchando: di TAMI, siguiente canción.' },
+  micListen: { pt: 'Oi! Sou a TAMI! Estou ouvindo. Fale: próxima música, pausa, uma piada... ou diga TAMI ou Victor para chamar um DJ.', en: 'Hi! I\'m TAMI! I\'m listening. Say: next song, pause, a joke... or say TAMI or Victor to call a DJ.', es: '¡Hola! Soy TAMI! Estoy escuchando. Di: siguiente canción, pausa, un chiste... o di TAMI o Victor para llamar a un DJ.' },
   comNo: { pt: 'Desculpa, não entendi. Tente: TAMI, próxima música.', en: 'Sorry, I didn\'t get that. Try: TAMI, next song.', es: 'Perdón, no te entendí. Prueba: TAMI, siguiente canción.' },
   swapToTami: { pt: 'Agora quem comanda é a TAMI!', en: 'Now TAMI is in charge!', es: '¡Ahora la que manda es TAMI!' },
   swapToVictor: { pt: 'Agora quem comanda é o Victor!', en: 'Now Victor is in charge!', es: '¡Ahora el que manda es Victor!' },
@@ -854,6 +854,9 @@ const I18N = {
   vRecSub: { pt: 'Escolhas da TAMI', en: "TAMI's picks", es: 'Elecciones de TAMI' },
   vScan: { pt: 'Localizar', en: 'Locate', es: 'Localizar' },
   vScanSub: { pt: 'Músicas do aparelho', en: 'Music on device', es: 'Música en el dispositivo' },
+  vCmd: { pt: 'Comandos de voz', en: 'Voice commands', es: 'Comandos de voz' },
+  vCmdSub: { pt: 'O que falar no mic', en: 'What to say to the mic', es: 'Qué decirle al micrófono' },
+  vCmdTip: { pt: 'Pode falar só o comando (ex.: próxima) ou chamar antes: TAMI, próxima.', en: 'Say just the command (e.g. next) or call first: TAMI, next.', es: 'Puedes decir el comando solo (p.ej. siguiente) o llamar antes: TAMI, siguiente.' },
   emptyNeed: { pt: 'A TAMI precisa de músicas para tocar.', en: 'TAMI needs songs to play.', es: 'TAMI necesita canciones para tocar.' },
   profileTitle: { pt: 'Perfil', en: 'Profile', es: 'Perfil' },
   nickLabel: { pt: 'Nickname:', en: 'Nickname:', es: 'Apodo:' },
@@ -2825,6 +2828,92 @@ function djVoiceToggle() {
   if (state.djVoice) djSpeak(L('hiIntro'));
   renderVirgin();
 }
+const CMDS = {
+  pt: [
+    ['TAMI ou Victor', 'Chama a DJ e troca para o nome falado'],
+    ['troca o DJ', 'Alterna entre TAMI e Victor'],
+    ['ambos / TAMI e Victor', 'As duas se apresentam juntas'],
+    ['cadê o Victor? / cadê a TAMI?', 'Responde citando o irmão'],
+    ['próxima / pular', 'Próxima música'],
+    ['anterior / volta', 'Volta para a anterior'],
+    ['pausa / para', 'Pausa a música'],
+    ['toca / continua', 'Retoma a música'],
+    ['bombar / festa', 'Playlist animada para a festa'],
+    ['relaxar / calma', 'Playlist tranquila'],
+    ['modo locutor / rádio', 'Alterna o locutor de rádio'],
+    ['uma piada', 'Conta uma piada'],
+    ['uma curiosidade / sabia?', 'Conta um fato curioso'],
+    ['dormir em 30 minutos', 'Timer de sono'],
+    ['qual está tocando?', 'Anuncia o que está tocando'],
+    ['recomenda uma', 'Sugere músicas para você'],
+    ['curti / favorita', 'Favorita a música'],
+    ['não gostei', 'Pula e aprende sua preferência'],
+    ['fala boa vibe', 'Repete o que você disser'],
+    ['obrigada / valeu', 'Responde ao agradecimento'],
+    ['oi / olá', 'Cumprimenta'],
+  ],
+  en: [
+    ['TAMI or Victor', 'Wakes up and switches to the spoken name'],
+    ['switch the DJ', 'Toggles between TAMI and Victor'],
+    ['both / TAMI and Victor', 'Both introduce themselves'],
+    ['where is Victor? / where is TAMI?', 'Answers pointing to the sibling'],
+    ['next / skip', 'Next song'],
+    ['previous / back', 'Goes back'],
+    ['pause', 'Pauses the music'],
+    ['play / resume', 'Resumes the music'],
+    ['party up', 'Upbeat party playlist'],
+    ['relax', 'Chill playlist'],
+    ['announcer mode / radio', 'Toggles the radio announcer'],
+    ['tell a joke', 'Tells a joke'],
+    ['a fun fact', 'Tells a fun fact'],
+    ['sleep in 30 minutes', 'Sleep timer'],
+    ['what song is this?', 'Announces the current song'],
+    ['recommend one', 'Suggests songs for you'],
+    ['like it', 'Favorites the song'],
+    ['I do not like it', 'Skips and learns your taste'],
+    ['say good vibes', 'Repeats what you say'],
+    ['thanks', 'Replies to your thanks'],
+    ['hello', 'Says hi'],
+  ],
+  es: [
+    ['TAMI o Victor', 'Despierta y cambia al nombre dicho'],
+    ['cambia el DJ', 'Alterna entre TAMI y Victor'],
+    ['ambos / TAMI y Victor', 'Ambos se presentan juntos'],
+    ['¿dónde está Victor? / ¿dónde está TAMI?', 'Responde señalando al hermano'],
+    ['siguiente / saltar', 'Siguiente canción'],
+    ['anterior / atrás', 'Vuelve a la anterior'],
+    ['pausa', 'Pausa la música'],
+    ['toca / continúa', 'Reanuda la música'],
+    ['fiesta', 'Lista animada de fiesta'],
+    ['relaja', 'Lista tranquila'],
+    ['modo locutor / radio', 'Alterna el locutor de radio'],
+    ['un chiste', 'Cuenta un chiste'],
+    ['una curiosidad', 'Cuenta un dato curioso'],
+    ['dormir en 30 minutos', 'Temporizador de sueño'],
+    ['¿qué está sonando?', 'Anuncia la canción actual'],
+    ['recomienda una', 'Sugiere canciones'],
+    ['me gusta', 'Favorece la canción'],
+    ['no me gusta', 'Salta y aprende tu gusto'],
+    ['dí buena vibra', 'Repite lo que digas'],
+    ['gracias', 'Responde al agradecimiento'],
+    ['hola', 'Saluda'],
+  ],
+};
+function tamiComandos() {
+  const list = $('modal');
+  const rows = (CMDS[state.lang] || CMDS.pt).map(([say, doWhat]) =>
+    `<div class="mrow">
+      <div style="flex:1;min-width:0">
+        <div class="it-title" style="color:var(--primary)">${esc(say)}</div>
+        <div class="it-sub">${esc(doWhat)}</div>
+      </div>
+    </div>`).join('');
+  list.innerHTML = `<h3>📜 ${L('vCmd')}</h3>
+    <div class="section" style="font-size:13px;opacity:.85">${esc(L('vCmdTip'))}</div>
+    <div class="list" style="max-height:52vh;overflow-y:auto;padding:0">${rows}</div>
+    <div id="modal-actions"><button class="btn secondary" onclick="closeModal()">${L('btnClose')}</button></div>`;
+  $('modal-wrap').classList.add('show');
+}
 function tamiLang() {
   const list = $('modal');
   const order = ['pt', 'en', 'es'];
@@ -3243,7 +3332,7 @@ function djCommand(raw) {
     : null;
   if (!hasTami && !hasVictor) {
     if (!action && swap) { switchPersona(); return true; }
-    return false;
+    if (!action) return false;
   }
   if (hasVictor) setPersona('victor', false);
   else if (hasTami && state.persona !== 'tami') setPersona('tami', false);
