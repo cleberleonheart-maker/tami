@@ -2677,6 +2677,7 @@ function djPersonaText(text) {
   const p = persona();
   if (!p || !text || p.key === 'tami') return text;
   return String(text)
+    .replace(/A TAMI/g, 'O ' + p.name)
     .replace(/a TAMI/g, 'o ' + p.name)
     .replace(/da TAMI/g, 'do ' + p.name)
     .replace(/na TAMI/g, 'no ' + p.name)
@@ -3298,6 +3299,13 @@ function djCommand(raw) {
   const hasVictor = /\b(victor|vitor|viktor|victorr)\b/.test(norm);
   const hasBoth = /ambos|as duas|os dois\b|juntos?\b|a dupla|\bdupla\b|tami e (o )?victor|victor e (a )?tami|familia|irm[aã]os|voces\b|ustedes\b|los dos\b/.test(norm);
   if (hasBoth || (hasTami && hasVictor)) {
+    if (swap) {
+      let lastV = -1;
+      for (const v of ['victor', 'vitor', 'viktor', 'victorr']) lastV = Math.max(lastV, norm.lastIndexOf(v));
+      const lastT = norm.lastIndexOf('tami');
+      setPersona(lastT > lastV ? 'tami' : 'victor', true);
+      return true;
+    }
     djSpeak(L('bothIntro'), true);
     return true;
   }
@@ -4225,6 +4233,7 @@ function renderVirgin() {
       <div class="v-card" onclick="tamiStats()"><div class="v-ic">📊</div><div class="v-l">${L('vStats')}</div><div class="v-s">${L('vStatsSub')}</div></div>
       <div class="v-card" onclick="tamiRecomenda()"><div class="v-ic">🎯</div><div class="v-l">${L('vRec')}</div><div class="v-s">${djPersonaText(L('vRecSub'))}</div></div>
       <div class="v-card" onclick="scanDeviceMusic()"><div class="v-ic">📂</div><div class="v-l">${L('vScan')}</div><div class="v-s">${L('vScanSub')}</div></div>
+      <div class="v-card" onclick="tamiComandos()"><div class="v-ic">🎙📜</div><div class="v-l">${L('vCmd')}</div><div class="v-s">${L('vCmdSub')}</div></div>
     </div>`;
   if (!hasSongs) {
     html += `<div class="empty"><div class="big">🎧</div>${djPersonaText(L('emptyNeed'))}<br><button class="btn" onclick="$('fileSongs').click()">${L('btnImportSongs')}</button></div>`;
