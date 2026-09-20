@@ -720,6 +720,7 @@ const I18N = {
   sleepWarn: { pt: 'Faltam dois minutos para eu desligar tudo. Se quiser continuar, é só cancelar o timer.', en: 'Two minutes left until I shut everything down. If you want to keep going, just cancel the timer.', es: 'Faltan dos minutos para que apague todo. Si quieres continuar, solo cancela el temporizador.' },
   sleepSet: { pt: 'Beleza! Vou desligar a música daqui a {n} minutos. Boa noite já adiantada.', en: 'Alright! I\'ll turn the music off in {n} minutes. Sleep well in advance.', es: '¡Listo! Apagaré la música en {n} minutos. Buenas noches anticipadas.' },
   sleepCancel: { pt: 'Ok! Cancelei o timer. A festa continua.', en: 'Okay! I\'ve cancelled the timer. The party goes on.', es: '¡Ok! Cancelé el temporizador. La fiesta continúa.' },
+  idleSleep: { pt: 'Estou dormindo... venha me acordar!', en: 'I\'m sleeping... come wake me up!', es: 'Estoy durmiendo... ¡ven a despertarme!' },
   radioOn: { pt: 'Você está ouvindo a Rádio TAMI F.M., tocando {n} músicas de todos os estilos!', en: 'You\'re listening to TAMI F.M. Radio, playing {n} songs of every style!', es: '¡Estás escuchando Radio TAMI F.M., tocando {n} canciones de todos los estilos!' },
   dayGreet: { pt: 'Bom dia!', en: 'Good morning!', es: '¡Buenos días!' },
   afterGreet: { pt: 'Boa tarde!', en: 'Good afternoon!', es: '¡Buenas tardes!' },
@@ -5776,6 +5777,24 @@ async function init() {
     if (state.djVoice) djSpeak(L('welcome'));
   }, { once: true, passive: true });
   document.addEventListener('pointerdown', () => { ensureVis(); }, { passive: true });
+  let idleLastUse = Date.now(), idleLastNotif = 0;
+  function noteUse() { idleLastUse = Date.now(); idleLastNotif = 0; }
+  document.addEventListener('pointerdown', noteUse, { passive: true });
+  document.addEventListener('keydown', noteUse, { passive: true });
+  document.addEventListener('touchstart', noteUse, { passive: true });
+  setInterval(() => {
+    if (window.TamiNative) return;
+    const now = Date.now();
+    if (now - idleLastUse >= 30 * 60000 && (!idleLastNotif || now - idleLastNotif >= 30 * 60000)) {
+      idleLastNotif = now;
+      const msg = L('idleSleep');
+      toast(persona().name + ': ' + msg);
+      if (state.djVoice) djSpeak(msg);
+      if ('Notification' in window && Notification.permission === 'granted') {
+        try { new Notification(persona().name, { body: msg, tag: 'tami-idle' }); } catch (e) {}
+      }
+    }
+  }, 15000);
   try { startVis(); } catch (e) {}
   try { checkBackgroundHandoff(); } catch (e) {}
   try { maybeShowWhatsNew(); } catch (e) {}

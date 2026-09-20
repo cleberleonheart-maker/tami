@@ -14,10 +14,15 @@ import android.net.Uri
 import android.os.Build
 import android.os.Bundle
 import android.os.Environment
+import android.os.Handler
+import android.os.Looper
 import android.os.ParcelFileDescriptor
+import android.os.SystemClock
 import android.provider.MediaStore
 import android.provider.Settings
 import android.speech.tts.TextToSpeech
+import android.speech.tts.Voice
+import android.view.MotionEvent
 import android.webkit.JavascriptInterface
 import android.webkit.PermissionRequest
 import android.webkit.ValueCallback
@@ -52,6 +57,23 @@ class MainActivity : AppCompatActivity() {
     private var pendingApk: File? = null
     private var pendingNotifApk: File? = null
     private var phonePermAsked = false
+    @Volatile private var currentPersona = "tami"
+    @Volatile private var currentLang = "pt"
+    private val idleHandler = Handler(Looper.getMainLooper())
+    private var lastUserTouch: Long = 0L
+    private var lastIdleNotif: Long = 0L
+    private val idleWatch = object : Runnable {
+        override fun run() {
+            try {
+                val now = SystemClock.elapsedRealtime()
+                if (now - lastUserTouch >= IDLE_AFTER_MS && now - lastIdleNotif >= IDLE_REPEAT_MS) {
+                    lastIdleNotif = now
+                    postIdleSleep()
+                }
+            } catch (e: Exception) {}
+            idleHandler.postDelayed(this, IDLE_CHECK_MS)
+        }
+    }
     private val telephonyManager by lazy { getSystemService(TELEPHONY_SERVICE) as TelephonyManager }
     @Suppress("DEPRECATION")
     private val callStateListener = object : PhoneStateListener() {
@@ -245,12 +267,7 @@ class MainActivity : AppCompatActivity() {
 
         @JavascriptInterface
         fun speak(text: String) {
-            runOnUiThread {
-                try {
-                    if (!::tts.isInitialized || tts.isSpeaking) tts.stop()
-                    tts.speak(text, TextToSpeech.QUEUE_FLUSH, null, "tami")
-                } catch (e: Exception) {}
-            }
+            runOnUiThread { speakMessage(text) }
         }
 
         @JavascriptInterface
@@ -260,6 +277,7 @@ class MainActivity : AppCompatActivity() {
 
         @JavascriptInterface
         fun setLang(lang: String) {
+            currentLang = when (lang) { "en" -> "en"; "es" -> "es"; else -> "pt" }
             val locale = when (lang) {
                 "en" -> Locale("en", "US")
                 "es" -> Locale("es", "ES")
@@ -271,6 +289,11 @@ class MainActivity : AppCompatActivity() {
                     else pendingTtsLang = locale
                 } catch (e: Exception) {}
             }
+        }
+
+        @JavascriptInterface
+        fun setPersona(key: String) {
+            currentPersona = if (key == "victor") "victor" else "tami"
         }
 
         @JavascriptInterface
@@ -443,6 +466,84 @@ class MainActivity : AppCompatActivity() {
                 "error"
             }
         }
+    }
+
+    private fun speakMessage(text: String) {
+        try {
+            if (!::tts.isInitialized || tts.isSpeaking) tts.stop()
+            val voice = pickVoice(currentPersona == "victor")
+            if (voice != null) { try { tts.setVoice(voice) } catch (e: Exception) {} }
+            tts.speak(text, TextToSpeech.QUEUE_FLUSH, null, "tami")
+        } catch (e: Exception) {}
+    }
+
+    private fun pickVoice(male: Boolean): Voice? {
+        return try {
+            val voices = tts.voices ?: return null
+            val l2 = currentLang.lowercase().take(2)
+            val rex = if (male) {
+                Regex("male|masculin|hombre|\\bman\\b|\\bboy\\b|daniel|david|jo[aá]o|juan|mark|fred|alex|ricardo|tiago|diego|carlos|miguel|lucas|guy|google uk english male", RegexOption.IGNORE_CASE)
+            } else {
+                Regex("female|feminina|femenine|\\bwoman\\b|helena|samantha|karen|zira|paula|google uk english female", RegexOption.IGNORE_CASE)
+            }
+            voices.firstOrNull { v -> v.locale.language == l2 && rex.containsMatchIn(v.name ?: "") }
+                ?: voices.firstOrNull { v -> rex.containsMatchIn(v.name ?: "") }
+        } catch (e: Exception) { null }
+    }
+
+    private fun noteUserInteraction() {
+        val now = SystemClock.elapsedRealtime()
+        lastUserTouch = now
+        lastIdleNotif = now
+        try { (getSystemService(NOTIFICATION_SERVICE) as? NotificationManager)?.cancel(IDLE_NOTIF_ID) } catch (e: Exception) {}
+    }
+
+    override fun dispatchTouchEvent(ev: MotionEvent): Boolean {
+        if (ev.actionMasked == MotionEvent.ACTION_DOWN) noteUserInteraction()
+        return super.dispatchTouchEvent(ev)
+    }
+
+    private fun postIdleSleep() {
+        val name = if (currentPersona == "victor") "Victor" else "TAMI"
+        val phrase = when (currentLang) {
+            "en" -> "I'm sleeping... come wake me up!"
+            "es" -> "Estoy durmiendo... ¡ven a despertarme!"
+            else -> "Estou dormindo... venha me acordar!"
+        }
+        speakMessage(phrase)
+        showIdleNotification(name, phrase)
+    }
+
+    private fun showIdleNotification(name: String, phrase: String) {
+        try {
+            if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.TIRAMISU &&
+                ContextCompat.checkSelfPermission(this, Manifest.permission.POST_NOTIFICATIONS) != PackageManager.PERMISSION_GRANTED) return
+            val nm = getSystemService(NOTIFICATION_SERVICE) as NotificationManager
+            if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.O) {
+                nm.createNotificationChannel(
+                    NotificationChannel(IDLE_CHANNEL, "TAMI / Victor", NotificationManager.IMPORTANCE_HIGH).apply {
+                        description = "Chamados da TAMI ou do Victor"
+                        setShowBadge(false)
+                    }
+                )
+            }
+            val open = PendingIntent.getActivity(this, 0,
+                Intent(this, MainActivity::class.java).addFlags(Intent.FLAG_ACTIVITY_NEW_TASK or Intent.FLAG_ACTIVITY_SINGLE_TOP),
+                PendingIntent.FLAG_IMMUTABLE or PendingIntent.FLAG_UPDATE_CURRENT)
+            @Suppress("DEPRECATION")
+            val builder = if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.O) {
+                Notification.Builder(this, IDLE_CHANNEL)
+            } else {
+                Notification.Builder(this)
+            }
+            builder.setSmallIcon(android.R.drawable.ic_lock_idle_alarm)
+                .setContentTitle(name)
+                .setContentText(phrase)
+                .setContentIntent(open)
+                .setAutoCancel(true)
+                .setDefaults(Notification.DEFAULT_SOUND or Notification.DEFAULT_VIBRATE)
+            nm.notify(IDLE_NOTIF_ID, builder.build())
+        } catch (e: Exception) {}
     }
 
     private fun copyApkToDownloads(src: File): Uri? {
@@ -760,6 +861,16 @@ class MainActivity : AppCompatActivity() {
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
 
+        lastUserTouch = SystemClock.elapsedRealtime()
+        lastIdleNotif = lastUserTouch
+        idleHandler.postDelayed(idleWatch, IDLE_CHECK_MS)
+
+        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.TIRAMISU) {
+            if (ContextCompat.checkSelfPermission(this, Manifest.permission.POST_NOTIFICATIONS) != PackageManager.PERMISSION_GRANTED) {
+                notifPermLauncher.launch(Manifest.permission.POST_NOTIFICATIONS)
+            }
+        }
+
         tts = TextToSpeech(this) { status ->
             if (status == TextToSpeech.SUCCESS) {
                 val pending = pendingTtsLang
@@ -842,6 +953,7 @@ class MainActivity : AppCompatActivity() {
 
     override fun onResume() {
         super.onResume()
+        noteUserInteraction()
         registerCallListener()
         if (TamiPlayerService.mode == TamiPlayerService.MODE_ADVERTISE) {
             try { TamiPlayerService.dismissNow(this) } catch (e: Exception) {}
@@ -898,6 +1010,7 @@ class MainActivity : AppCompatActivity() {
             }
         } catch (e: Exception) {}
         webViewRef = null
+        idleHandler.removeCallbacks(idleWatch)
         super.onDestroy()
         try { if (::tts.isInitialized) tts.shutdown() } catch (e: Exception) {}
     }
@@ -909,6 +1022,12 @@ class MainActivity : AppCompatActivity() {
 
     companion object {
         private const val START_URL = "https://appassets.androidplatform.net/assets/index.html"
+
+        private const val IDLE_AFTER_MS = 30 * 60_000L
+        private const val IDLE_REPEAT_MS = 30 * 60_000L
+        private const val IDLE_CHECK_MS = 15_000L
+        private const val IDLE_NOTIF_ID = 202
+        private const val IDLE_CHANNEL = "tami_idle"
 
         @Volatile
         var nowPlayingJson: String? = null
