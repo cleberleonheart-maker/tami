@@ -317,10 +317,15 @@ html[data-accent="laranja"].light { --primary:#EE812B; --primary-dark:#CD6B1E; }
 .v-avatar.sleep { animation: tami-bob 4.6s ease-in-out infinite; filter: saturate(.65); }
 .v-avatar.sleep .eye { animation: none; height: 3px; border-radius: 2px; }
 .v-avatar.sleep .eye::after { display: none; }
+.v-avatar.victor { background: radial-gradient(circle at 35% 28%, #E3F2FF, #81D4FA 48%, #4FC3F7 100%); box-shadow: 0 0 34px rgba(79,195,247,.5), inset 0 -10px 20px rgba(21,101,192,.32), inset 0 6px 12px rgba(255,255,255,.5); }
+.v-avatar.victor .v-bow { display: none; }
+.v-avatar.victor .blush { background: rgba(255,150,64,.45); }
+.v-avatar .v-cap { position: absolute; top: -10px; left: 50%; transform: translateX(-50%) rotate(-8deg); font-size: 30px; filter: drop-shadow(0 3px 6px rgba(79,195,247,.65)); z-index: 2; }
 @keyframes tami-blink { 0%, 92%, 100% { transform: scaleY(1); } 95% { transform: scaleY(.1); } }
 @keyframes tami-bob { 0%, 100% { transform: translateY(0); } 50% { transform: translateY(-5px); } }
 @keyframes tami-dance { 0%, 100% { transform: translateY(0) rotate(-4deg); } 50% { transform: translateY(-6px) rotate(4deg); } }
 .v-name { font-size: 30px; font-weight: 800; margin-top: 8px; background: linear-gradient(90deg,#FF6EC7,#B388FF); -webkit-background-clip: text; background-clip: text; color: transparent; }
+.v-name.victor { background: linear-gradient(90deg,#FFB347,#4FC3F7); -webkit-background-clip: text; background-clip: text; color: transparent; }
 .v-status { font-size: 13px; color: var(--text2); margin-top: 6px; }
 .v-status.on { color: var(--primary); font-weight: 700; }
 .v-actions { display: flex; gap: 10px; padding: 14px 16px 6px; }
@@ -563,6 +568,7 @@ const state = {
   queue: [], queueIndex: -1, current: null, upNext: [], codec: null, codecPlaying: false,
   shuffle: false, repeat: 0, favs: new Set(), nick: '', theme: 'dark', accent: 'cyan', visStyle: 'hearts',
   djMode: false, djVoice: true, djMic: false, learn: {},
+  persona: 'tami',
   radio: false, djLocutor: false,
   amb: { id: null, vol: 0.4, playing: false },
   sleep: 0, sleepId: null,
@@ -740,6 +746,11 @@ const I18N = {
   radioOff: { pt: 'Rádio desligada.', en: 'Radio off.', es: 'Radio apagada.' },
   micListen: { pt: 'Oi! Eu sou a TAMI. Estou ouvindo: fale TAMI, próxima música.', en: 'Hi! I\'m TAMI. I\'m listening: say TAMI, next song.', es: '¡Hola! Soy TAMI. Estoy escuchando: di TAMI, siguiente canción.' },
   comNo: { pt: 'Desculpa, não entendi. Tente: TAMI, próxima música.', en: 'Sorry, I didn\'t get that. Try: TAMI, next song.', es: 'Perdón, no te entendí. Prueba: TAMI, siguiente canción.' },
+  swapToTami: { pt: 'Agora quem comanda é a TAMI!', en: 'Now TAMI is in charge!', es: '¡Ahora la que manda es TAMI!' },
+  swapToVictor: { pt: 'Agora quem comanda é o Victor!', en: 'Now Victor is in charge!', es: '¡Ahora el que manda es Victor!' },
+  bothIntro: { pt: 'Oi! Aqui estão a TAMI e o Victor, os DJs irmãos!', en: 'Hi! Here are TAMI and Victor, the sibling DJs!', es: '¡Hola! Están aquí TAMI y Victor, los DJs hermanos!' },
+  vSwap: { pt: 'Trocar DJ', en: 'Switch DJ', es: 'Cambiar DJ' },
+  vSwapSub: { pt: 'irmãos: TAMI e Victor', en: 'siblings: TAMI and Victor', es: 'hermanos: TAMI y Victor' },
   actBombar: { pt: 'Bora bombar! Preparando um mix só pra você.', en: 'Let\'s rock! Preparing a mix just for you.', es: '¡A darle! Preparando un mix solo para ti.' },
   actRelaxar: { pt: 'Pode relaxar. Deixa comigo o clima.', en: 'You can relax. I\'ll take care of the vibe.', es: 'Puedes relajarte. Yo me encargo del ambiente.' },
   actFact: { pt: 'Ótimo! Vou buscar uma curiosidade sobre a banda ou a música.', en: 'Great! I\'ll look up a fun fact about the band or the song.', es: '¡Genial! Buscaré una curiosidad sobre la banda o la canción.' },
@@ -812,6 +823,7 @@ const I18N = {
   ambPlayingTag: { pt: ' · Tocando', en: ' · Playing', es: ' · Sonando' },
   stPlaying: { pt: 'Tocando agora', en: 'Playing now', es: 'Sonando ahora' },
   stReady: { pt: 'Pronta para mixar', en: 'Ready to mix', es: 'Lista para mezclar' },
+  stReadyM: { pt: 'Pronto para mixar', en: 'Ready to mix', es: 'Listo para mezclar' },
   stNoSongs: { pt: 'Sem músicas ainda', en: 'No songs yet', es: 'Sin canciones aún' },
   btnStartTami: { pt: '🎛 Iniciar TAMI', en: '🎛 Start TAMI', es: '🎛 Iniciar TAMI' },
   btnBombar: { pt: '🎉 Bombar', en: '🎉 Party', es: '🎉 Fiesta' },
@@ -1287,6 +1299,56 @@ const TAMI_MOODS_ALL = {
     '¿Has pensado en hacer una playlist de canciones que te hagan sonreír?',
     'Pulsa play y olvida el resto por un momento.',
     'Lista para acompañarte todo el día. ¡Solo llámame!'
+  ]
+};
+const VICTOR_MOODS_ALL = {
+  pt: [
+    'Oi, bora botar um som bom?',
+    'Você tá arrasando hoje, hein!',
+    'Já marcou suas favoritas? Eu monto o som na hora.',
+    'Respira, deixa a batida cuidar do resto.',
+    'Bora deixar o dia melhor que ontem!',
+    'Foco, fé e uma trilha sonora fiel atrás de você.',
+    'Um som bom resolve quase tudo. Pode confiar.',
+    'Dança um pouco, faz bem pro astral!',
+    'Deixa comigo, eu escolho as próximas pra você.',
+    'Sabe a receita de um dia bom? Música boa, volume alto.',
+    'Seu gosto musical tá aprovado, hein?',
+    'Não esquece de beber água e aumentar o volume.',
+    'Se o dia pesou, a gente levanta com qualquer refrão.',
+    'Prontinho pra te acompanhar o dia inteiro. Só chamar!'
+  ],
+  en: [
+    'Hey, let\'s play something good!',
+    'You look sharp today, you know?',
+    'Picked your favorites yet? I\'ll set it up in a flash.',
+    'Breathe and let the beat handle the rest.',
+    'Let\'s make today better than yesterday!',
+    'Focus, faith, and a solid soundtrack behind you.',
+    'A good track fixes almost everything. Trust me.',
+    'Move a little — it\'s good for you!',
+    'Leave it to me, I\'ll pick what\'s next.',
+    'The recipe for a good day? Great music, loud volume.',
+    'Your taste in music gets a thumbs up, huh?',
+    'Don\'t forget to drink water and turn it up.',
+    'Rough day? We lift it up with any chorus.',
+    'Ready to tag along all day. Just call me!'
+  ],
+  es: [
+    '¡Oye, vamos a poner algo bueno!',
+    '¡Estás genial hoy, sabes!',
+    '¿Ya marcaste tus favoritas? Lo armo en un segundo.',
+    'Respira y deja que el ritmo cuide el resto.',
+    '¡Hagamos el día mejor que ayer!',
+    'Enfoque, fe y una banda sonora fiel detrás de ti.',
+    'Un buen tema arregla casi todo. Confía.',
+    '¡Muévete un poco, te hace bien!',
+    'Déjame a mí, elijo las siguientes por ti.',
+    '¿La receta de un buen día? Música buena, volumen alto.',
+    '¡Tu gusto musical tiene mi aprobación, eh!',
+    'No olvides tomar agua y subir el volumen.',
+    '¿Día pesado? Lo levantamos con cualquier estribillo.',
+    'Listo para acompañarte todo el día. ¡Solo llámame!'
   ]
 };
 const I18N_MORE = {
@@ -2581,6 +2643,42 @@ function revokeCover(id) {
 }
 
 // ---------- DJ TAMI ----------
+const PERSONAS = {
+  tami: {
+    key: 'tami', name: 'TAMI', sibling: 'Victor', male: false,
+    hair: { cls: 'v-bow', emoji: '🎀' },
+    moods: TAMI_MOODS_ALL
+  },
+  victor: {
+    key: 'victor', name: 'Victor', sibling: 'TAMI', male: true,
+    hair: { cls: 'v-cap', emoji: '🧢' },
+    moods: VICTOR_MOODS_ALL
+  }
+};
+function persona() { return PERSONAS[state.persona] || PERSONAS.tami; }
+function setPersona(key, speakName) {
+  if (!PERSONAS[key]) return;
+  state.persona = key;
+  try { localStorage.setItem('tami-persona', key); } catch (e) {}
+  updateTitle();
+  renderUILabels();
+  renderVirgin();
+  if (window.TamiNative && TamiNative.setPersona) { try { TamiNative.setPersona(key); } catch (e) {} }
+  if (speakName && state.djVoice) djSpeak(L('swapTo' + (key === 'victor' ? 'Victor' : 'Tami')), true);
+}
+function switchPersona() { setPersona(state.persona === 'tami' ? 'victor' : 'tami', true); }
+function djPersonaText(text) {
+  const p = persona();
+  if (!p || !text || p.key === 'tami') return text;
+  return String(text)
+    .replace(/a TAMI/g, 'o ' + p.name)
+    .replace(/da TAMI/g, 'do ' + p.name)
+    .replace(/na TAMI/g, 'no ' + p.name)
+    .replace(/sua DJ/g, 'seu DJ')
+    .replace(/uma locutora/g, 'um locutor')
+    .replace(/una locutora/g, 'un locutor')
+    .replace(/TAMI/g, p.name);
+}
 let djEntered = false, djLearnTimer = 0, djLastId = null, djAnnounced = new Set();
 function djLearnGet(id) { return state.learn[id] || { plays: 0, skips: 0, liked: false }; }
 function djLearnSet(id, patch) {
@@ -2679,17 +2777,21 @@ function pickDjVoice(u) {
   if (!vs.length) return;
   const myLang = (LANG_LOCALES[state.lang] || 'pt-BR').toLowerCase().slice(0, 2);
   const langPref = [myLang, 'pt', 'pt-BR', 'en', 'es'];
+  const genderRx = persona().male
+    ? /male|masculin|hombre|Man$|\bBoy\b|\bMale\b|Daniel|David|George|Joao|Juan|Mark|Fred|Alex|Ricardo|Tiago|Diego|Carlos|Miguel|Lucas|Google UK English Male|Guy\b/i
+    : /female|feminina|femenine|woman|mulher|Paula|Helena|Samantha|Google UK English Female|Karen|Zira/i;
   const pick =
     langPref.map(l => vs.filter(v => (v.lang || '').toLowerCase().startsWith(l.toLowerCase()))
-      .find(v => /female|feminina|femenine|woman|mulher|Paula|Helena|Samantha|Google UK English Female|Karen|Zira/i.test(v.name)))
+      .find(v => genderRx.test(v.name)))
       .find(Boolean) ||
     langPref.map(l => vs.find(v => (v.lang || '').toLowerCase().startsWith(l.toLowerCase())))
       .find(Boolean) ||
     vs[0];
   if (pick) { u.voice = pick; u.lang = pick.lang; }
 }
-async function djSpeak(text) {
+async function djSpeak(text, noPersona) {
   if (!state.djVoice || !text) return;
+  if (!noPersona) text = djPersonaText(text);
   micHold(text);
   try {
     if (window.TamiNative && window.TamiNative.speak) { window.TamiNative.speak(text); return; }
@@ -2723,7 +2825,7 @@ function djVoiceToggle() {
 function tamiLang() {
   const list = $('modal');
   const order = ['pt', 'en', 'es'];
-  list.innerHTML = `<h3>🌐 ${L('langTitle')}</h3>
+  list.innerHTML = `<h3>🌐 ${djPersonaText(L('langTitle'))}</h3>
     <div class="list" style="padding:0">` +
     order.map((code, i) => `<div class="mrow" onclick="setLang('${code}')">
       <span class="art ${state.lang === code ? 'grad-a' : 'grad-' + 'abcde'[i]}">${LANG_FLAGS[code]}</span>
@@ -2755,7 +2857,7 @@ function renderUILabels() {
     const ic = b.querySelector('.ic');
     const icHtml = ic ? ic.outerHTML : '';
     const lbl = b.dataset.label;
-    b.innerHTML = icHtml + (lbl === 'TAMI' ? 'TAMI' : L(lbl || ''));
+    b.innerHTML = icHtml + (lbl === 'TAMI' ? persona().name : L(lbl || ''));
   });
   const s = $('search');
   if (s) s.placeholder = L('searchPh');
@@ -2764,7 +2866,7 @@ function renderUILabels() {
 function updateTitle() {
   if (state.detail) { $('title').textContent = state.detail.name || ''; return; }
   const key = { virgin: 'TAMI', songs: 'tSongs', albums: 'tAlbums', artists: 'tArtists', playlists: 'tPlaylists', favs: 'tFavs', videos: 'tVideos', amb: 'tAmb', phone: 'tPhone', room: 'roomTab' }[state.tab];
-  $('title').textContent = key === 'TAMI' ? 'TAMI' : L(key);
+  $('title').textContent = key === 'TAMI' ? persona().name : L(key);
 }
 function djAnnounceTrack(s) {
   if (!s) return;
@@ -3100,8 +3202,14 @@ function djNorm(t) {
 }
 function djCommand(raw) {
   const norm = djNorm(raw);
-  const hasWake = /tami|tammi|tammy|tamy|tani|tamni/.test(norm);
-  if (!hasWake) return false;
+  const hasTami = /tami|tammi|tammy|tamy|tani|tamni/.test(norm);
+  const hasVictor = /\b(victor|vitor|viktor|victorr)\b/.test(norm);
+  const hasBoth = /ambos|as duas|os dois\b|juntos?\b|a dupla|\bdupla\b|tami e (o )?victor|victor e (a )?tami|familia|irm[aã]os/.test(norm);
+  if (hasBoth || (hasTami && hasVictor)) {
+    djSpeak(L('bothIntro'), true);
+    return true;
+  }
+  const swap = /troca|trocar|muda|mudar|mude|alter|alterna|switch|chama o|chama a|chamar|chame|fala com|falar com|fale com/.test(norm);
   const action = /bombar|festa|balada|anima|party|fiesta/.test(norm) ? 'bombar'
     : /relaxa|calma|calm|tranquil|light|relax|suave/.test(norm) ? 'relaxar'
     : /curiosidade|fato curioso|sabia|curios|fact|interesting|dato/.test(norm) ? 'curiosidade'
@@ -3122,9 +3230,17 @@ function djCommand(raw) {
     : /obrigad|valeu|thanks|thank|gracias/.test(norm) ? 'thanks'
     : /oi\b|ola\b|hello\b|hola\b|hi\b|e ai\b/.test(norm) ? 'hello'
     : null;
-  if (!action) {
-    if (hasWake) { djSpeak(L('comNo')); return true; }
+  if (!hasTami && !hasVictor) {
+    if (!action && swap) { switchPersona(); return true; }
     return false;
+  }
+  if (hasVictor) setPersona('victor', false);
+  else if (hasTami && state.persona !== 'tami') setPersona('tami', false);
+  if (!action) {
+    if (hasVictor && !hasTami) { djSpeak(L('swapToVictor'), true); return true; }
+    if (hasTami && !hasVictor) { djSpeak(L('swapToTami'), true); return true; }
+    if (swap) { switchPersona(); return true; }
+    djSpeak(L('comNo')); return true;
   }
   const cur = state.current;
   switch (action) {
@@ -3955,19 +4071,21 @@ function renderVirgin() {
   const now = state.current;
   const elNow = now && (now.type === 'video' ? video : audio);
   const paused = !elNow || !elNow.src || elNow.paused;
+  const p = persona();
+  const other = PERSONAS[p.key === 'tami' ? 'victor' : 'tami'];
   const status = state.djMode
     ? L('stPlaying')
-    : (hasSongs ? L('stReady') : L('stNoSongs'));
+    : (hasSongs ? (p.male ? L('stReadyM') : L('stReady')) : L('stNoSongs'));
   let html = `<div class="v-hero">
-      <div class="v-avatar" id="tami-avatar" onclick="tamiSpeakMood()" title="Falar com a TAMI">
-        <span class="v-bow">🎀</span>
+      <div class="v-avatar ${p.key === 'victor' ? 'victor' : ''}" id="tami-avatar" onclick="tamiSpeakMood()" title="Falar com ${p.name}">
+        <span class="${p.hair.cls}">${p.hair.emoji}</span>
         <div class="face">
           <div class="eye l"></div><div class="eye r"></div>
           <div class="blush l"></div><div class="blush r"></div>
           <div class="mouth"></div>
         </div>
       </div>
-      <div class="v-name">TAMI</div>
+      <div class="v-name ${p.key === 'victor' ? 'victor' : ''}">${p.name}</div>
       <div class="v-status ${state.djMode ? 'on' : ''}">${state.djMode ? '●' : '○'} ${esc(status)}</div>
     </div>`;
   if (now) {
@@ -3979,7 +4097,7 @@ function renderVirgin() {
   }
   if (!state.djMode) {
     html += `<div class="v-actions">
-      <button class="btn" onclick="state.songs.length?djMix():$('fileSongs').click()" style="flex:1">${hasSongs ? L('btnStartTami') : L('btnImportSongs')}</button>
+      <button class="btn" onclick="state.songs.length?djMix():$('fileSongs').click()" style="flex:1">${hasSongs ? djPersonaText(L('btnStartTami')) : L('btnImportSongs')}</button>
     </div>`;
     if (hasSongs) {
       html += `<div class="v-actions">
@@ -3996,19 +4114,20 @@ function renderVirgin() {
   }
   html += `<div class="section">${L('langCmdTitle')}</div>
     <div class="v-grid">
-      <div class="v-card" onclick="tamiLang()"><div class="v-ic">🌐</div><div class="v-l">${L('langTitle')}</div><div class="v-s">${LANG_FLAGS[state.lang]} ${LANG_LABELS[state.lang]}</div></div>
+      <div class="v-card" onclick="switchPersona()"><div class="v-ic">🎭</div><div class="v-l">${L('vSwap')}</div><div class="v-s">${p.name} ⇄ ${other.name}</div></div>
+      <div class="v-card" onclick="tamiLang()"><div class="v-ic">🌐</div><div class="v-l">${djPersonaText(L('langTitle'))}</div><div class="v-s">${LANG_FLAGS[state.lang]} ${LANG_LABELS[state.lang]}</div></div>
       <div class="v-card ${state.djVoice ? 'on' : ''}" onclick="djVoiceToggle()"><div class="v-ic">🗣</div><div class="v-l">${L('vVoz')}</div><div class="v-s">${state.djVoice ? L('vVoiceOn') : L('vVoiceOff')}</div></div>
       <div class="v-card ${state.djMic ? 'on' : ''}" onclick="pjMicToggle()"><div class="v-ic">🎙</div><div class="v-l">${L('vMic')}</div><div class="v-s">${state.djMic ? L('vMicOn') : L('vMicOff')}</div></div>
       <div class="v-card ${state.sleep ? 'on' : ''}" onclick="tamiSleep()"><div class="v-ic">💤</div><div class="v-l">${L('vSleep')}</div><div class="v-s">${state.sleep ? L('vSleepOn', { n: state.sleep }) : L('vSleepOff')}</div></div>
-      <div class="v-card" onclick="tamiPiada()"><div class="v-ic">😄</div><div class="v-l">${L('vJoke')}</div><div class="v-s">${L('vJokeSub')}</div></div>
-      <div class="v-card" onclick="tamiFato()"><div class="v-ic">🤓</div><div class="v-l">${L('vFact')}</div><div class="v-s">${L('vFactSub')}</div></div>
-      <div class="v-card ${state.radio ? 'on' : ''}" onclick="tamiRadio()"><div class="v-ic">📻</div><div class="v-l">${L('vRadio')}</div><div class="v-s">${state.radio ? L('vRadioOn') : L('vRadioSub')}</div></div>
+      <div class="v-card" onclick="tamiPiada()"><div class="v-ic">😄</div><div class="v-l">${L('vJoke')}</div><div class="v-s">${djPersonaText(L('vJokeSub'))}</div></div>
+      <div class="v-card" onclick="tamiFato()"><div class="v-ic">🤓</div><div class="v-l">${L('vFact')}</div><div class="v-s">${djPersonaText(L('vFactSub'))}</div></div>
+      <div class="v-card ${state.radio ? 'on' : ''}" onclick="tamiRadio()"><div class="v-ic">📻</div><div class="v-l">${L('vRadio')}</div><div class="v-s">${state.radio ? L('vRadioOn') : djPersonaText(L('vRadioSub'))}</div></div>
       <div class="v-card" onclick="tamiStats()"><div class="v-ic">📊</div><div class="v-l">${L('vStats')}</div><div class="v-s">${L('vStatsSub')}</div></div>
-      <div class="v-card" onclick="tamiRecomenda()"><div class="v-ic">🎯</div><div class="v-l">${L('vRec')}</div><div class="v-s">${L('vRecSub')}</div></div>
+      <div class="v-card" onclick="tamiRecomenda()"><div class="v-ic">🎯</div><div class="v-l">${L('vRec')}</div><div class="v-s">${djPersonaText(L('vRecSub'))}</div></div>
       <div class="v-card" onclick="scanDeviceMusic()"><div class="v-ic">📂</div><div class="v-l">${L('vScan')}</div><div class="v-s">${L('vScanSub')}</div></div>
     </div>`;
   if (!hasSongs) {
-    html += `<div class="empty"><div class="big">🎧</div>${L('emptyNeed')}<br><button class="btn" onclick="$('fileSongs').click()">${L('btnImportSongs')}</button></div>`;
+    html += `<div class="empty"><div class="big">🎧</div>${djPersonaText(L('emptyNeed'))}<br><button class="btn" onclick="$('fileSongs').click()">${L('btnImportSongs')}</button></div>`;
   }
   list.innerHTML = html;
   if (now) renderArt($('vnow-art'), now, '');
@@ -4017,7 +4136,7 @@ function renderVirgin() {
 
 // ---------- Avatar da TAMI ----------
 function tamiSpeakMood() {
-  const moods = langArr(TAMI_MOODS_ALL);
+  const moods = langArr(persona().moods);
   const p = moods[Math.floor(Math.random() * moods.length)];
   djSpeak(p); toast(p);
 }
@@ -5519,6 +5638,8 @@ async function init() {
       state.visStyle = visStyle;
       const vb = $('vis-style'); if (vb) vb.textContent = VIS_ICONS[visStyle];
     }
+    const pers = (() => { try { return localStorage.getItem('tami-persona') || ''; } catch (e) { return ''; } })();
+    if (PERSONAS[pers]) state.persona = pers;
     const amb = await getKV('amb');
     if (amb) { state.amb = Object.assign(state.amb, amb); state.amb.playing = false; }
     const idx = await getKV('lastSong');
