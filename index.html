@@ -3299,6 +3299,7 @@ function djCommand(raw) {
   const hasTami = /tami|tammi|tammy|tamy|tani|tamni/.test(norm);
   const hasVictor = /\b(victor|vitor|viktor|victorr)\b/.test(norm);
   const hasBoth = /ambos|as duas|os dois\b|juntos?\b|a dupla|\bdupla\b|tami e (o )?victor|victor e (a )?tami|familia|irm[aã]os|voces\b|ustedes\b|los dos\b/.test(norm);
+  const swap = /troca|trocar|muda|mudar|mude|alter|alterna|switch|chama o|chama a|chamar|chame|fala com|falar com|fale com/.test(norm);
   if (hasBoth || (hasTami && hasVictor)) {
     if (swap) {
       let lastV = -1;
@@ -3318,7 +3319,6 @@ function djCommand(raw) {
     else djSpeak(L('bothIntro'), true);
     return true;
   }
-  const swap = /troca|trocar|muda|mudar|mude|alter|alterna|switch|chama o|chama a|chamar|chame|fala com|falar com|fale com/.test(norm);
   const action = /bombar|festa|balada|anima|party|fiesta/.test(norm) ? 'bombar'
     : /relaxa|calma|calm|tranquil|light|relax|suave/.test(norm) ? 'relaxar'
     : /curiosidade|fato curioso|sabia|curios|fact|interesting|dato/.test(norm) ? 'curiosidade'
