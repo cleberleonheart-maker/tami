@@ -14,6 +14,7 @@ import android.net.Uri
 import android.os.Build
 import android.os.IBinder
 import android.os.PowerManager
+import org.json.JSONArray
 import org.json.JSONObject
 import java.io.File
 
@@ -43,6 +44,14 @@ class TamiPlayerService : Service() {
 
         @Volatile var mode = MODE_NONE
         @Volatile var handoffPayload: String? = null
+
+        @Volatile private var queueJson: String? = null
+        @Volatile private var queueIndex: Int = 0
+
+        fun setQueue(json: String, index: Int) {
+            queueJson = json.takeIf { it.isNotBlank() }
+            queueIndex = if (index >= 0) index else 0
+        }
 
         @Volatile
         private var liveService: TamiPlayerService? = null
@@ -121,8 +130,8 @@ class TamiPlayerService : Service() {
         override fun onPlay() = doToggle()
         override fun onPause() = doToggle()
         override fun onStop() = stopAll()
-        override fun onSkipToNext() = relayOrNothing("next")
-        override fun onSkipToPrevious() = relayOrNothing("prev")
+        override fun onSkipToNext() = nativeStep(1)
+        override fun onSkipToPrevious() = nativeStep(-1)
         override fun onSeekTo(pos: Long) {
             if (mode == MODE_HANDOFF || mode == MODE_CODEC) {
                 try { mediaPlayer?.seekTo(pos.toInt()) } catch (e: Exception) {}
@@ -172,6 +181,7 @@ class TamiPlayerService : Service() {
                 }
                 mode = MODE_HANDOFF
                 goForeground()
+                stopPlayback()
                 startHandoff(trackUrl!!, pos)
             }
             ACTION_CODEC -> {
@@ -190,16 +200,10 @@ class TamiPlayerService : Service() {
             }
             ACTION_CTRL -> when (intent.getStringExtra(EXTRA_CMD)) {
                 "playpause" -> doToggle()
-                "next" -> relayOrNothing("next")
-                "prev" -> relayOrNothing("prev")
-                "play" -> if (mode == MODE_HANDOFF || mode == MODE_CODEC) {
-                    try { mediaPlayer?.start() } catch (e: Exception) {}
-                    updateNotification()
-                }
-                "pause" -> if (mode == MODE_HANDOFF || mode == MODE_CODEC) {
-                    try { mediaPlayer?.pause() } catch (e: Exception) {}
-                    updateNotification()
-                }
+                "next" -> nativeStep(1)
+                "prev" -> nativeStep(-1)
+                "play" -> doPlay()
+                "pause" -> doPause()
                 "seek" -> if (mode == MODE_HANDOFF || mode == MODE_CODEC) {
                     try { mediaPlayer?.seekTo(intent.getIntExtra(EXTRA_ARG, 0)) } catch (e: Exception) {}
                 }
@@ -214,7 +218,9 @@ class TamiPlayerService : Service() {
                         }
                     } catch (e: Exception) {}
                 } else if (mode == MODE_ADVERTISE) {
-                    MainActivity.relayControl("pause")
+                    relayOrStop("pause")
+                } else if (mode == MODE_CODEC) {
+                    MainActivity.relayControl("codecStopped")
                 }
                 stopAll()
             }
@@ -230,6 +236,26 @@ class TamiPlayerService : Service() {
             trackTitle = o.optString("title").ifEmpty { "TAMI" }
             trackArtist = o.optString("artist")
         } catch (e: Exception) {}
+    }
+
+    private fun notifMeta(): Triple<String, String, Boolean> {
+        if (mode == MODE_HANDOFF || mode == MODE_CODEC) {
+            val playing = try { mediaPlayer?.isPlaying == true } catch (e: Exception) { false }
+            return Triple(trackTitle, trackArtist, playing)
+        }
+        var title = trackTitle
+        var artist = trackArtist
+        var playing = MainActivity.nowPlayingPlaying == true
+        val json = MainActivity.nowPlayingJson
+        if (!json.isNullOrEmpty()) {
+            try {
+                val o = JSONObject(json)
+                title = o.optString("title").ifEmpty { title }
+                artist = o.optString("artist")
+                playing = o.optBoolean("playing", playing)
+            } catch (e: Exception) {}
+        }
+        return Triple(title, artist, playing)
     }
 
     private fun goForeground() {
@@ -255,7 +281,10 @@ class TamiPlayerService : Service() {
                 }
             )
         }
-        val playing = (mode == MODE_HANDOFF || mode == MODE_CODEC) && (mediaPlayer?.isPlaying ?: false)
+        val meta = notifMeta()
+        val nTitle = meta.first
+        val nArtist = meta.second
+        val playing = meta.third
         val openPi = PendingIntent.getActivity(
             this, 0,
             Intent(this, MainActivity::class.java).addFlags(Intent.FLAG_ACTIVITY_NEW_TASK or Intent.FLAG_ACTIVITY_SINGLE_TOP),
@@ -278,13 +307,13 @@ class TamiPlayerService : Service() {
             Notification.Builder(this)
         }
         builder.setSmallIcon(android.R.drawable.sym_def_app_icon)
-            .setContentTitle(if (trackTitle.isBlank()) "TAMI" else trackTitle)
-            .setContentText(if (trackArtist.isBlank()) "Tocando…" else trackArtist)
+            .setContentTitle(if (nTitle.isBlank()) "TAMI" else nTitle)
+            .setContentText(if (nArtist.isBlank()) "Tocando…" else nArtist)
             .setOngoing(true)
             .setShowWhen(false)
             .setContentIntent(openPi)
             .addAction(android.R.drawable.ic_media_previous, "Anterior", pi("prev", 11))
-            .addAction(if (playing) android.R.drawable.ic_media_pause else android.R.drawable.ic_media_play, if (playing) "Pausar" else "Tocar", pi("playpause", 12))
+            .addAction(if (playing) android.R.drawable.ic_media_pause else android.R.drawable.ic_media_play, if (playing) "Pausar" else "Tocar", pi(if (playing) "pause" else "play", 12))
             .addAction(android.R.drawable.ic_media_next, "Próxima", pi("next", 13))
             .addAction(android.R.drawable.ic_menu_close_clear_cancel, "Fechar", stopPi)
         try {
@@ -323,7 +352,11 @@ class TamiPlayerService : Service() {
                     liveSession?.let { s -> syncSessionPos(true, m.currentPosition.toLong()) }
                 } catch (e: Exception) {}
             }
-            mp.setOnErrorListener { _, _, _ -> stopAll(); true }
+            mp.setOnErrorListener { _, _, _ ->
+                if (mode == MODE_CODEC) MainActivity.relayControl("codecStopped")
+                stopAll()
+                true
+            }
             mp.setOnCompletionListener {
                 if (mode == MODE_HANDOFF) stopAll()
                 else if (mode == MODE_CODEC) {
@@ -348,15 +381,101 @@ class TamiPlayerService : Service() {
             } catch (e: Exception) {}
             updateNotification()
         } else {
-            MainActivity.relayControl(
-                if (MainActivity.nowPlayingPlaying == true) "pause" else "play"
-            )
+            relayOrStop(if (MainActivity.nowPlayingPlaying == true) "pause" else "play")
         }
     }
 
-    private fun relayOrNothing(cmd: String) {
-        if (mode == MODE_HANDOFF) return
-        MainActivity.relayControl(cmd)
+    private fun doPlay() {
+        if (mode == MODE_HANDOFF || mode == MODE_CODEC) {
+            val mp = mediaPlayer
+            if (mp != null) {
+                try { if (!mp.isPlaying) mp.start() } catch (e: Exception) {}
+                liveSession?.let { s -> syncSessionPos(true, try { mp.currentPosition.toLong() } catch (e: Exception) { 0L }) }
+            }
+            updateNotification()
+            return
+        }
+        relayOrStop("play")
+    }
+
+    private fun doPause() {
+        if (mode == MODE_HANDOFF || mode == MODE_CODEC) {
+            val mp = mediaPlayer
+            if (mp != null) {
+                try { if (mp.isPlaying) mp.pause() } catch (e: Exception) {}
+                liveSession?.let { s -> syncSessionPos(false, try { mp.currentPosition.toLong() } catch (e: Exception) { 0L }) }
+            }
+            updateNotification()
+            return
+        }
+        relayOrStop("pause")
+    }
+
+    private fun relayOrStop(cmd: String): Boolean {
+        if (MainActivity.relayControl(cmd)) return true
+        stopAll()
+        return false
+    }
+
+    private fun nativeStep(dir: Int) {
+        if (mode == MODE_HANDOFF) {
+            if (stepQueue(dir)) return
+            // A fila nativa nao tem este arquivo (a musica ainda nao foi copiada).
+            // Para o player nativo antes de devolver o controle pra WebView, senao
+            // as duas tocam ao mesmo tempo. A notificacao continua viva e passa a
+            // mostrar o que a WebView esta tocando.
+            stopPlayback()
+            handoffPayload = null
+            mode = MODE_ADVERTISE
+            try { goForeground() } catch (e: Exception) {}
+        }
+        relayOrStop(if (dir > 0) "next" else "prev")
+    }
+
+    private fun stepQueue(dir: Int): Boolean {
+        try {
+            val raw = queueJson ?: return false
+            if (raw.isEmpty()) return false
+            val arr = JSONArray(raw)
+            val n = arr.length()
+            if (n == 0) return false
+            if (dir < 0) {
+                val pos = try { mediaPlayer?.currentPosition ?: 0 } catch (e: Exception) { 0 }
+                if (pos > 3000) {
+                    try { mediaPlayer?.seekTo(0) } catch (e: Exception) {}
+                    return true
+                }
+            }
+            var idx = -1
+            var i = queueIndex
+            for (k in 0 until n) {
+                i = ((i + dir) % n + n) % n
+                val cand = arr.optJSONObject(i) ?: continue
+                if (cand.optString("url").isNotEmpty()) { idx = i; break }
+            }
+            if (idx < 0) return false
+            val o = arr.getJSONObject(idx)
+            val url = o.optString("url")
+            if (url.isEmpty()) return false
+            queueIndex = idx
+            trackUrl = url
+            trackTitle = o.optString("title").ifEmpty { "TAMI" }
+            trackArtist = o.optString("artist")
+            handoffPayload = JSONObject()
+                .put("id", o.optString("id"))
+                .put("url", url)
+                .put("title", trackTitle)
+                .put("artist", trackArtist)
+                .put("pos", 0L)
+                .put("playing", true)
+                .toString()
+            stopPlayback()
+            updateNotification()
+            startHandoff(url, 0)
+            return true
+        } catch (e: Exception) {
+            return false
+        }
     }
 
     private fun stopPlayback() {

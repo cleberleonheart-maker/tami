@@ -26,6 +26,19 @@ jobs:
           distribution: temurin
           java-version: '17'
 
+      # A versao vem do arquivo version (ex.: 50|1.50|url) e sempre incrementa.
+      # Usar github.run_number fazia a numeracao andar para tras quando o APK era
+      # compilado localmente, e a TAMI parava de oferecer atualizacao.
+      - name: Definir versao
+        id: ver
+        run: |
+          cur=$(cut -d'|' -f2 < version 2>/dev/null || true)
+          [ -n "$cur" ] || cur=1.0
+          patch="${cur##*.}"
+          next="$(( ${patch:-0} + 1 ))"
+          echo "versionName=${cur%.*}.${next}" >> $GITHUB_OUTPUT
+          echo "versionCode=$(( ${cur//./} + 1 ))" >> $GITHUB_OUTPUT
+
       - name: Empacotar o PWA nos assets do APK
         run: |
           mkdir -p android/app/src/main/assets
@@ -35,14 +48,14 @@ jobs:
         working-directory: android
         run: |
           chmod +x gradlew
-          ./gradlew :app:assembleRelease -PversionCode=${{ github.run_number }} -PversionName=1.${{ github.run_number }} --no-daemon
+          ./gradlew :app:assembleRelease -PversionCode=${{ steps.ver.outputs.versionCode }} -PversionName=${{ steps.ver.outputs.versionName }} --no-daemon
 
       - name: Publicar o APK direto no repositório
         run: |
           cp android/app/build/outputs/apk/release/app-release.apk TAMI.apk
-          echo "${{ github.run_number }}|1.${{ github.run_number }}|https://cleberleonheart-maker.github.io/tami/TAMI.apk" > version
+          echo "${{ steps.ver.outputs.versionCode }}|${{ steps.ver.outputs.versionName }}|https://cleberleonheart-maker.github.io/tami/TAMI.apk" > version
           git config user.name github-actions
           git config user.email github-actions@github.com
           git add TAMI.apk version
-          git commit -m "build: APK ${{ github.run_number }}" || true
+          git commit -m "build: APK ${{ steps.ver.outputs.versionName }}" || true
           git push

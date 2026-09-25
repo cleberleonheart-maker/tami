@@ -241,6 +241,11 @@ class MainActivity : AppCompatActivity() {
         fun finishBackground(): String = TamiPlayerService.finishBackground()
 
         @JavascriptInterface
+        fun syncQueue(json: String, index: Int) {
+            try { TamiPlayerService.setQueue(json, index) } catch (e: Exception) {}
+        }
+
+        @JavascriptInterface
         fun cacheStart(name: String): String {
             try {
                 val safe = name.replace(Regex("[^A-Za-z0-9._\\- ]"), "_").trim().ifEmpty { "music" }
@@ -756,6 +761,29 @@ class MainActivity : AppCompatActivity() {
         }
     }
 
+    private fun maybeHandoffNow() {
+        try {
+            if (nowPlayingPlaying != true) return
+            if (TamiPlayerService.mode == TamiPlayerService.MODE_HANDOFF || TamiPlayerService.mode == TamiPlayerService.MODE_CODEC) return
+            val json = nowPlayingJson ?: return
+            val o = JSONObject(json)
+            val url = o.optString("url")
+            if (url.isEmpty()) return
+            val i = Intent(this, TamiPlayerService::class.java)
+                .setAction(TamiPlayerService.ACTION_HANDOFF)
+                .putExtra(TamiPlayerService.EXTRA_URL, url)
+                .putExtra(TamiPlayerService.EXTRA_TITLE, o.optString("title"))
+                .putExtra(TamiPlayerService.EXTRA_ARTIST, o.optString("artist"))
+                .putExtra(TamiPlayerService.EXTRA_POS, o.optLong("pos"))
+            TamiPlayerService.handoffPayload = json
+            try {
+                startService(i)
+            } catch (e: Exception) {
+                if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.O) startForegroundService(i) else startService(i)
+            }
+        } catch (e: Exception) {}
+    }
+
     private fun resolveMime(uri: Uri, pfd: ParcelFileDescriptor): String {
         val sniffed = sniffMime(pfd)
         if (sniffed != null) return sniffed
@@ -974,6 +1002,11 @@ class MainActivity : AppCompatActivity() {
         } catch (e: Exception) {}
     }
 
+    override fun onStop() {
+        super.onStop()
+        if (isFinishing) maybeHandoffNow()
+    }
+
     override fun onPause() {
         super.onPause()
         if (nowPlayingPlaying != true) unregisterCallListener()
@@ -986,28 +1019,7 @@ class MainActivity : AppCompatActivity() {
 
     override fun onDestroy() {
         try {
-            if (!isChangingConfigurations && nowPlayingPlaying == true && TamiPlayerService.mode != TamiPlayerService.MODE_HANDOFF && TamiPlayerService.mode != TamiPlayerService.MODE_CODEC) {
-                val json = nowPlayingJson
-                if (!json.isNullOrEmpty()) {
-                    val o = JSONObject(json)
-                    val url = o.optString("url")
-                    if (url.isNotEmpty()) {
-                        val i = Intent(this, TamiPlayerService::class.java)
-                            .setAction(TamiPlayerService.ACTION_HANDOFF)
-                            .putExtra(TamiPlayerService.EXTRA_URL, url)
-                            .putExtra(TamiPlayerService.EXTRA_TITLE, o.optString("title"))
-                            .putExtra(TamiPlayerService.EXTRA_ARTIST, o.optString("artist"))
-                            .putExtra(TamiPlayerService.EXTRA_POS, o.optLong("pos"))
-                        TamiPlayerService.handoffPayload = json
-                        try {
-                            if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.O) startForegroundService(i)
-                            else startService(i)
-                        } catch (e: Exception) {
-                            try { startService(i) } catch (e2: Exception) {}
-                        }
-                    }
-                }
-            }
+            if (!isChangingConfigurations) maybeHandoffNow()
         } catch (e: Exception) {}
         webViewRef = null
         idleHandler.removeCallbacks(idleWatch)
@@ -1038,11 +1050,18 @@ class MainActivity : AppCompatActivity() {
         @Volatile
         private var webViewRef: WebView? = null
 
-        fun relayControl(cmd: String) {
-            val wv = webViewRef ?: return
-            try {
-                wv.post { try { wv.evaluateJavascript("window.tamiRemote&&window.tamiRemote('$cmd');", null) } catch (e: Exception) {} }
-            } catch (e: Exception) {}
+        fun relayControl(cmd: String): Boolean {
+            val wv = webViewRef ?: return false
+            return try {
+                wv.post {
+                    try {
+                        wv.evaluateJavascript("window.tamiRemote&&window.tamiRemote('$cmd');", null)
+                    } catch (e: Exception) {}
+                }
+                true
+            } catch (e: Exception) {
+                false
+            }
         }
     }
 }

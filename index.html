@@ -3567,6 +3567,20 @@ function setAudioSource(s) {
     }
   }
 }
+function syncNativeQueue() {
+  try {
+    if (!window.TamiNative || !window.TamiNative.syncQueue) return;
+    // Sem filtro: o índice enviado precisa bater com state.queue, senão o player
+    // nativo pula a música errada. Quem não tem cópia ainda vai com url vazia.
+    const q = state.queue.map((x) => ({
+      id: String(x.id || ''),
+      url: (x.url && /^(content|file):/.test(x.url)) ? x.url : (x.handoffPath || ''),
+      title: x.title || x.name || '',
+      artist: x.artist || x.album || ''
+    }));
+    window.TamiNative.syncQueue(JSON.stringify(q), state.queueIndex);
+  } catch (e) {}
+}
 function updateMediaSession() {
   if (!('mediaSession' in navigator)) return;
   const s = state.queue[state.queueIndex];
@@ -3579,8 +3593,9 @@ function updateMediaSession() {
     navigator.mediaSession.setActionHandler('play', togglePlay);
     navigator.mediaSession.setActionHandler('pause', togglePlay);
     navigator.mediaSession.setActionHandler('previoustrack', prev);
-    navigator.mediaSession.setActionHandler('nexttrack', next);
+    navigator.mediaSession.setActionHandler('nexttrack', () => next(true));
   } catch (e) {}
+  syncNativeQueue();
 }
 
 // ---------- Visualizador + Efeitos (8D) ----------
@@ -3844,10 +3859,28 @@ function syncNativeNow(force) {
     }));
   } catch (e) {}
 }
+function remotePlayPause(wantPlay) {
+  try {
+    if (state.codec) {
+      try { if (wantPlay) window.TamiNative.codecPlayResume(); else window.TamiNative.codecPause(); } catch (e) {}
+      setTimeout(codecTickRender, 120);
+      return;
+    }
+    if (!state.current) return;
+    const el = state.current.type === 'video' ? video : audio;
+    if (!el || !el.src) return;
+    if (wantPlay) { if (el.paused) safePlay(el); }
+    else if (!el.paused) el.pause();
+    renderPlayer();
+    syncNativeNow(true);
+  } catch (e) {}
+}
 function tamiRemote(cmd) {
-  if (cmd === 'next') next();
-  else if (cmd === 'prev') prev();
-  else if (cmd === 'play' || cmd === 'pause' || cmd === 'playpause') togglePlay();
+  if (cmd === 'next') { next(true); syncNativeNow(true); }
+  else if (cmd === 'prev') { prev(); syncNativeNow(true); }
+  else if (cmd === 'play') remotePlayPause(true);
+  else if (cmd === 'pause') remotePlayPause(false);
+  else if (cmd === 'playpause') togglePlay();
   else if (cmd === 'codecEnd') { codecEnded(); }
   else if (cmd === 'codecStopped') { if (state.codec) { state.codec = null; state.codecPlaying = false; stopCodecTick(); renderPlayer(); syncNativeNow(true); } }
 }
@@ -3875,9 +3908,10 @@ function checkBackgroundHandoff() {
       toast('Retomando onde parou.');
       return;
     }
-    state.queue = [s];
-    state.queueIndex = 0;
-    state.current = s;
+    const i = state.queue.findIndex((x) => String(x.id) === String(s.id));
+    if (i >= 0) state.queueIndex = i;
+    else { state.queue = [s]; state.queueIndex = 0; }
+    state.current = state.queue[state.queueIndex];
     playCurrent();
     const seekBack = () => {
       if (audio.readyState >= 1 && audio.duration > 0) {
@@ -3905,6 +3939,7 @@ function maybeHandoffToNative() {
     const url = (s.url && /^(content|file):/.test(s.url)) ? s.url : (s.handoffPath || '');
     if (!url) return;
     const pos = Math.floor((el.currentTime || 0) * 1000);
+    syncNativeQueue();
     let ok = false;
     try { ok = !!window.TamiNative.handoffNow(String(s.id || ''), url, s.title || s.name || '', s.artist || s.album || '', pos); } catch (e) {}
     if (ok) { pendingHandoff = true; try { el.pause(); } catch (e) {} }
@@ -3921,6 +3956,19 @@ document.addEventListener('visibilitychange', () => {
         const s = state.current;
         const el = s && s.type === 'video' ? video : audio;
         if (s && el && el.src && el.paused) { try { safePlay(el); } catch (e) {} }
+      } else {
+        // O servico nativo ainda esta encerrando: espera ele terminar antes de
+        // devolver o som para a WebView (senao o app volta sem tocar).
+        let tries = 12;
+        const waitStop = () => {
+          let on = false;
+          try { on = !!(window.TamiNative.handoffActive && window.TamiNative.handoffActive()); } catch (e) {}
+          if (on && tries-- > 0) { setTimeout(waitStop, 300); return; }
+          const s = state.current;
+          const el = s && s.type === 'video' ? video : audio;
+          if (s && el && el.src && el.paused) { try { safePlay(el); } catch (e) {} }
+        };
+        setTimeout(waitStop, 300);
       }
     }
   } else {
@@ -3947,6 +3995,14 @@ function next(user) {
   if (!state.queue.length) return;
   if (state.repeat === 2 && !user) { audio.currentTime = 0; safePlay(audio); return; }
   if (state.upNext.length) { playUpNext(); return; }
+  if (state.queue.length === 1 && user) {
+    const el = state.current && state.current.type === 'video' ? video : audio;
+    if (!state.codec && el && el.src) {
+      try { el.currentTime = 0; if (el.paused) safePlay(el); return; } catch (e) {}
+    }
+    playCurrent();
+    return;
+  }
   state.queueIndex = (state.queueIndex + 1) % state.queue.length;
   playCurrent();
 }
@@ -4019,6 +4075,7 @@ function prev() {
 audio.addEventListener('ended', () => {
   if (state.repeat === 2) { if (audio.currentTime) { audio.currentTime = 0; } safePlay(audio); return; }
   if (state.repeat === 1 || state.queueIndex < state.queue.length - 1 || state.upNext.length) next();
+  else syncNativeNow(true);
 });
 audio.addEventListener('timeupdate', updateProgress);
 audio.addEventListener('play', () => { renderPlayer(); if ('mediaSession' in navigator) navigator.mediaSession.playbackState = 'playing'; updateAvatarMood(); syncNativeNow(true); persistLastSong(); });
@@ -4032,11 +4089,12 @@ video.addEventListener('ended', () => {
     if (state.upNext.length) { next(); return; }
     if (state.queue.length > 1 && state.queueIndex < state.queue.length - 1) { next(); return; }
     closePlayer();
+    syncNativeNow(true);
     return;
   }
   if (state.repeat === 2) next();
   else if (state.repeat === 1 || state.queueIndex < state.queue.length - 1) next();
-  else closePlayer();
+  else { closePlayer(); syncNativeNow(true); }
 });
 function updateProgress() {
   if (state.codec) { codecTickRender(); return; }
@@ -4413,6 +4471,11 @@ const CHANGELOG = {
     pt: ['Aba "Celular": busca e como ordenar as músicas do computador por título, artista ou álbum', 'O servidor acompanhante lê título/artista/álbum de verdade das músicas do PC (MP3/FLAC/WAV) e percebe sozinho quando entra música nova', 'O que estava tocando no PC pode ser restaurado no celular, e as músicas novas do PC entram na biblioteca sozinhas', 'Comandos de voz mais confiáveis: o microfone não reage mais a conversa sem chamar "TAMI", frases como "para de tocar", "dorme em 30 minutos" e "pon música" agora funcionam, e a TAMI segura o microfone enquanto fala'],
     en: ['"Phone" tab: search and sort the computer\'s songs by title, artist or album', 'The companion server reads real title/artist/album from the PC music (MP3/FLAC/WAV) and detects new songs on its own', 'What was playing on the PC can be restored on the phone, and new PC songs join the library automatically', 'More reliable voice commands: the mic no longer reacts to speech without saying "TAMI", phrases like "stop playing", "sleep in 30 minutes" and "pon música" now work, and TAMI holds the mic while she speaks'],
     es: ['Pestaña "Celular": búsqueda y cómo ordenar las canciones del PC por título, artista o álbum', 'El servidor acompañante lee título/artista/álbum reales de las canciones del PC (MP3/FLAC/WAV) y detecta solo cuando entra música nueva', 'Lo que sonaba en el PC se puede restaurar en el celular, y las canciones nuevas del PC entran solas a la biblioteca', 'Comandos de voz más fiables: el micrófono ya no reacciona a conversaciones sin decir "TAMI", frases como "deja de sonar", "duerme en 30 minutos" y "pon música" ahora funcionan, y TAMI sostiene el micrófono mientras habla']
+  },
+  '1.51': {
+    pt: ['Corrige a música que não mudava ao apertar "próxima" na notificação (ou no botão do fone/Bluetooth) quando o app estava em segundo plano, principalmente com "repetir uma" ligado', 'A notificação agora mostra a música que está tocando na hora: título, artista e o botão de tocar/pausar mudam junto com a faixa', 'O botão de tocar/pausar da notificação não fica mais invertido: ele pausa quando está tocando e toca quando está pausado', 'Corrige as duas músicas tocando ao mesmo tempo quando a faixa seguinte ainda não tinha sido copiada para o player nativo', 'A fila não se perde mais: ao voltar para o app depois de trocar de música pela notificação, todas as músicas continuam na fila na ordem certa', 'Fechar a notificação durante uma música em formato especial (WMA/APE/WavPack…) agora volta o app para o estado normal, sem ficar travado no player'],
+    en: ['Fixes the song not changing when pressing "next" on the notification (or the headset/Bluetooth button) with the app in the background, especially with "repeat one" on', 'The notification now shows the song that is playing right away: title, artist and the play/pause button follow the track', 'The notification play/pause button is no longer inverted: it pauses while playing and plays while paused', 'Fixes two songs playing at once when the next track had not been copied to the native player yet', 'The queue is no longer lost: coming back to the app after switching songs from the notification keeps every song, in the right order', 'Closing the notification during a song in a special format (WMA/APE/WavPack…) now returns the app to its normal state instead of sticking on the player'],
+    es: ['Corrige la canción que no cambiaba al pulsar "siguiente" en la notificación (o el botón de los auriculares/Bluetooth) con la app en segundo plano, sobre todo con "repetir una" activado', 'La notificación ahora muestra la canción que suena en el momento: título, artista y el botón de reproducir/pausar cambian con la pista', 'El botón de reproducir/pausar de la notificación ya no está invertido: pausa cuando está sonando y reproduce cuando está pausado', 'Corrige las dos canciones sonando a la vez cuando la pista siguiente todavía no se había copiado al reproductor nativo', 'La lista ya no se pierde: al volver a la app después de cambiar de canción desde la notificación, todas las canciones siguen en la lista en el orden correcto', 'Cerrar la notificación durante una canción en formato especial (WMA/APE/WavPack…) ahora devuelve la app a su estado normal, sin quedarse enganchada en el reproductor']
   },
   '1.41': {
     pt: ['Novo: trocar de vídeo/música no palco do YouTube agora recria o player do zero na hora — quem entra depois continua assistindo, em sincronia com a sala', 'Correção: mudar de mídia durante o YouTube não deixa mais tela preta nem player travado — o palco destrói e remonta o player do YouTube do zero, mantendo a sala em sincronia'],
