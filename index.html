@@ -119,6 +119,9 @@ input[type="range"] { touch-action: none; }
 .item {
   display: flex; align-items: center; gap: 12px;
   padding: 10px 8px; border-radius: 12px; cursor: pointer;
+  /* sem isso o long-press no Android abre a caixinha de seleção de texto, o
+     WebView cancela o gesto e o seletor de várias músicas nunca entra */
+  user-select: none; -webkit-user-select: none; -webkit-touch-callout: none;
 }
 .item:hover { background: var(--surface); }
 #amb-list .item.active { background: var(--surface-v); border: 1px solid var(--divider); }
@@ -1825,6 +1828,8 @@ function renderSongs(list, container, favOnly) {
       <button class="like" data-info="${s.id}" title="Detalhes">ⓘ</button>
       <button class="like" data-del="${s.id}" title="Excluir">🗑</button>`;
     row.onclick = (e) => {
+      // o clique que vem depois de um long-press não pode executar a ação
+      if (longPressed) { longPressed = false; return; }
       const cb = e.target.closest('[data-cb]');
       if (cb || multiSelect) {
         if (cb) cb.classList.toggle('checked');
@@ -1832,17 +1837,41 @@ function renderSongs(list, container, favOnly) {
       }
       playList(list, s);
     };
-    let pressTimer;
-    row.onpointerdown = (e) => {
-      if (e.target.closest('button')) return;
-      pressTimer = setTimeout(() => { enterMultiSelect(); toggleSongSelect(s.id, row.querySelector('.checkbox')); }, 500);
+    // Long-press marca a música e entra no modo de seleção. Funciona em toda a
+    // linha, inclusive sobre os botões: segurar o 🗑 não apaga, marca. O gesto
+    // é medido em touch events porque no Android o long-press da WebView
+    // dispara pointercancel e mataria o timer dos pointer events.
+    let pressTimer = null;
+    let longPressed = false;
+    function clearPress() { if (pressTimer) { clearTimeout(pressTimer); pressTimer = null; } }
+    function startPress() {
+      longPressed = false;
+      clearPress();
+      pressTimer = setTimeout(() => {
+        longPressed = true;
+        enterMultiSelect();
+        toggleSongSelect(s.id, row.querySelector('.checkbox'));
+      }, 450);
+    }
+    row.addEventListener('touchstart', startPress, { passive: true });
+    row.addEventListener('touchmove', clearPress, { passive: true });
+    row.addEventListener('touchend', clearPress, { passive: true });
+    row.addEventListener('touchcancel', clearPress, { passive: true });
+    // desktop
+    row.addEventListener('mousedown', startPress);
+    row.addEventListener('mouseup', clearPress);
+    row.addEventListener('mouseleave', clearPress);
+    const onBtn = (sel, fn) => {
+      row.querySelector(sel).onclick = (e) => {
+        e.stopPropagation();
+        if (longPressed) { longPressed = false; return; }
+        fn();
+      };
     };
-    const clearPress = () => { if (pressTimer) { clearTimeout(pressTimer); pressTimer = null; } };
-    row.onpointerup = clearPress; row.onpointermove = clearPress; row.onpointercancel = clearPress;
-    row.querySelector('[data-fav]').onclick = (e) => { e.stopPropagation(); toggleFav(s); };
-    row.querySelector('[data-next]').onclick = (e) => { e.stopPropagation(); addUpNext(s); };
-    row.querySelector('[data-info]').onclick = (e) => { e.stopPropagation(); songDetails(s); };
-    row.querySelector('[data-del]').onclick = (e) => { e.stopPropagation(); delSong(s.id); };
+    onBtn('[data-fav]', () => toggleFav(s));
+    onBtn('[data-next]', () => addUpNext(s));
+    onBtn('[data-info]', () => songDetails(s));
+    onBtn('[data-del]', () => delSong(s.id));
     renderArt(row.childNodes[1], s);
     container.appendChild(row);
   }
@@ -4889,8 +4918,8 @@ function updateSelectCount() {
   const el = $('select-count');
   if (el) el.textContent = c === 1 ? '1 selecionada' : c + ' selecionadas';
   const btns = $('select-bar') ? $('select-bar').querySelectorAll('.btn') : [];
-  // segunda botão é selecionar tudo, quarto é excluir
-  if (btns[3]) btns[3].disabled = c === 0;
+  // a barra tem 3 botões: 0 cancelar, 1 selecionar tudo, 2 excluir
+  if (btns[2]) btns[2].disabled = c === 0;
 }
 
 function toggleSongSelect(id, cbEl) {
@@ -4907,7 +4936,8 @@ function toggleSongSelect(id, cbEl) {
 }
 
 function selectAllSongs() {
-  const list = document.querySelector('.tab.active #songs-list');
+  // qualquer lista da aba ativa (músicas ou favoritos), não só #songs-list
+  const list = document.querySelector('.tab.active .list');
   if (!list) return;
   const all = Array.from(list.querySelectorAll('.item'));
   if (all.length === 0) return;
