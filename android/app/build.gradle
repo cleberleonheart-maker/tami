@@ -6,6 +6,25 @@ plugins {
 def senhaKs = System.getenv('TAMIKS_PASS') ?: 'tami123'
 def tamiKs = rootProject.file('keystore/tami.keystore')
 
+// Versao do app: o arquivo ../version (ex.: 153|1.53|url) e a fonte da verdade.
+// Sem isso o build local cai no default 1/1.0, o Android recusa a instalacao
+// (versionCode igual ao instalado) e a TAMI nunca para de oferecer atualizacao.
+// -PversionCode / -PversionName ainda tem prioridade, quando passados.
+def lerVersao = { File arq ->
+    if (!arq.exists()) return null
+    def p = arq.text.trim().split('\\|')
+    if (p.length < 2) return null
+    def code = (p[0].trim() as String)
+    def name = p[1].trim()
+    if (!(code ==~ /\d+/) || !name) return null
+    return [code: code.toInteger(), name: name]
+}
+def versaoApp = lerVersao(rootProject.file('../version'))
+        ?: lerVersao(file('src/main/assets/version'))
+        ?: [code: 1, name: '1.0']
+
+logger.lifecycle("TAMI versionCode=${versaoApp.code} versionName=${versaoApp.name}")
+
 android {
     namespace 'com.tami.app'
     compileSdk 34
@@ -14,8 +33,8 @@ android {
         applicationId "com.tami.app"
         minSdk 24
         targetSdk 34
-        versionCode ((project.findProperty('versionCode') as String ?: '1').toInteger())
-        versionName (project.findProperty('versionName') as String ?: '1.0')
+        versionCode ((project.findProperty('versionCode') as String ?: versaoApp.code.toString()).toInteger())
+        versionName (project.findProperty('versionName') as String ?: versaoApp.name)
     }
 
     signingConfigs {

@@ -9,6 +9,7 @@ on:
       - 'manifest.json'
       - 'sw.js'
       - 'icon.svg'
+      - 'version'
       - '.github/workflows/build-apk.yml'
   workflow_dispatch:
 
@@ -26,18 +27,23 @@ jobs:
           distribution: temurin
           java-version: '17'
 
-      # A versao vem do arquivo version (ex.: 50|1.50|url) e sempre incrementa.
-      # Usar github.run_number fazia a numeracao andar para tras quando o APK era
-      # compilado localmente, e a TAMI parava de oferecer atualizacao.
-      - name: Definir versao
+      # A versao vem do arquivo version (ex.: 153|1.53|url), que e a fonte da
+      # verdade lida pelo build.gradle. Nao incrementamos aqui: para publicar
+      # um APK novo e preciso subir a versao no arquivo version, senao o
+      # versionCode repete e o Android recusa a instalacao (downgrade).
+      - name: Ler versao
         id: ver
         run: |
-          cur=$(cut -d'|' -f2 < version 2>/dev/null || true)
-          [ -n "$cur" ] || cur=1.0
-          patch="${cur##*.}"
-          next="$(( ${patch:-0} + 1 ))"
-          echo "versionName=${cur%.*}.${next}" >> $GITHUB_OUTPUT
-          echo "versionCode=$(( ${cur//./} + 1 ))" >> $GITHUB_OUTPUT
+          cur=$(cut -d'|' -f1 < version 2>/dev/null || true)
+          name=$(cut -d'|' -f2 < version 2>/dev/null || true)
+          url=$(cut -d'|' -f3 < version 2>/dev/null || true)
+          case "$cur" in ''|*[!0-9]*) echo "::error::versionCode invalido no arquivo version: '$cur'"; exit 1;; esac
+          [ -n "$name" ] || { echo "::error::versionName ausente no arquivo version"; exit 1; }
+          [ -n "$url" ] || { echo "::error::URL do APK ausente no arquivo version"; exit 1; }
+          echo "versionCode=$cur" >> $GITHUB_OUTPUT
+          echo "versionName=$name" >> $GITHUB_OUTPUT
+          echo "url=$url" >> $GITHUB_OUTPUT
+          echo "Publicando TAMI $name (versionCode $cur)"
 
       - name: Empacotar o PWA nos assets do APK
         run: |
@@ -48,12 +54,21 @@ jobs:
         working-directory: android
         run: |
           chmod +x gradlew
-          ./gradlew :app:assembleRelease -PversionCode=${{ steps.ver.outputs.versionCode }} -PversionName=${{ steps.ver.outputs.versionName }} --no-daemon
+          ./gradlew :app:assembleRelease --no-daemon
+
+      # Impede que o APK com versionCode/Name errados volte a ser publicado:
+      # a TAMI ficaria mostrando 1.0 e nunca aceitaria a atualizacao.
+      - name: Conferir versao do APK gerado
+        run: |
+          badging=$("$ANDROID_HOME"/build-tools/*/aapt dump badging android/app/build/outputs/apk/release/app-release.apk | head -1)
+          echo "$badging"
+          echo "$badging" | grep -q "versionCode='${{ steps.ver.outputs.versionCode }}' versionName='${{ steps.ver.outputs.versionName }}'" \
+            || { echo "::error::APK nao bate com o arquivo version ($badging)"; exit 1; }
 
       - name: Publicar o APK direto no repositório
         run: |
           cp android/app/build/outputs/apk/release/app-release.apk TAMI.apk
-          echo "${{ steps.ver.outputs.versionCode }}|${{ steps.ver.outputs.versionName }}|https://cleberleonheart-maker.github.io/tami/TAMI.apk" > version
+          echo "${{ steps.ver.outputs.versionCode }}|${{ steps.ver.outputs.versionName }}|${{ steps.ver.outputs.url }}" > version
           git config user.name github-actions
           git config user.email github-actions@github.com
           git add TAMI.apk version
