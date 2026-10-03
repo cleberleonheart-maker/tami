@@ -389,7 +389,26 @@ html[data-accent="laranja"].light { --primary:#EE812B; --primary-dark:#CD6B1E; }
 #room-view .rt-msg .rt-time { color: var(--text2, #888); font-size: 10.5px; margin-left: 5px; }
 #room-view .rt-row { display: flex; gap: 6px; margin: 0 2px 12px; }
 #room-view .rt-row input { flex: 1; min-width: 0; padding: 8px 10px; border: 1px solid var(--divider, #333); border-radius: 10px; background: var(--bg2, #16161d); color: var(--text, #eee); font-size: 13px; }
-</style>
+.item.select-mode { padding-left: 8px; }
+.item .checkbox {
+  display: none; align-items: center; justify-content: center;
+  width: 24px; height: 24px; border-radius: 6px; border: 2px solid var(--text2);
+  margin-right: 8px; flex-shrink: 0; transition: all .15s ease;
+}
+.item .checkbox.checked { background: var(--primary); border-color: var(--primary); }
+.item .checkbox.checked::after { content: "✓"; color: #fff; font-size: 16px; font-weight: bold; }
+.item.select-mode .checkbox { display: inline-flex; }
+.item.select-mode .art { margin-left: 0; }
+#select-bar {
+  display: none; align-items: center; justify-content: space-between;
+  background: var(--surface-v); border-bottom: 1px solid var(--divider);
+  padding: 8px 12px; gap: 10px; position: sticky; top: 0; z-index: 5;
+}
+#select-bar.show { display: flex; }
+#select-count { color: var(--text2); font-size: 14px; flex: 1; }
+#select-bar .btn { margin-top: 0; padding: 8px 16px; font-size: 14px; }
+#select-bar .btn.ghost { background: transparent; border: 1px solid var(--divider); color: var(--text); }
+#select-bar .btn:disabled { opacity: .4; cursor: not-allowed; }</style>
 <style id="redesign-futuro">
 /* Futurista sci-fi: fundo em grade neon animado + glassmorphism neon em todos os painéis Virgin Virgin */
 :root {
@@ -440,7 +459,26 @@ body::after {
   50% { transform: translateY(-3px) rotate(1.5deg); }
 }
 .v-ic { animation: redes-futuro-flut 3.5s ease-in-out infinite; }
-</style>
+.item.select-mode { padding-left: 8px; }
+.item .checkbox {
+  display: none; align-items: center; justify-content: center;
+  width: 24px; height: 24px; border-radius: 6px; border: 2px solid var(--text2);
+  margin-right: 8px; flex-shrink: 0; transition: all .15s ease;
+}
+.item .checkbox.checked { background: var(--primary); border-color: var(--primary); }
+.item .checkbox.checked::after { content: "✓"; color: #fff; font-size: 16px; font-weight: bold; }
+.item.select-mode .checkbox { display: inline-flex; }
+.item.select-mode .art { margin-left: 0; }
+#select-bar {
+  display: none; align-items: center; justify-content: space-between;
+  background: var(--surface-v); border-bottom: 1px solid var(--divider);
+  padding: 8px 12px; gap: 10px; position: sticky; top: 0; z-index: 5;
+}
+#select-bar.show { display: flex; }
+#select-count { color: var(--text2); font-size: 14px; flex: 1; }
+#select-bar .btn { margin-top: 0; padding: 8px 16px; font-size: 14px; }
+#select-bar .btn.ghost { background: transparent; border: 1px solid var(--divider); color: var(--text); }
+#select-bar .btn:disabled { opacity: .4; cursor: not-allowed; }</style>
 </head>
 <body>
 <div id="bg-anim"></div>
@@ -453,6 +491,12 @@ body::after {
   </header>
   <main id="main">
     <div id="search-wrap"><input type="search" id="search" placeholder="Buscar músicas, artistas…" autocomplete="off"></div>
+    <div id="select-bar">
+      <button class="btn ghost" onclick="cancelMultiSelect()">Cancelar</button>
+      <div id="select-count">0 selecionadas</div>
+      <button class="btn" onclick="selectAllSongs()">Selecionar tudo</button>
+      <button class="btn" onclick="deleteSelectedSongs()">Excluir</button>
+    </div>
     <section class="tab active" id="tab-virgin">
       <div class="list" id="virgin-list"></div>
     </section>
@@ -1773,18 +1817,33 @@ function renderSongs(list, container, favOnly) {
   for (const s of list) {
     const row = document.createElement('div');
     row.className = 'item';
-    row.innerHTML = `<div class="art" id="a-${s.id}"></div>
+    row.dataset.songId = s.id;
+    row.innerHTML = `<div class="checkbox" data-cb="${s.id}"></div><div class="art" id="a-${s.id}"></div>
       <div class="mid"><div class="it-title">${esc(s.title)}</div><div class="it-sub">${esc(s.artist)} · ${esc(s.album)}</div></div>
       <button class="like ${state.favs.has(s.id) ? 'fav' : ''}" data-fav="${s.id}">${state.favs.has(s.id) ? '♥' : '♡'}</button>
       <button class="like" data-next="${s.id}" title="Tocar a seguir">⏭</button>
       <button class="like" data-info="${s.id}" title="Detalhes">ⓘ</button>
       <button class="like" data-del="${s.id}" title="Excluir">🗑</button>`;
-    row.onclick = () => playList(list, s);
+    row.onclick = (e) => {
+      const cb = e.target.closest('[data-cb]');
+      if (cb || multiSelect) {
+        if (cb) cb.classList.toggle('checked');
+        if (toggleSongSelect(s.id, cb || row.querySelector('.checkbox'))) return;
+      }
+      playList(list, s);
+    };
+    let pressTimer;
+    row.onpointerdown = (e) => {
+      if (e.target.closest('button')) return;
+      pressTimer = setTimeout(() => { enterMultiSelect(); toggleSongSelect(s.id, row.querySelector('.checkbox')); }, 500);
+    };
+    const clearPress = () => { if (pressTimer) { clearTimeout(pressTimer); pressTimer = null; } };
+    row.onpointerup = clearPress; row.onpointermove = clearPress; row.onpointercancel = clearPress;
     row.querySelector('[data-fav]').onclick = (e) => { e.stopPropagation(); toggleFav(s); };
     row.querySelector('[data-next]').onclick = (e) => { e.stopPropagation(); addUpNext(s); };
     row.querySelector('[data-info]').onclick = (e) => { e.stopPropagation(); songDetails(s); };
     row.querySelector('[data-del]').onclick = (e) => { e.stopPropagation(); delSong(s.id); };
-    renderArt(row.childNodes[0], s);
+    renderArt(row.childNodes[1], s);
     container.appendChild(row);
   }
 }
@@ -1869,7 +1928,31 @@ function renderVideos(container) {
 function renderAll() {
   const songs = searchQ ? state.songs.filter((s) => matched(s.title, s.artist, s.album)) : state.songs;
   renderSongs(songs, $('songs-list'), false);
+  if (multiSelect) {
+    const list = document.querySelector('.tab.active #songs-list');
+    if (list) {
+      list.querySelectorAll('.item').forEach((el) => {
+        el.classList.add('select-mode');
+        const id = el.dataset.songId;
+        if (id && selectedIds.has(id)) {
+          const cb = el.querySelector('.checkbox'); if (cb) cb.classList.add('checked');
+        }
+      });
+    }
+  }
   renderSongs(songs.filter((s) => state.favs.has(s.id)), $('favs-list'), true);
+  if (multiSelect) {
+    const listFav = document.querySelector('.tab.active #favs-list');
+    if (listFav) {
+      listFav.querySelectorAll('.item').forEach((el) => {
+        el.classList.add('select-mode');
+        const id = el.dataset.songId;
+        if (id && selectedIds.has(id)) {
+          const cb = el.querySelector('.checkbox'); if (cb) cb.classList.add('checked');
+        }
+      });
+    }
+  }
   renderAlbums($('albums-list'), searchQ ? albums.filter((al) => matched(al.name, al.artist)) : albums);
   renderArtists($('artists-list'));
   renderPlaylists($('playlists-list'));
@@ -2114,6 +2197,7 @@ function renderAmb() {
 
 // ---------- Tabs ----------
 function selectTab(tab, updateDetail) {
+  if (multiSelect) exitMultiSelect();
   state.tab = tab;
   state.detail = null;
   document.querySelectorAll('nav button').forEach((b) => b.classList.toggle('active', b.dataset.tab === tab));
@@ -2194,6 +2278,7 @@ async function addSongsToPlaylist(plId) {
   });
 }
 function goBack() {
+  if (multiSelect) { exitMultiSelect(); return; }
   if (state.detail) {
     state.detail = null;
     selectTab(detailBackStack || 'songs');
@@ -4753,6 +4838,116 @@ async function deleteDupes(idsArg) {
 }
 
 // ---------- Remoção ----------
+
+// ---------- Seleção múltipla ----------
+let multiSelect = false;
+let selectedIds = new Set();
+
+function enterMultiSelect() {
+  if (multiSelect) return;
+  multiSelect = true;
+  selectedIds.clear();
+  $('select-bar').classList.add('show');
+  $('search-wrap').style.display = 'none';
+  $('back').style.display = 'none';
+  $('title').style.display = 'none';
+  $('addPlaylistBtn').style.display = 'none';
+  updateSelectCount();
+  document.querySelectorAll('.tab.active .item').forEach((el) => {
+    if (!el.classList.contains('item')) return;
+    el.classList.add('select-mode');
+  });
+}
+
+function exitMultiSelect() {
+  multiSelect = false;
+  selectedIds.clear();
+  $('select-bar').classList.remove('show');
+  $('search-wrap').style.display = '';
+  $('back').style.display = '';
+  $('title').style.display = '';
+  $('addPlaylistBtn').style.display = '';
+  document.querySelectorAll('.item.select-mode').forEach((el) => {
+    el.classList.remove('select-mode');
+    const cb = el.querySelector('.checkbox');
+    if (cb) cb.classList.remove('checked');
+  });
+  updateSelectCount();
+}
+
+function cancelMultiSelect() {
+  exitMultiSelect();
+}
+
+function updateSelectCount() {
+  const c = selectedIds.size;
+  const el = $('select-count');
+  if (el) el.textContent = c === 1 ? '1 selecionada' : c + ' selecionadas';
+  const btns = $('select-bar') ? $('select-bar').querySelectorAll('.btn') : [];
+  // segunda botão é selecionar tudo, quarto é excluir
+  if (btns[3]) btns[3].disabled = c === 0;
+}
+
+function toggleSongSelect(id, cbEl) {
+  if (!multiSelect) return false;
+  if (selectedIds.has(id)) {
+    selectedIds.delete(id);
+    if (cbEl) cbEl.classList.remove('checked');
+  } else {
+    selectedIds.add(id);
+    if (cbEl) cbEl.classList.add('checked');
+  }
+  updateSelectCount();
+  return true;
+}
+
+function selectAllSongs() {
+  const list = document.querySelector('.tab.active #songs-list');
+  if (!list) return;
+  const all = Array.from(list.querySelectorAll('.item'));
+  if (all.length === 0) return;
+  const allSelected = selectedIds.size === all.length;
+  if (allSelected) {
+    selectedIds.clear();
+    all.forEach((el) => { const cb = el.querySelector('.checkbox'); if (cb) cb.classList.remove('checked'); });
+  } else {
+    all.forEach((el) => {
+      const id = el.dataset.songId;
+      if (id) selectedIds.add(id);
+      const cb = el.querySelector('.checkbox'); if (cb) cb.classList.add('checked');
+    });
+  }
+  updateSelectCount();
+}
+
+async function deleteSelectedSongs() {
+  if (selectedIds.size === 0) return;
+  const n = selectedIds.size;
+  const msg = n === 1 ? 'Excluir 1 música selecionada? Ela também sai das playlists e favoritos.' : `Excluir ${n} músicas selecionadas? Elas também saem das playlists e favoritos.`;
+  if (!confirm(msg)) return;
+  const ids = Array.from(selectedIds);
+  // reutiliza lógica similar a deleteDupes
+  for (const id of ids) {
+    const it = state.songs.find((x) => x.id === id);
+    if (!it) continue;
+    deleteHandoffCache(it);
+    await delObj('songs', id);
+    state.favs.delete(id);
+    if (state.learn[id]) { delete state.learn[id]; }
+    if (objectUrlCache.has(id)) { URL.revokeObjectURL(objectUrlCache.get(id)); objectUrlCache.delete(id); }
+    revokeCover(id);
+    for (const p of state.playlists) {
+      if (p.songIds && p.songIds.includes(id)) { p.songIds = p.songIds.filter((x) => x !== id); await putPlaylist(p); }
+    }
+  }
+  await putKV('favs', [...state.favs]);
+  if (Object.keys(state.learn).length) await putKV('learn', state.learn);
+  state.queue = state.queue.filter((x) => !ids.includes(x.id));
+  exitMultiSelect();
+  await reloadAll();
+  toast(n === 1 ? 'Música removida' : n + ' músicas removidas');
+}
+
 async function delVideo(id) {
   const v = state.videos.find((x) => x.id === id);
   if (!v) return;
@@ -5875,7 +6070,7 @@ async function init() {
 function registerTabs() {
   $('fileSongs').onchange = (e) => { if (e.target.files.length) importFiles([...e.target.files], 'song'); e.target.value = ''; };
   $('fileVideos').onchange = (e) => { if (e.target.files.length) importFiles([...e.target.files], 'video'); e.target.value = ''; };
-  $('search').oninput = () => { searchQ = $('search').value.trim().toLowerCase(); renderAll(); if (state.detail) { state.detail = null; selectTab(state.tab); } };
+  $('search').oninput = () => { if (multiSelect) exitMultiSelect(); searchQ = $('search').value.trim().toLowerCase(); renderAll(); if (state.detail) { state.detail = null; selectTab(state.tab); } };
   $('vol').oninput = () => { const v = +$('vol').value; audio.volume = v; video.volume = v; };
   $('p-speed').onclick = cycleSpeed;
   let dragDepth = 0;
