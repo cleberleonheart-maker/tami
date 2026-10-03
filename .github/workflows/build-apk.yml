@@ -70,6 +70,25 @@ jobs:
           echo "$badging" | grep -q "versionCode='${{ steps.ver.outputs.versionCode }}' versionName='${{ steps.ver.outputs.versionName }}'" \
             || { echo "::error::APK nao bate com o arquivo version ($badging)"; exit 1; }
 
+      # Trava a porta que caused o problema: um app-debug.apk (chave
+      # "Android Debug") publicado como TAMI.apk nao deixa ninguem atualizar por
+      # cima, porque o Android recusa instalacao com assinatura diferente.
+      - name: Conferir assinatura do APK
+        run: |
+          apk=android/app/build/outputs/apk/release/app-release.apk
+          signer=$(ls "$ANDROID_HOME"/build-tools/*/apksigner 2>/dev/null | sort -V | tail -1)
+          [ -n "$signer" ] || { echo "::error::apksigner nao encontrado no runner"; exit 1; }
+          # mesma senha do build.gradle (TAMIKS_PASS ou o fallback)
+          want=$(keytool -list -v -keystore android/keystore/tami.keystore -storepass "${TAMIKS_PASS:-tami123}" -alias tami \
+                 | sed -n 's/.*SHA256: *//p' | tr -d ':' | tr 'A-Z' 'a-z')
+          got=$("$signer" verify --print-certs "$apk" | sed -n 's/.*certificate SHA-256 digest: *//p' | head -1 | tr 'A-Z' 'a-z')
+          echo "keystore: $want"
+          echo "apk:      $got"
+          if [ -z "$want" ] || [ "$want" != "$got" ]; then
+            echo "::error::assinatura do APK nao bate com o keystore do repo (buildou em debug?)"
+            exit 1
+          fi
+
       - name: Publicar o APK direto no repositório
         run: |
           cp android/app/build/outputs/apk/release/app-release.apk TAMI.apk
