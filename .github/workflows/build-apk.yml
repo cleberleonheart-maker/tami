@@ -58,9 +58,14 @@ jobs:
 
       # Impede que o APK com versionCode/Name errados volte a ser publicado:
       # a TAMI ficaria mostrando 1.0 e nunca aceitaria a atualizacao.
+      # aapt foi removido das build-tools novas, por isso o aapt2.
       - name: Conferir versao do APK gerado
         run: |
-          badging=$("$ANDROID_HOME"/build-tools/*/aapt dump badging android/app/build/outputs/apk/release/app-release.apk | head -1)
+          apk=android/app/build/outputs/apk/release/app-release.apk
+          tool=$(ls "$ANDROID_HOME"/build-tools/*/aapt2 2>/dev/null | sort -V | tail -1)
+          [ -n "$tool" ] || tool=$(ls "$ANDROID_HOME"/build-tools/*/aapt 2>/dev/null | sort -V | tail -1)
+          [ -n "$tool" ] || { echo "::error::aapt2/aapt nao encontrado no runner"; exit 1; }
+          badging=$("$tool" dump badging "$apk" | head -1)
           echo "$badging"
           echo "$badging" | grep -q "versionCode='${{ steps.ver.outputs.versionCode }}' versionName='${{ steps.ver.outputs.versionName }}'" \
             || { echo "::error::APK nao bate com o arquivo version ($badging)"; exit 1; }
