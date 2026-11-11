@@ -1070,6 +1070,10 @@ const I18N = {
   phoneGo: { pt: 'Conectar', en: 'Connect', es: 'Conectar' },
   phoneServAddr: { pt: 'Endereço do servidor (em uso agora)', en: 'Server address (in use now)', es: 'Dirección del servidor (en uso ahora)' },
   phoneServPub: { pt: 'Link público (convidar amigos)', en: 'Public link (invite friends)', es: 'Enlace público (invitar amigos)' },
+  phoneTokenLbl: { pt: 'Token de acesso (só se o servidor foi aberto com TAMI_TOKEN)', en: 'Access token (only if the server was started with TAMI_TOKEN)', es: 'Token de acceso (solo si el servidor se inició con TAMI_TOKEN)' },
+  phoneTokenPh: { pt: 'deixe vazio se não usa token', en: 'leave empty if no token', es: 'déjalo vacío si no usa token' },
+  phoneTokenSet: { pt: 'Token salvo.', en: 'Token saved.', es: 'Token guardado.' },
+  phoneTokenClear: { pt: 'Token apagado.', en: 'Token cleared.', es: 'Token borrado.' },
   phoneCopy: { pt: 'copiar', en: 'copy', es: 'copiar' },
   phoneShare: { pt: 'compartilhar', en: 'share', es: 'compartir' },
   phonePubLan: { pt: 'Você está na rede local: mande o endereço acima pra quem está na MESMA rede. Pra amigos DE LONGE, exponha o servidor num túnel (Cloudflare Tunnel/ngrok/bore) e o link público aparece aqui — o convidado cola em Conectar.', en: 'You are on the local network: send the address above to people on the SAME network. For far-away friends, expose the server through a tunnel (Cloudflare Tunnel/ngrok/bore) and the public link shows here — the guest pastes it into Connect.', es: 'Estás en la red local: envía la dirección de arriba a quien esté en la MISMA red. Para amigos LEJANOS, expón el servidor con un túnel (Cloudflare Tunnel/ngrok/bore) y el enlace público aparece aquí — el invitado lo pega en Conectar.' },
@@ -1512,6 +1516,24 @@ const I18N_MORE = {
 };
 Object.assign(I18N, I18N_MORE);
 let REMOTE = '';
+let REMOTE_TOKEN = '';
+function getRemoteToken() {
+  if (REMOTE_TOKEN) return REMOTE_TOKEN;
+  try { return (REMOTE_TOKEN = localStorage.getItem('tami-token') || ''); } catch (e) { return ''; }
+}
+// Cabecalho de autenticacao do servidor acompanhante. O token e opcional:
+// o servidor so o exige se foi iniciado com TAMI_TOKEN.
+function remoteHeaders(extra) {
+  const h = Object.assign({}, extra || {});
+  const t = getRemoteToken();
+  if (t) h['x-tami-token'] = t;
+  return h;
+}
+// Query com o token, para os endpoints que nao aceitam cabecalho (EventSource).
+function remoteQuery() {
+  const t = getRemoteToken();
+  return t ? '?t=' + encodeURIComponent(t) : '';
+}
 function getRemote() {
   if (REMOTE) return REMOTE;
   let saved = (() => { try { return localStorage.getItem('tami-remote') || ''; } catch (e) { return ''; } })().trim().replace(/\/+$/, '');
@@ -4707,6 +4729,11 @@ function dismissUpdate() {
   closeModal();
 }
 const CHANGELOG = {
+  '1.55': {
+    pt: ['Segurança: o servidor do PC aceita um token de acesso (TAMI_TOKEN) — com ele ligado, só quem tem o segredo consegue mandar comandos, ler a biblioteca ou abrir salas', 'Novo campo de token na aba "Celular": cole o segredo uma vez e ele fica salvo no aparelho', 'O token também pode vir no próprio endereço (http://ip:8081?t=SEGREDO) — o app separa e usa sozinho', 'Correção: o token não é aceito por um túnel público (ngrok/Cloudflare) sem a senha, mesmo vindo do próprio PC'],
+    en: ['Security: the PC server accepts an access token (TAMI_TOKEN) — with it on, only whoever has the secret can send commands, read the library or open rooms', 'New token field in the "Phone" tab: paste the secret once and it is saved on the device', 'The token can also come in the address itself (http://ip:8081?t=SECRET) — the app splits it and uses it on its own', 'Fix: the token is not accepted through a public tunnel (ngrok/Cloudflare) without the password, even coming from the PC itself'],
+    es: ['Seguridad: el servidor del PC acepta un token de acceso (TAMI_TOKEN) — con él activado, solo quien tenga el secreto puede mandar comandos, leer la biblioteca o abrir salas', 'Nuevo campo de token en la pestaña "Celular": pega el secreto una vez y queda guardado en el móvil', 'El token también puede venir en la propia dirección (http://ip:8081?t=SECRETO) — la app lo separa y lo usa sola', 'Corrección: el token no se acepta por un túnel público (ngrok/Cloudflare) sin la contraseña, aunque venga del propio PC']
+  },
   '1.54': {
     pt: ['Correção: as músicas do YouTube voltam a tocar até o fim e o botão de pause/continuar, o avance e a barra de progresso passam a funcionar nelas', 'Correção: o app não trava mais ao tocar uma música que veio do servidor do PC ou da sala compartilhada', 'Correção: a tela de detalhes da música não embaralha mais o aplicativo ao abrir', 'Correção: copiar e compartilhar links funciona também quando o app está na rede local (sem HTTPS)', 'O armazenamento das músicas ficou mais confiável: a biblioteca, as playlists e a fila não somem mais quando o app fica sem memória ou é reaberto', 'A busca não trava mais a rolagem enquanto você digita', 'A sala compartilhada reconecta sozinha quando a conexão cai', 'Tema claro com contraste correto e foco visível nos botões', 'Segurança: o servidor do PC não expõe mais os arquivos do projeto (nem a chave de assinatura do app) pela rede', 'Segurança: a chave das salas e os ids das músicas agora são gerados de forma segura e não mudam mais entre visitas', 'As músicas do PC agora tocam no navegador (o formato do arquivo estava sendo servido errado)', 'Segurança: o app só instala atualizações por HTTPS e só abre links confiáveis', 'A tela de bloqueio do celular mostra o nome da música e o tempo avançando'],
     en: ['Fix: YouTube songs now play to the end, and pause/resume, skip and the progress bar work on them', 'Fix: the app no longer crashes when playing a song coming from the PC server or the shared room', 'Fix: the song details screen no longer scrambles the app when opened', 'Fix: copying and sharing links now works on a local network too (without HTTPS)', 'Music storage got more reliable: the library, playlists and queue no longer vanish when the app runs out of memory or is reopened', 'Search no longer stutters while you type', 'The shared room reconnects on its own when the connection drops', 'Light theme with correct contrast and visible focus on buttons', 'Security: the PC server no longer exposes the project files (nor the app signing key) over the network', 'Security: room keys and song ids are now generated securely and no longer change between visits', 'PC songs now play in the browser (the file type was being served wrong)', 'Security: the app only installs updates over HTTPS and only opens trusted links', 'The lock screen now shows the song name and the time moving forward'],
@@ -5263,7 +5290,7 @@ function phonePlaying() {
 }
 async function pollRemote() {
   try {
-    const r = await fetch(getRemote() + '/remote', { cache: 'no-store' });
+    const r = await fetch(getRemote() + '/remote', { cache: 'no-store', headers: remoteHeaders() });
     if (!r.ok) throw new Error('!ok');
     const d = await r.json();
     state.phone.dev = d.dev || '';
@@ -5281,7 +5308,7 @@ async function pollRemote() {
 async function sendCmd(cmd, value) {
   try {
     await fetch(getRemote() + '/cmd', {
-      method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ cmd, value })
+      method: 'POST', headers: remoteHeaders({ 'Content-Type': 'application/json' }), body: JSON.stringify({ cmd, value })
     });
   } catch (e) { toast('Sem conexão com o servidor do celular.'); }
 }
@@ -5327,21 +5354,22 @@ function publishState() {
   // Precisa usar o mesmo endereco configurado na aba Celular: com '/api/state'
   // relativo o estado ia para o servidor da propria pagina, e nao para o PC.
   const base = getRemote();
-  try { fetch(base + '/api/state', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ dev: state.nick || navigator.platform || 'PC', state: companionState() }) }).catch(() => {}); } catch (e) {}
+  try { fetch(base + '/api/state', { method: 'POST', headers: remoteHeaders({ 'Content-Type': 'application/json' }), body: JSON.stringify({ dev: state.nick || navigator.platform || 'PC', state: companionState() }) }).catch(() => {}); } catch (e) {}
 }
 let companionEvents = null;
 let companionTimer = 0;
 async function probeCompanion() {
   try {
     const base = getRemote();
-    const r = await fetch(base + '/__companion__', { cache: 'no-store' });
+    const r = await fetch(base + '/__companion__', { cache: 'no-store', headers: remoteHeaders() });
     if (!r.ok) return;
     await r.json();
     window.__COMPANION__ = true;
     toast('Modo acompanhante ativo — aba Celular conectada.');
     if (companionEvents) { try { companionEvents.close(); } catch (e) {} companionEvents = null; }
     if (companionTimer) { clearInterval(companionTimer); companionTimer = 0; }
-    const es = new EventSource(base + '/api/events');
+    // EventSource nao aceita cabecalhos: o token vai na query (?t=).
+    const es = new EventSource(base + '/api/events' + remoteQuery());
     es.onmessage = (ev) => {
       try {
         const m = JSON.parse(ev.data);
@@ -5365,11 +5393,39 @@ function phoneSet() {
   let v = ($('phone-addr').value || '').trim().replace(/\/+$/, '');
   if (!v) { toast('Digite o endereço do servidor.'); return; }
   if (!/^https?:\/\//i.test(v)) v = 'http://' + v;
+  // O token do servidor pode vir na query: http://ip:8081?t=SEGREDO.
+  // Ele e guardado separado e vai no cabecalho das requisicoes.
+  try {
+    const u = new URL(v);
+    const t = u.searchParams.get('t');
+    if (t) {
+      REMOTE_TOKEN = t;
+      try { localStorage.setItem('tami-token', t); } catch (e2) {}
+      u.searchParams.delete('t');
+      v = u.toString().replace(/\/+$/, '');
+    }
+  } catch (e) {}
   REMOTE = v;
   phoneAddrDraftValue = v;
   try { localStorage.setItem('tami-remote', v); } catch (e) {}
   toast('Servidor definido: ' + v);
   $('phone-addr').value = v;
+  pollRemote();
+}
+function phoneTokenSet() {
+  const el = $('phone-token');
+  const t = el ? String(el.value || '').trim() : '';
+  REMOTE_TOKEN = t;
+  try { t ? localStorage.setItem('tami-token', t) : localStorage.removeItem('tami-token'); } catch (e) {}
+  toast(t ? L('phoneTokenSet') : L('phoneTokenClear'));
+  pollRemote();
+}
+function phoneTokenClear() {
+  REMOTE_TOKEN = '';
+  try { localStorage.removeItem('tami-token'); } catch (e) {}
+  const el = $('phone-token');
+  if (el) el.value = '';
+  toast(L('phoneTokenClear'));
   pollRemote();
 }
 // navigator.clipboard so existe em contexto seguro (https/localhost). Na LAN
@@ -5498,6 +5554,10 @@ function renderPhone() {
   // endereco, tudo que o usuario digitava era apagado a cada rodada.
   if (addrEl && document.activeElement !== addrEl) phoneAddrDraftValue = addrEl.value;
   const wasAddr = document.activeElement && document.activeElement.id === 'phone-addr';
+  const wasToken = document.activeElement && document.activeElement.id === 'phone-token';
+  const tokenEl = $('phone-token');
+  // Mesmo problema do endereco: o token digitado sumia no redesenho.
+  if (tokenEl && document.activeElement !== tokenEl) phoneTokenDraftValue = tokenEl.value;
   const p = state.phone;
   const s = p.state || {};
   const cur = s.current || null;
@@ -5513,6 +5573,14 @@ function renderPhone() {
       <button class="btn" onclick="phoneSet()" style="flex:0">${esc(L('phoneGo'))}</button>
     </div>
     <div style="font-size:11px;color:var(--text2,#999);margin:-2px 2px 6px">Endereço do PC com o servidor acompanhante — ex.: <b>192.168.1.10:8081</b> ou um link público</div>
+    <div style="margin:0 2px 8px">
+      <div style="font-size:11px;color:var(--text2,#999);padding:0 2px 4px">${esc(L('phoneTokenLbl'))}</div>
+      <div style="display:flex;gap:6px">
+        <input id="phone-token" type="password" value="${esc(phoneTokenDraftValue || getRemoteToken())}" placeholder="${esc(L('phoneTokenPh'))}" autocomplete="off" style="flex:1;min-width:0;padding:8px 10px;border:1px solid var(--border,#333);border-radius:10px;background:var(--bg2,#16161d);color:var(--text,#eee);font-size:13px">
+        <button class="btn" onclick="phoneTokenSet()" style="flex:0">${esc(L('phoneGo'))}</button>
+        <button class="btn secondary" onclick="phoneTokenClear()" style="flex:0">✕</button>
+      </div>
+    </div>
     <div style="border:1px solid var(--border,#333);border-radius:12px;background:var(--bg2,#16161d);padding:10px;margin:2px 2px 10px">
       <div style="font-size:11px;color:var(--text2,#999);padding:0 2px 4px">${esc(L('phoneServAddr'))}</div>
       <code style="display:block;font-size:12px;color:var(--text,#eee);word-break:break-all;background:var(--surface-v,#1b1b24);border:1px solid var(--divider,#333);border-radius:8px;padding:8px;margin:0 0 8px">${esc(getRemote())}</code>
@@ -5648,6 +5716,12 @@ function renderPhone() {
     ae.oninput = () => { phoneAddrDraftValue = ae.value; };
     if (wasAddr) { try { ae.focus(); ae.setSelectionRange(ae.value.length, ae.value.length); } catch (e) {} }
   }
+  const te = $('phone-token');
+  if (te) {
+    te.onpointerup = (e) => e.stopPropagation();
+    te.oninput = () => { phoneTokenDraftValue = te.value; };
+    if (wasToken) { try { te.focus(); te.setSelectionRange(te.value.length, te.value.length); } catch (e) {} }
+  }
   const so = $('phone-sort');
   if (so) {
     so.onchange = () => { phoneSort = so.value; renderPhone(); };
@@ -5663,6 +5737,7 @@ function renderPhone() {
 let phoneSearch = '';
 let phoneSort = 'orig';
 let phoneAddrDraftValue = '';
+let phoneTokenDraftValue = '';
 function phoneAddrDraft() {
   return phoneAddrDraftValue || getRemote();
 }
@@ -5740,7 +5815,7 @@ function roomEl() { return state.current && state.current.type === 'video' ? vid
 async function roomCmd(payload) {
   try {
     const r = await fetch(getRemote() + '/api/room/' + state.room.code + '/cmd', {
-      method: 'POST', headers: { 'Content-Type': 'application/json' },
+      method: 'POST', headers: remoteHeaders({ 'Content-Type': 'application/json' }),
       body: JSON.stringify({ key: state.room.key, evt: payload })
     });
     return r.ok;
@@ -5768,7 +5843,7 @@ function roomStopStream() {
 function roomSub() {
   roomStopSse();
   try {
-    const es = new EventSource(getRemote() + '/api/room/' + state.room.code + '/events');
+    const es = new EventSource(getRemote() + '/api/room/' + state.room.code + '/events' + remoteQuery());
     es.onmessage = (ev) => { try { roomGuestBackend(JSON.parse(ev.data)); } catch (e) {} };
     es.onerror = () => {
       try { es.close(); } catch (e) {}
@@ -5784,7 +5859,7 @@ async function roomPoll() {
   const r = state.room;
   if (r.role === 'off' || !r.code) return;
   try {
-    const res = await fetch(getRemote() + '/api/room/' + r.code, { cache: 'no-store' });
+    const res = await fetch(getRemote() + '/api/room/' + r.code, { cache: 'no-store', headers: remoteHeaders() });
     if (!res.ok) { if (res.status === 404) roomReset(true); return; }
     const snap = await res.json();
     r.members = snap.members || [];
@@ -5920,7 +5995,7 @@ function roomCreateApply(nick) {
   (async () => {
     try {
       const res = await fetch(getRemote() + '/api/room', {
-        method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ nick })
+        method: 'POST', headers: remoteHeaders({ 'Content-Type': 'application/json' }), body: JSON.stringify({ nick })
       });
       if (!res.ok) { toast(L('roomNoConn')); return; }
       const d = await res.json();
@@ -5938,7 +6013,7 @@ function roomJoinApply(code, nick) {
   (async () => {
     try {
       const res = await fetch(getRemote() + '/api/room/' + encodeURIComponent(code) + '/join', {
-        method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ nick })
+        method: 'POST', headers: remoteHeaders({ 'Content-Type': 'application/json' }), body: JSON.stringify({ nick })
       });
       if (!res.ok) { toast(L('roomNotFind')); return; }
       const snap = await res.json();
@@ -5995,7 +6070,7 @@ function roomJoin() {
 function roomLeave() {
   const r = state.room;
   if (r.role === 'guest' && r.code) {
-    try { fetch(getRemote() + '/api/room/' + r.code + '/leave', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ nick: r.nick }) }).catch(() => {}); } catch (e) {}
+    try { fetch(getRemote() + '/api/room/' + r.code + '/leave', { method: 'POST', headers: remoteHeaders({ 'Content-Type': 'application/json' }), body: JSON.stringify({ nick: r.nick }) }).catch(() => {}); } catch (e) {}
   } else if (r.role === 'host' && r.code) {
     roomCmd({ cmd: 'close' });
   }
@@ -6204,7 +6279,7 @@ async function roomSendMsg() {
   let res;
   try {
     res = await fetch(getRemote() + '/api/room/' + encodeURIComponent(r.code) + '/msg', {
-      method: 'POST', headers: { 'Content-Type': 'application/json' },
+      method: 'POST', headers: remoteHeaders({ 'Content-Type': 'application/json' }),
       body: JSON.stringify({ nick: r.nick, text })
     });
   } catch (e) { res = null; }

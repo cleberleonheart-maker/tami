@@ -501,9 +501,27 @@ function sendJSON(res, code, obj) {
 
 // Token opcional (TAMI_TOKEN). Sem ele o servidor continua aberto (comportamento
 // antigo, util na LAN confiavel), mas com ele os comandos exigem o segredo.
+// O token pode vir no header x-tami-token ou na query ?t= (util para o
+// EventSource, que nao permite cabecalhos).
 const AUTH_TOKEN = (process.env.TAMI_TOKEN || '').trim();
+
+// A pagina aberta no proprio PC (localhost:8081) e a aba "Celular" do
+// navegador do PC nao tem como informar o token. Pedidos do loopback com
+// Host localhost sao liberados.
+// Importante: exige as DUAS condicoes. Tunel (ngrok/Cloudflare) conecta pelo
+// 127.0.0.1 mas preserva o Host do dominio publico, entao nao passa por aqui.
+function isLocalApp(req) {
+  try {
+    const a = String(req.socket.remoteAddress || '');
+    const loop = a === '127.0.0.1' || a === '::1' || a === '::ffff:127.0.0.1' || a.startsWith('127.');
+    if (!loop) return false;
+    const host = String(req.headers.host || '').replace(/:\d+$/, '').toLowerCase();
+    return host === 'localhost' || host === '127.0.0.1' || host === '[::1]' || host === '::1';
+  } catch (e) { return false; }
+}
 function tokenOk(req) {
   if (!AUTH_TOKEN) return true;
+  if (isLocalApp(req)) return true;
   const h = req.headers['x-tami-token'];
   if (typeof h === 'string' && h.length && timingSafeEqual(h, AUTH_TOKEN)) return true;
   const q = new URL(req.url, 'http://x').searchParams.get('t');
@@ -728,6 +746,7 @@ const server = http.createServer((req, res) => {
   }
 
   if (p === '/api/events') {
+    if (!tokenOk(req)) { sendJSON(res, 401, { error: 'unauthorized' }); return; }
     sendCORS(res);
     res.writeHead(200, {
       'content-type': 'text/event-stream',
@@ -762,12 +781,16 @@ const server = http.createServer((req, res) => {
   }
 
   if (p === '/remote') {
+    if (!tokenOk(req)) { sendJSON(res, 401, { error: 'unauthorized' }); return; }
     stateJSON(req).then((d) => sendJSON(res, 200, d));
     return;
   }
 
   const rm = p.match(/^\/api\/room(?:\/([A-Z0-9]+))?(\/(?:join|leave|cmd|msg|events|ping))?$/);
   if (rm) {
+    // Com TAMI_TOKEN ligado, todas as rotas da sala exigem o segredo: criar
+    // uma sala devolve a key do anfitriao, que da controle do palco.
+    if (!tokenOk(req)) { sendJSON(res, 401, { error: 'unauthorized' }); return; }
     if (!rm[1] && req.method === 'POST') {
       let body = '';
       req.on('data', (c) => { body += c; if (body.length > 8192) req.destroy(); });
@@ -894,7 +917,13 @@ server.listen(PORT, () => {
   console.log(`  No celular  : aba "Celular" do app => http://${LAN_IP()}:${PORT}`);
   console.log(`  Músicas     : ${MUSIC}${fs.existsSync(MUSIC) ? '' : '  (pasta vazia. Use TAMI_MUSIC=/caminho ou coloque músicas em ~/Music)'}`);
   if (PUBLIC_URL) console.log(`  Acesso externo (configurado): ${PUBLIC_URL}`);
-  if (AUTH_TOKEN) console.log('  Token ativo: comandos exigem TAMI_TOKEN (header x-tami-token ou ?t=)');
+  if (AUTH_TOKEN) {
+    console.log('  Token ativo: comandos exigem TAMI_TOKEN (header x-tami-token ou ?t=)');
+    console.log('               No celular, cole o token no campo da aba "Celular"');
+    console.log('               ou use o endereço http://ip:8081?t=SEU_TOKEN');
+  } else {
+    console.log('  Dica: para proteger o servidor, inicie com TAMI_TOKEN=seu-segredo');
+  }
   console.log('  Dica: para acessar de outro estado, use Tailscale/ZeroTier no PC e no celular,');
   console.log('        ou exponha esta porta num túnel (Cloudflare Tunnel, ngrok, bore).');
 });
