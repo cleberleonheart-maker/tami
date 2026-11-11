@@ -39,7 +39,11 @@ const MIME = {
   '.json': 'application/json', '.svg': 'image/svg+xml', '.png': 'image/png',
   '.ico': 'image/x-icon', '.apk': 'application/vnd.android.package-archive',
   '.mp4': 'video/mp4', '.m4v': 'video/mp4', '.mkv': 'video/x-matroska',
-  '.webm': 'video/webm', '.mov': 'video/quicktime', '.avi': 'video/x-msvideo'
+  '.webm': 'video/webm', '.mov': 'video/quicktime', '.avi': 'video/x-msvideo',
+  // Sem o MIME correto o <audio> do navegador recusa a faixa.
+  '.mp3': 'audio/mpeg', '.m4a': 'audio/mp4', '.aac': 'audio/aac',
+  '.ogg': 'audio/ogg', '.opus': 'audio/ogg', '.wav': 'audio/wav',
+  '.flac': 'audio/flac', '.wma': 'audio/x-ms-wma'
 };
 
 let lastState = null;
@@ -373,6 +377,12 @@ async function fillMeta(songs) {
   }));
 }
 
+// id curto e estavel derivado do caminho absoluto do arquivo.
+function pathId(p) {
+  const crypto = require('crypto');
+  return crypto.createHash('sha1').update(p).digest('hex').slice(0, 12);
+}
+
 function scanMusic() {
   const now = Date.now();
   if (now - musicCache.at < 15000) return musicCache.songs;
@@ -395,7 +405,10 @@ function scanMusic() {
         const fallbackTitle = parts.length > 1 ? parts.slice(1).join(' -').trim() : base;
         const fallbackArtist = parts.length > 1 ? parts[0].trim() : '';
         out.push({
-          id: String(out.length),
+          // id estavel: derivado do caminho, nao do indice. Com String(out.length)
+          // remover um arquivo renumerava todas as faixas seguintes e o app
+          // passava a tocar a musica errada.
+          id: pathId(full),
           title: fallbackTitle, artist: fallbackArtist, album: '',
           durationMs: 0, type: vExt ? 'video' : 'song',
           name: e.name, size: st.size, path: full, mtimeMs: st.mtimeMs, _done: false
@@ -486,11 +499,44 @@ function sendJSON(res, code, obj) {
   res.end(JSON.stringify(obj));
 }
 
+// Token opcional (TAMI_TOKEN). Sem ele o servidor continua aberto (comportamento
+// antigo, util na LAN confiavel), mas com ele os comandos exigem o segredo.
+const AUTH_TOKEN = (process.env.TAMI_TOKEN || '').trim();
+function tokenOk(req) {
+  if (!AUTH_TOKEN) return true;
+  const h = req.headers['x-tami-token'];
+  if (typeof h === 'string' && h.length && timingSafeEqual(h, AUTH_TOKEN)) return true;
+  const q = new URL(req.url, 'http://x').searchParams.get('t');
+  return typeof q === 'string' && q.length && timingSafeEqual(q, AUTH_TOKEN);
+}
+function timingSafeEqual(a, b) {
+  const crypto = require('crypto');
+  const ba = Buffer.from(String(a));
+  const bb = Buffer.from(String(b));
+  if (ba.length !== bb.length) return false;
+  return crypto.timingSafeEqual(ba, bb);
+}
+
+// Arquivos que o servidor pode entregar. Antes ele servia a pasta inteira do
+// repositorio: dava para baixar o .git/config, o keystore de assinatura e o
+// codigo-fonte pela rede. Agora a lista e fechada.
+const PUBLIC_FILES = new Set([
+  'index.html', 'sw.js', 'manifest.json', 'icon.svg', 'version', 'TAMI.apk'
+]);
+
 function serveStatic(req, res, p) {
   let rel = decodeURIComponent(p);
-  if (rel === '/') rel = '/index.html';
-  const file = path.join(ROOT, path.normalize(rel));
-  if (!file.startsWith(ROOT) || !fs.existsSync(file) || fs.statSync(file).isDirectory()) {
+  if (rel === '/' || rel === '') rel = '/index.html';
+  // Sem path traversal: o nome do arquivo precisa estar na lista publica.
+  const name = path.basename(rel);
+  if (!PUBLIC_FILES.has(name)) {
+    sendCORS(res);
+    res.writeHead(404, { 'content-type': 'text/plain' });
+    res.end('404');
+    return;
+  }
+  const file = path.join(ROOT, name);
+  if (!fs.existsSync(file) || !fs.statSync(file).isFile()) {
     sendCORS(res);
     res.writeHead(404, { 'content-type': 'text/plain' });
     res.end('404');
@@ -502,7 +548,8 @@ function serveStatic(req, res, p) {
 }
 
 function serveMedia(req, res, p, kind) {
-  const m = p.match(/^\/api\/(audio|video)\/(\d+)$/);
+  // id pode ser o hash estavel (hex) ou o indice numerico antigo.
+  const m = p.match(/^\/api\/(audio|video)\/([A-Za-z0-9_-]+)$/);
   if (!m || (kind && m[1] !== kind)) { sendJSON(res, 404, { error: 'not found' }); return; }
   const items = scanMusic();
   const want = m[1] === 'audio' ? 'song' : 'video';
@@ -594,19 +641,26 @@ const ROOM_IDLE_MS = 10 * 60 * 1000;
 const ROOM_CODE_CHARS = 'ABCDEFGHJKLMNPQRSTUVWXYZ23456789'; // sem I/O/L/0/1
 const rooms = new Map();
 
+// Math.random() nao e criptografico: a chave da sala (que da direito de
+// mandar play/pause/seek) precisa vir do modulo de crypto.
+function randomBytesHex(n) {
+  return require('crypto').randomBytes(n).toString('hex');
+}
+function randomFrom(chars, n) {
+  const crypto = require('crypto');
+  let s = '';
+  for (let i = 0; i < n; i++) s += chars[crypto.randomInt(chars.length)];
+  return s;
+}
 function roomCode() {
   let s;
   do {
-    s = '';
-    for (let i = 0; i < 4; i++) s += ROOM_CODE_CHARS[Math.floor(Math.random() * ROOM_CODE_CHARS.length)];
+    s = randomFrom(ROOM_CODE_CHARS, 4);
   } while (rooms.has(s));
   return s;
 }
 function roomKey() {
-  const cs = 'abcdef0123456789';
-  let s = '';
-  for (let i = 0; i < 32; i++) s += cs[Math.floor(Math.random() * cs.length)];
-  return s;
+  return randomBytesHex(32);
 }
 function roomSnapshot(code) {
   const r = rooms.get(code);
@@ -658,6 +712,7 @@ const server = http.createServer((req, res) => {
   }
 
   if (p === '/api/state' && req.method === 'POST') {
+    if (!tokenOk(req)) { sendJSON(res, 401, { error: 'unauthorized' }); return; }
     let body = '';
     req.on('data', (c) => { body += c; if (body.length > 512000) req.destroy(); });
     req.on('end', () => {
@@ -691,6 +746,7 @@ const server = http.createServer((req, res) => {
   }
 
   if (p === '/cmd' && req.method === 'POST') {
+    if (!tokenOk(req)) { sendJSON(res, 401, { error: 'unauthorized' }); return; }
     let body = '';
     req.on('data', (c) => { body += c; if (body.length > 10000) req.destroy(); });
     req.on('end', () => {
@@ -838,6 +894,7 @@ server.listen(PORT, () => {
   console.log(`  No celular  : aba "Celular" do app => http://${LAN_IP()}:${PORT}`);
   console.log(`  Músicas     : ${MUSIC}${fs.existsSync(MUSIC) ? '' : '  (pasta vazia. Use TAMI_MUSIC=/caminho ou coloque músicas em ~/Music)'}`);
   if (PUBLIC_URL) console.log(`  Acesso externo (configurado): ${PUBLIC_URL}`);
+  if (AUTH_TOKEN) console.log('  Token ativo: comandos exigem TAMI_TOKEN (header x-tami-token ou ?t=)');
   console.log('  Dica: para acessar de outro estado, use Tailscale/ZeroTier no PC e no celular,');
   console.log('        ou exponha esta porta num túnel (Cloudflare Tunnel, ngrok, bore).');
 });

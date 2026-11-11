@@ -113,6 +113,9 @@ input[type="range"] { touch-action: none; }
 #search-wrap { padding: 0 12px 6px; position: sticky; top: 0; z-index: 9; background: var(--bg); }
 #search { width: 100%; background: var(--surface); border: 1px solid var(--divider); color: var(--text); border-radius: 22px; padding: 10px 16px; font-size: 15px; outline: none; }
 #search:focus { border-color: var(--primary); }
+/* Foco visivel: sem isso o teclado nao dava nenhuma pista de onde o cursor esta. */
+:focus-visible { outline: 2px solid var(--primary); outline-offset: 2px; }
+input[type=range]:focus-visible { outline: 2px solid var(--primary); outline-offset: 4px; }
 .p-vol { display: flex; align-items: center; gap: 10px; padding: 0 24px 18px; }
 .p-vol .pl { color: var(--text2); font-size: 16px; }
 .p-vol .pr { color: var(--primary); font-size: 13px; font-weight: 700; cursor: pointer; min-width: 34px; text-align: right; user-select: none; }
@@ -153,11 +156,15 @@ input[type="range"] { touch-action: none; }
 .empty .big { font-size: 44px; margin-bottom: 12px; }
 .btn {
   display: inline-flex; align-items: center; gap: 8px;
-  background: var(--primary-dark); color: #fff; border: none;
+  /* O overlay escuro garante contraste 4.5:1 do texto branco em cima de
+     qualquer cor de acento (verde/laranja ficavam em ~3:1 e ilegiveis). */
+  background-color: var(--primary-dark);
+  background-image: linear-gradient(rgba(0,0,0,.28), rgba(0,0,0,.28));
+  color: #fff; border: none;
   border-radius: 24px; padding: 12px 22px; font-size: 15px; font-weight: 600;
   cursor: pointer; margin-top: 14px;
 }
-.btn.secondary { background: var(--surface-v); color: var(--text); }
+.btn.secondary { background-color: var(--surface-v); background-image: none; color: var(--text); }
 
 /* Bottom nav */
 nav {
@@ -440,6 +447,13 @@ body::after {
   border: 1px solid var(--divider) !important;
   backdrop-filter: blur(12px) saturate(150%);
 }
+/* No tema claro o painel escuro deixava o texto (preto) ilegivel: o fundo
+   precisa acompanhar o tema, nao ser fixo. */
+html.light .v-card, html.light .item, html.light .mrow, html.light .empty, html.light .section {
+  background: rgba(255,255,255,.72) !important;
+  color: var(--text) !important;
+}
+html.light .it-sub, html.light .sub-hint { color: var(--text2) !important; }
 .v-card {
   transition: transform .18s ease, box-shadow .2s ease, border-color .2s ease;
 }
@@ -593,7 +607,7 @@ body::after {
   </div>
 </div>
 
-<div id="modal-wrap" onclick="if(event.target===this)closeModal()">
+<div id="modal-wrap" role="dialog" aria-modal="true" onclick="if(event.target===this)closeModal()">
   <div id="modal"></div>
 </div>
 <div class="toast" id="toast"></div>
@@ -620,7 +634,7 @@ const state = {
   amb: { id: null, vol: 0.4, playing: false },
   sleep: 0, sleepId: null,
   phone: { dev: '', online: false, state: null, songs: null, videos: null, server: null, syncing: false },
-  room: { role: 'off', code: '', key: '', nick: '', media: null, playing: false, positionMs: 0, members: [], messages: [], sse: null, timer: 0, poll: 0 },
+  room: { role: 'off', code: '', key: '', nick: '', media: null, playing: false, positionMs: 0, members: [], messages: [], sse: null, timer: 0, poll: 0, retry: 0 },
   db: null,
   lang: (() => { try { return ['pt', 'en', 'es'].includes(localStorage.getItem('tami-lang')) ? localStorage.getItem('tami-lang') : 'pt'; } catch (e) { return 'pt'; } })()
 };
@@ -652,7 +666,21 @@ function loadYtApi(cb) {
   };
   const s = document.createElement('script');
   s.src = 'https://www.youtube.com/iframe_api';
+  // Sem onerror/timeout, uma API bloqueada deixava ytApiQueued travado em
+  // true para sempre e o palco ficava preto sem nenhuma mensagem.
+  s.onerror = () => {
+    ytApiQueued = false;
+    ytApiReadyCbs.splice(0);
+    try { toast(L('ytBad')); } catch (e) {}
+  };
   document.head.appendChild(s);
+  setTimeout(() => {
+    if (!window.YT || !YT.Player) {
+      ytApiQueued = false;
+      ytApiReadyCbs.splice(0);
+      try { toast(L('ytBad')); } catch (e) {}
+    }
+  }, 12000);
 }
 function ytEnsureDom() {
   if (!document.getElementById('ytbox')) {
@@ -671,6 +699,35 @@ function ytStop() {
   if (b) b.style.display = 'none';
 }
 function ytHide() { ytStop(); }
+// O player do YouTube nao emite "timeupdate": o tempo so vem por consulta.
+// Um ticker leve atualiza a barra de progresso e detecta o fim da faixa.
+let ytTicker = 0;
+function startYtTicker() {
+  if (ytTicker) return;
+  ytTicker = setInterval(() => {
+    try {
+      if (!ytPlayer || !state.current || !isYtMedia(state.current)) { stopYtTicker(); return; }
+      const st = ytPlayer.getPlayerState ? ytPlayer.getPlayerState() : -1;
+      if (st === 0) { stopYtTicker(); ytOnEnded(); return; }
+      if (st === 1) updateProgress();
+    } catch (e) { stopYtTicker(); }
+  }, 500);
+}
+function stopYtTicker() {
+  if (ytTicker) { clearInterval(ytTicker); ytTicker = 0; }
+}
+function ytOnEnded() {
+  try {
+    if (state.repeat === 2) {
+      if (ytPlayer && ytPlayer.seekTo) { ytPlayer.seekTo(0, true); ytPlayer.playVideo(); }
+      return;
+    }
+    if (state.upNext.length) { next(); return; }
+    if (state.queue.length > 1 && state.queueIndex < state.queue.length - 1) { next(); return; }
+    closePlayer();
+    syncNativeNow(true);
+  } catch (e) {}
+}
 function ytMount(videoId, positionMs, autoplay) {
   if (!videoId) return;
   loadYtApi(() => {
@@ -697,8 +754,27 @@ function ytMount(videoId, positionMs, autoplay) {
         onReady: () => {
           try { if (positionMs > 0) ytPlayer.seekTo(positionMs / 1000, true); } catch (e) {}
           if (autoplay) { try { ytPlayer.playVideo(); } catch (e) {} }
+          startYtTicker();
         },
-        onError: () => { try { toast(L('ytBad')); } catch (e) {} }
+        // Sem onStateChange o video do YouTube terminava e a fila ficava
+        // congelada: o <video> do DOM nunca dispara "ended" no YouTube.
+        onStateChange: (e) => {
+          try {
+            if (e.data === 1) startYtTicker();
+            else if (e.data === 0 || e.data === 2) stopYtTicker();
+            else if (e.data === 3) stopYtTicker();
+            else if (e.data === 5) { try { toast(L('ytBad')); } catch (err) {} }
+          } catch (err) {}
+        },
+        onError: (e) => {
+          const code = e && e.data;
+          const msg = code === 2 ? 'youtubeEmbed'
+            : code === 100 ? 'youtubeRemoved'
+            : code === 101 || code === 150 ? 'youtubeDenied'
+            : 'ytBad';
+          try { toast(L(msg)); } catch (err) {}
+          if (state.djMode && state.queue.length) { try { pjNext(); } catch (err) {} }
+        }
       }
     });
   });
@@ -712,7 +788,9 @@ function mediaError(ev, reason) {
   const code = err ? err.code : 0;
   const msg = (err && err.message) || (reason && reason.message) || '';
   if (code !== 4 && !/supported sources|no hay fuentes|sem origens|origens suportadas|fuentes soportadas|cannot play|not supported/i.test(msg)) return;
-  const cur = state.queue[state.queueIndex];
+  // O erro precisa apontar para a faixa que esta tocando: usar o indice da
+  // fila mostrava o nome errado e, no modo DJ, pulava a musica errada.
+  const cur = state.current || state.queue[state.queueIndex];
   const now = Date.now();
   if (cur && mediaSkipGuard[cur.id] && now - mediaSkipGuard[cur.id] < 4000) return;
   if (cur) mediaSkipGuard[cur.id] = now;
@@ -1023,6 +1101,9 @@ const I18N = {
   roomYt: { pt: '🔴 YouTube (link ou ID do vídeo)', en: '🔴 YouTube (video link or ID)', es: '🔴 YouTube (enlace o ID del vídeo)' },
   roomYtPh: { pt: 'https://youtube.com/watch?v=… ou só o ID', en: 'https://youtube.com/watch?v=… or just the ID', es: 'https://youtube.com/watch?v=… o solo el ID' },
   ytBad: { pt: 'Link do YouTube inválido.', en: 'Invalid YouTube link.', es: 'Enlace de YouTube inválido.' },
+  youtubeEmbed: { pt: 'O dono do vídeo não permite tocar no YouTube.', en: 'The video owner does not allow playback.', es: 'El dueño del vídeo no permite reproducirlo.' },
+  youtubeRemoved: { pt: 'Este vídeo do YouTube foi removido.', en: 'This YouTube video was removed.', es: 'Este vídeo de YouTube fue eliminado.' },
+  youtubeDenied: { pt: 'O YouTube recusou este vídeo.', en: 'YouTube refused this video.', es: 'YouTube rechazó este vídeo.' },
   roomUrlPh: { pt: 'https://…/video.mp4', en: 'https://…/video.mp4', es: 'https://…/video.mp4' },
   roomTitlePh: { pt: 'Nome (opcional)', en: 'Name (optional)', es: 'Nombre (opcional)' },
   roomFollow: { pt: 'Seguindo o anfitrião', en: 'Following the host', es: 'Siguiendo al anfitrión' },
@@ -1452,7 +1533,14 @@ function openDB() {
         if (!db.objectStoreNames.contains('playlists')) db.createObjectStore('playlists', { keyPath: 'id' });
         if (!db.objectStoreNames.contains('kv')) db.createObjectStore('kv');
       };
-      req.onsuccess = () => resolve(req.result);
+      req.onsuccess = () => {
+        const db = req.result;
+        // Sem isso, uma segunda aba que atualiza o schema bloqueia esta
+        // conexao para sempre e state.db passa a apontar para uma conexao morta.
+        db.onversionchange = () => { try { db.close(); } catch (e) {} if (state.db === db) state.db = null; };
+        db.onclose = () => { if (state.db === db) state.db = null; };
+        resolve(db);
+      };
       req.onerror = () => reject(req.error);
       req.onblocked = () => reject(new Error('blocked'));
     } catch (e) { reject(e); }
@@ -1473,37 +1561,58 @@ async function ensureDB() {
   return state.db;
 }
 function tx(store, mode) { return state.db.transaction(store, mode).objectStore(store); }
+// O timeout antigo resolvia com [] (ou "sucesso" mudo) e a biblioteca
+// sumia da tela sem erro nenhum. Agora a espera e longa e o erro propaga:
+// quem chama decide o que fazer, em vez de fingir que a leitura deu vazio.
 function getAll(store) {
   if (!state.db) return Promise.resolve([]);
   return new Promise((res, rej) => {
-    const t = setTimeout(() => res([]), 3000);
+    let done = false;
+    const t = setTimeout(() => {
+      if (done) return;
+      done = true;
+      rej(new Error('getAll timeout: ' + store));
+    }, 30000);
     try {
       const r = tx(store).getAll();
-      r.onsuccess = () => { clearTimeout(t); res(r.result || []); };
-      r.onerror = () => { clearTimeout(t); rej(r.error); };
-    } catch (e) { clearTimeout(t); rej(e); }
+      r.onsuccess = () => { if (done) return; done = true; clearTimeout(t); res(r.result || []); };
+      r.onerror = () => { if (done) return; done = true; clearTimeout(t); rej(r.error); };
+    } catch (e) { if (done) return; done = true; clearTimeout(t); rej(e); }
   });
 }
 function putKV(k, v) {
-  if (!state.db) return Promise.resolve();
-  return new Promise((res, rej) => {
-    const t = setTimeout(() => res(), 3000);
+  if (!state.db) return Promise.resolve(false);
+  return new Promise((res) => {
+    let done = false;
+    const finish = (ok, err) => {
+      if (done) return;
+      done = true;
+      clearTimeout(t);
+      if (!ok) console.warn('putKV falhou: ' + k, err);
+      res(ok);
+    };
+    const t = setTimeout(() => finish(false, new Error('timeout')), 15000);
     try {
       const r = tx('kv', 'readwrite').put(v, k);
-      r.onsuccess = () => { clearTimeout(t); res(); };
-      r.onerror = () => { clearTimeout(t); rej(r.error); };
-    } catch (e) { clearTimeout(t); rej(e); }
+      r.onsuccess = () => finish(true);
+      r.onerror = () => finish(false, r.error);
+    } catch (e) { finish(false, e); }
   });
 }
 function getKV(k) {
   if (!state.db) return Promise.resolve(undefined);
   return new Promise((res) => {
-    const t = setTimeout(() => res(undefined), 3000);
+    let done = false;
+    const t = setTimeout(() => {
+      if (done) return;
+      done = true;
+      res(undefined);
+    }, 15000);
     try {
       const r = tx('kv').get(k);
-      r.onsuccess = () => { clearTimeout(t); res(r.result); };
-      r.onerror = () => { clearTimeout(t); res(undefined); };
-    } catch (e) { clearTimeout(t); res(undefined); }
+      r.onsuccess = () => { if (done) return; done = true; clearTimeout(t); res(r.result); };
+      r.onerror = () => { if (done) return; done = true; clearTimeout(t); res(undefined); };
+    } catch (e) { if (done) return; done = true; clearTimeout(t); res(undefined); }
   });
 }
 function persistLastSong() {
@@ -1821,7 +1930,7 @@ function renderSongs(list, container, favOnly) {
     const row = document.createElement('div');
     row.className = 'item';
     row.dataset.songId = s.id;
-    row.innerHTML = `<div class="checkbox" data-cb="${s.id}"></div><div class="art" id="a-${s.id}"></div>
+    row.innerHTML = `<div class="checkbox" data-cb="${s.id}"></div><div class="art"></div>
       <div class="mid"><div class="it-title">${esc(s.title)}</div><div class="it-sub">${esc(s.artist)} · ${esc(s.album)}</div></div>
       <button class="like ${state.favs.has(s.id) ? 'fav' : ''}" data-fav="${s.id}">${state.favs.has(s.id) ? '♥' : '♡'}</button>
       <button class="like" data-next="${s.id}" title="Tocar a seguir">⏭</button>
@@ -1848,6 +1957,8 @@ function renderSongs(list, container, favOnly) {
       longPressed = false;
       clearPress();
       pressTimer = setTimeout(() => {
+        pressTimer = null;
+        if (!row.isConnected) return;
         longPressed = true;
         enterMultiSelect();
         toggleSongSelect(s.id, row.querySelector('.checkbox'));
@@ -1861,6 +1972,9 @@ function renderSongs(list, container, favOnly) {
     row.addEventListener('mousedown', startPress);
     row.addEventListener('mouseup', clearPress);
     row.addEventListener('mouseleave', clearPress);
+    // O timer de long-press e verificado com isConnected antes de agir: se a
+    // linha sair da tela (busca, troca de aba) ele nao dispara a selecao
+    // numa linha que nao existe mais.
     const onBtn = (sel, fn) => {
       row.querySelector(sel).onclick = (e) => {
         e.stopPropagation();
@@ -2712,7 +2826,7 @@ function songDetails(s) {
         sizeTxt = (info.s && Number(info.s) > 0) ? fmtBytes(Number(info.s)) : '';
         codecTxt = info.c || '';
         fileTxt = info.n ? esc(info.n) : '';
-        if (info.m) codecTxt += (codecTxt ? ' · ' : '') + esc(info.m);
+        if (info.m) codecTxt += (codecTxt ? ' · ' : '') + info.m;
         if (info.d && Number(info.d) > 0) durTxt = fmtMs(Number(info.d));
         srcTxt = L('detSourceDevice');
       }
@@ -2725,13 +2839,19 @@ function songDetails(s) {
     ${fileTxt ? `<div class="me-row"><span class="me-k">${L('detFile')}</span><span class="me-v">${fileTxt}</span></div>` : ''}
     ${sizeTxt ? `<div class="me-row"><span class="me-k">${L('detSize')}</span><span class="me-v">${sizeTxt}</span></div>` : ''}
     ${durTxt ? `<div class="me-row"><span class="me-k">${L('detDur')}</span><span class="me-v">${durTxt}</span></div>` : ''}
-    ${codecTxt ? `<div class="me-row"><span class="me-k">${L('detCodec')}</span><span class="me-v">${codecTxt}</span></div>` : ''}
+    ${codecTxt ? `<div class="me-row"><span class="me-k">${L('detCodec')}</span><span class="me-v">${esc(codecTxt)}</span></div>` : ''}
     <div class="me-row"><span class="me-k">${L('detSource')}</span><span class="me-v">${srcTxt}</span></div>
-    <div id="modal-actions"><button class="btn" onclick="addUpNextId(${JSON.stringify(s.id)});closeModal()">${L('upNextAddBtn')}</button><button class="btn" onclick="closeModal();openLyricsFor(${JSON.stringify(s.id)})">📜 ${L('lyrTitle')}</button><button class="btn secondary" onclick="closeModal()">${L('detClose')}</button></div>`;
+    <div id="modal-actions"><button class="btn" id="det-upnext">${L('upNextAddBtn')}</button><button class="btn" id="det-lyrics">📜 ${L('lyrTitle')}</button><button class="btn secondary" onclick="closeModal()">${L('detClose')}</button></div>`;
   const modal = $('modal');
   const wrap = $('modal-wrap');
   modal.innerHTML = html;
   addModalStyles();
+  // Os ids vao por data-attribute: colocar o id direto no onclick quebrava o
+  // HTML (aspas do JSON.stringify encerravam o atributo) e os botões morriam.
+  const upBtn = $('det-upnext');
+  if (upBtn) upBtn.onclick = () => { addUpNextId(s.id); closeModal(); };
+  const lyBtn = $('det-lyrics');
+  if (lyBtn) lyBtn.onclick = () => { closeModal(); openLyricsFor(s.id); };
   wrap.classList.add('show');
 }
 
@@ -3619,11 +3739,17 @@ function playList(list, song) {
   playCurrent();
   openPlayer();
 }
+function releaseVideoUrl() {
+  if (state.videoUrl && state.videoUrl.startsWith('blob:')) {
+    try { URL.revokeObjectURL(state.videoUrl); } catch (e) {}
+  }
+  state.videoUrl = null;
+}
 function playVideo(v) {
   djExit();
   ytStop();
   audio.pause();
-  if (state.videoUrl) URL.revokeObjectURL(state.videoUrl);
+  releaseVideoUrl();
   state.current = v;
   openPlayer();
   renderPlayer();
@@ -3631,7 +3757,7 @@ function playVideo(v) {
     state.videoUrl = URL.createObjectURL(v.blob);
     video.src = state.videoUrl;
   } else {
-    state.videoUrl = null;
+    state.videoUrl = v.url || '';
     video.src = v.url || '';
   }
   video.play().catch(() => {});
@@ -3645,7 +3771,7 @@ function playCurrent() {
   if (!s) return;
   ytStop();
   state.current = s;
-  if (state.videoUrl) { URL.revokeObjectURL(state.videoUrl); state.videoUrl = null; }
+  releaseVideoUrl();
   renderPlayer();
   video.pause();
   video.removeAttribute('src');
@@ -3874,7 +4000,10 @@ function drawVis() {
     const dpr = window.devicePixelRatio || 1;
     const W = cv.clientWidth, H = cv.clientHeight;
     if (W) {
-      cv.width = W * dpr; cv.height = H * dpr;
+      // Redimensionar o canvas a cada quadro realoca o back-buffer inteiro.
+      // So refaz quando o tamanho realmente mudou.
+      const wantW = Math.round(W * dpr), wantH = Math.round(H * dpr);
+      if (cv.width !== wantW || cv.height !== wantH) { cv.width = wantW; cv.height = wantH; }
       const g = cv.getContext('2d');
       const analyser = visAnalyserOf();
       g.clearRect(0, 0, cv.width, cv.height);
@@ -3910,9 +4039,21 @@ function drawVis() {
       }
     }
   }
-  requestAnimationFrame(drawVis);
+  // O rAF fica sempre ativo, mesmo com o player fechado: consome bateria no
+  // Android. Agora ele para quando o player nao esta na tela e volta quando abre.
+  if (visRaf) return;
+  visRaf = requestAnimationFrame(drawVis);
 }
-function startVis() { requestAnimationFrame(drawVis); }
+let visRaf = 0;
+function startVis() {
+  const p = $('player');
+  if (p && !p.classList.contains('show')) return;
+  if (visRaf) return;
+  visRaf = requestAnimationFrame(drawVis);
+}
+function stopVis() {
+  if (visRaf) { cancelAnimationFrame(visRaf); visRaf = 0; }
+}
 audio.addEventListener('play', () => { if (visCtx && visCtx.state === 'suspended') visCtx.resume().catch(() => {}); });
 video.addEventListener('play', () => { if (visCtx && visCtx.state === 'suspended') visCtx.resume().catch(() => {}); });
 
@@ -3921,6 +4062,16 @@ function togglePlay() {
   if (state.codec) {
     try { window.TamiNative.codecToggle(); } catch (e) {}
     setTimeout(codecTickRender, 120);
+    return;
+  }
+  if (isYtMedia(state.current)) {
+    try {
+      if (!ytPlayer) return;
+      const st = ytPlayer.getPlayerState ? ytPlayer.getPlayerState() : -1;
+      if (st === 1) ytPlayer.pauseVideo(); else ytPlayer.playVideo();
+    } catch (e) {}
+    renderPlayer();
+    syncNativeNow(true);
     return;
   }
   const el = state.current.type === 'video' ? video : audio;
@@ -4107,7 +4258,15 @@ function toggleRepeat() {
 }
 function next(user) {
   if (!state.queue.length) return;
-  if (state.repeat === 2 && !user) { audio.currentTime = 0; safePlay(audio); return; }
+  if (state.repeat === 2 && !user) {
+    if (isYtMedia(state.current)) {
+      try { if (ytPlayer && ytPlayer.seekTo) ytPlayer.seekTo(0, true); if (ytPlayer) ytPlayer.playVideo(); } catch (e) {}
+      return;
+    }
+    const el = state.current && state.current.type === 'video' ? video : audio;
+    try { el.currentTime = 0; safePlay(el); } catch (e) {}
+    return;
+  }
   if (state.upNext.length) { playUpNext(); return; }
   if (state.queue.length === 1 && user) {
     const el = state.current && state.current.type === 'video' ? video : audio;
@@ -4171,18 +4330,31 @@ function openUpNext() {
       `</div>
       <div id="modal-actions">
         <button class="btn secondary" onclick="closeModal()">${L('detClose')}</button>
-        <button class="btn" onclick="state.upNext=[];openUpNext()">${L('upNextClear')}</button>
+        <button class="btn" id="upnext-clear">${L('upNextClear')}</button>
       </div>`;
   }
   addModalStyles();
   wrap.classList.add('show');
+  const clr = $('upnext-clear');
+  if (clr) clr.onclick = () => { state.upNext = []; syncUpNextBtn(); openUpNext(); };
   modal.querySelectorAll('[data-un]').forEach((btn) => {
     btn.onclick = () => { state.upNext.splice(+btn.dataset.un, 1); syncUpNextBtn(); openUpNext(); };
   });
 }
 function prev() {
   if (!state.queue.length) return;
-  if (audio.currentTime > 3) { audio.currentTime = 0; return; }
+  // A regra "se ja passou de 3s, volta ao comeco" precisa olhar o elemento que
+  // esta tocando de verdade: com video ou YouTube no audio.currentTime era
+  // sempre 0 e o botao pulava a faixa em vez de reiniciar.
+  if (isYtMedia(state.current)) {
+    try {
+      const t = ytPlayer && ytPlayer.getCurrentTime ? (ytPlayer.getCurrentTime() || 0) : 0;
+      if (t > 3) { if (ytPlayer && ytPlayer.seekTo) ytPlayer.seekTo(0, true); return; }
+    } catch (e) {}
+  } else {
+    const el = state.current && state.current.type === 'video' ? video : audio;
+    if (el && (el.currentTime || 0) > 3) { try { el.currentTime = 0; } catch (e) {} return; }
+  }
   state.queueIndex = (state.queueIndex - 1 + state.queue.length) % state.queue.length;
   playCurrent();
 }
@@ -4212,6 +4384,25 @@ video.addEventListener('ended', () => {
 });
 function updateProgress() {
   if (state.codec) { codecTickRender(); return; }
+  if (isYtMedia(state.current)) {
+    let cur = 0, dur = 0, playing = false;
+    try {
+      cur = ytPlayer && ytPlayer.getCurrentTime ? (ytPlayer.getCurrentTime() || 0) : 0;
+      dur = ytPlayer && ytPlayer.getDuration ? (ytPlayer.getDuration() || 0) : 0;
+      playing = !!(ytPlayer && ytPlayer.getPlayerState && ytPlayer.getPlayerState() === 1);
+    } catch (e) {}
+    const seek = $('seek');
+    seek.disabled = !dur || !isFinite(dur);
+    seek.max = dur || 0;
+    seek.value = cur || 0;
+    $('time-cur').textContent = fmtTime(cur * 1000);
+    $('time-dur').textContent = fmtTime(dur * 1000);
+    $('p-play').textContent = playing ? '⏸' : '▶';
+    $('mini-play').textContent = playing ? '⏸' : '▶';
+    syncMini();
+    syncNativeNow(false);
+    return;
+  }
   const el = state.current && state.current.type === 'video' ? video : audio;
   const dur = el.duration || 0;
   const seek = $('seek');
@@ -4228,6 +4419,11 @@ $('seek').addEventListener('input', () => {
     syncNativeNow(true);
     return;
   }
+  if (isYtMedia(state.current)) {
+    try { if (ytPlayer && ytPlayer.seekTo) ytPlayer.seekTo(+$('seek').value || 0, true); } catch (e) {}
+    syncNativeNow(true);
+    return;
+  }
   const el = state.current && state.current.type === 'video' ? video : audio;
   el.currentTime = $('seek').value;
   syncNativeNow(true);
@@ -4237,9 +4433,11 @@ function openPlayer() {
   $('player').classList.add('show');
   renderPlayer();
   syncMini();
+  try { startVis(); } catch (e) {}
 }
 function closePlayer() {
   $('player').classList.remove('show');
+  stopVis();
 }
 function renderPlayer() {
   const s = state.current;
@@ -4276,9 +4474,13 @@ function renderPlayer() {
       art.innerHTML = '';
       video.style.display = 'block';
       art.appendChild(video);
-      if (!state.videoUrl) state.videoUrl = URL.createObjectURL(s.blob);
-      video.src = state.videoUrl;
     }
+    // Video do servidor/sala nao tem blob local: usa a URL remota. Sem isso o
+    // createObjectURL(null) estoura e o video nunca chega a tocar.
+    if (!state.videoUrl) {
+      state.videoUrl = s.blob ? URL.createObjectURL(s.blob) : (s.url || '');
+    }
+    if (state.videoUrl && video.getAttribute('src') !== state.videoUrl) video.src = state.videoUrl;
     const vPlaying = !video.paused;
     $('p-play').textContent = vPlaying ? '⏸' : '▶';
     $('mini-play').textContent = vPlaying ? '⏸' : '▶';
@@ -4439,6 +4641,10 @@ function closeModal() {
   clearInterval(lyr.timer);
   lyr.timer = 0;
 }
+// Fecha o modal com Esc (antes so fechava tocando fora).
+document.addEventListener('keydown', (e) => {
+  if (e.key === 'Escape' && $('modal-wrap').classList.contains('show')) closeModal();
+});
 
 // ---------- Perfil ----------
 function showProfile() {
@@ -4501,6 +4707,11 @@ function dismissUpdate() {
   closeModal();
 }
 const CHANGELOG = {
+  '1.54': {
+    pt: ['Correção: as músicas do YouTube voltam a tocar até o fim e o botão de pause/continuar, o avance e a barra de progresso passam a funcionar nelas', 'Correção: o app não trava mais ao tocar uma música que veio do servidor do PC ou da sala compartilhada', 'Correção: a tela de detalhes da música não embaralha mais o aplicativo ao abrir', 'Correção: copiar e compartilhar links funciona também quando o app está na rede local (sem HTTPS)', 'O armazenamento das músicas ficou mais confiável: a biblioteca, as playlists e a fila não somem mais quando o app fica sem memória ou é reaberto', 'A busca não trava mais a rolagem enquanto você digita', 'A sala compartilhada reconecta sozinha quando a conexão cai', 'Tema claro com contraste correto e foco visível nos botões', 'Segurança: o servidor do PC não expõe mais os arquivos do projeto (nem a chave de assinatura do app) pela rede', 'Segurança: a chave das salas e os ids das músicas agora são gerados de forma segura e não mudam mais entre visitas', 'As músicas do PC agora tocam no navegador (o formato do arquivo estava sendo servido errado)', 'Segurança: o app só instala atualizações por HTTPS e só abre links confiáveis', 'A tela de bloqueio do celular mostra o nome da música e o tempo avançando'],
+    en: ['Fix: YouTube songs now play to the end, and pause/resume, skip and the progress bar work on them', 'Fix: the app no longer crashes when playing a song coming from the PC server or the shared room', 'Fix: the song details screen no longer scrambles the app when opened', 'Fix: copying and sharing links now works on a local network too (without HTTPS)', 'Music storage got more reliable: the library, playlists and queue no longer vanish when the app runs out of memory or is reopened', 'Search no longer stutters while you type', 'The shared room reconnects on its own when the connection drops', 'Light theme with correct contrast and visible focus on buttons', 'Security: the PC server no longer exposes the project files (nor the app signing key) over the network', 'Security: room keys and song ids are now generated securely and no longer change between visits', 'PC songs now play in the browser (the file type was being served wrong)', 'Security: the app only installs updates over HTTPS and only opens trusted links', 'The lock screen now shows the song name and the time moving forward'],
+    es: ['Corrección: las canciones de YouTube ahora suenan hasta el final y el botón de pausar/reanudar, el avanzar y la barra de progreso funcionan en ellas', 'Corrección: la app ya no se cuelga al reproducir una canción que vino del servidor del PC o de la sala compartida', 'Corrección: la pantalla de detalles de la canción ya no desordena la app al abrirla', 'Corrección: copiar y compartir enlaces funciona también cuando la app está en red local (sin HTTPS)', 'El almacenamiento de las canciones es más fiable: la biblioteca, las listas y la cola ya no desaparecen cuando la app se queda sin memoria o se reabre', 'La búsqueda ya no bloquea el desplazamiento mientras escribes', 'La sala compartida reconecta sola cuando se cae la conexión', 'Tema claro con contraste correcto y foco visible en los botones', 'Seguridad: el servidor del PC ya no expone los archivos del proyecto (ni la clave de firma de la app) por la red', 'Seguridad: las claves de las salas y los ids de las canciones ahora se generan de forma segura y ya no cambian entre visitas', 'Las canciones del PC ahora suenan en el navegador (el formato del archivo se servía mal)', 'Seguridad: la app solo instala actualizaciones por HTTPS y solo abre enlaces de confianza', 'La pantalla de bloqueo del móvil muestra el nombre de la canción y el tiempo avanzando']
+  },
   '1.13': {
     pt: ['Playlist "Animes" criada sozinha com suas músicas de anime', 'Atualização baixa o APK novo e guarda uma cópia na pasta Downloads', 'Compartilhar o app (APK) direto pelo menu'],
     en: ['Auto "Anime" playlist from your anime songs', 'Update downloads the APK and saves a copy to Downloads', 'Share the app (APK) from the menu'],
@@ -4844,6 +5055,25 @@ function confirmByVoice() {
   r.onend = () => { if (!done) { try { r.start(); } catch (e) { finish(); } } };
   try { r.start(); } catch (e) { toast('Não consegui ouvir — toque em "Remover".'); }
 }
+// Remove as musicas do estado em memoria. Sem reajustar o queueIndex, excluir
+// uma musica antes da atual deslocava a fila e o "proxima" pulava a faixa errada;
+// a fila "tocar a seguir" tambem guardava ids que ja nao existiam.
+function purgeSongsFromState(ids) {
+  const set = new Set(ids.map((x) => String(x)));
+  const curId = state.current ? String(state.current.id) : '';
+  const before = state.queue.length;
+  const removedBefore = state.queue.slice(0, Math.max(0, state.queueIndex)).filter((x) => set.has(String(x.id))).length;
+  state.queue = state.queue.filter((x) => !set.has(String(x.id)));
+  state.queueIndex = Math.max(0, state.queueIndex - removedBefore);
+  if (state.queueIndex >= state.queue.length) state.queueIndex = Math.max(0, state.queue.length - 1);
+  if (state.queue.length !== before && !state.queue.length) state.queueIndex = -1;
+  state.upNext = (state.upNext || []).filter((x) => !set.has(String(x.id)));
+  if (state.current && set.has(curId)) {
+    state.current = null;
+    closePlayer(); syncMini(); renderPlayer();
+  }
+  syncUpNextBtn();
+}
 async function deleteDupes(idsArg) {
   let ids = idsArg;
   if (!ids) {
@@ -4865,8 +5095,8 @@ async function deleteDupes(idsArg) {
     }
   }
   await putKV('favs', [...state.favs]);
-  if (Object.keys(state.learn).length) await putKV('learn', state.learn);
-  state.queue = state.queue.filter((x) => !ids.includes(x.id));
+  await putKV('learn', state.learn);
+  purgeSongsFromState(ids);
   await reloadAll();
   toast('Duplicadas removidas!');
 }
@@ -4876,6 +5106,7 @@ async function deleteDupes(idsArg) {
 // ---------- Seleção múltipla ----------
 let multiSelect = false;
 let selectedIds = new Set();
+let searchTimer = 0;
 
 function enterMultiSelect() {
   if (multiSelect) return;
@@ -4976,8 +5207,8 @@ async function deleteSelectedSongs() {
     }
   }
   await putKV('favs', [...state.favs]);
-  if (Object.keys(state.learn).length) await putKV('learn', state.learn);
-  state.queue = state.queue.filter((x) => !ids.includes(x.id));
+  await putKV('learn', state.learn);
+  purgeSongsFromState(ids);
   exitMultiSelect();
   await reloadAll();
   toast(n === 1 ? 'Música removida' : n + ' músicas removidas');
@@ -4999,13 +5230,14 @@ async function delSong(id) {
   await delObj('songs', id);
   state.favs.delete(id);
   await putKV('favs', [...state.favs]);
-  if (state.learn[id]) { delete state.learn[id]; await putKV('learn', state.learn); }
+  if (state.learn[id]) { delete state.learn[id]; }
+  await putKV('learn', state.learn);
   if (objectUrlCache.has(id)) { URL.revokeObjectURL(objectUrlCache.get(id)); objectUrlCache.delete(id); }
   revokeCover(id);
   for (const p of state.playlists) {
     if (p.songIds && p.songIds.includes(id)) { p.songIds = p.songIds.filter((x) => x !== id); await putPlaylist(p); }
   }
-  state.queue = state.queue.filter((x) => x.id !== id);
+  purgeSongsFromState([id]);
   if (wasCurrent) {
     audio.pause(); video.pause();
     state.current = null; state.queue = []; state.queueIndex = -1;
@@ -5092,16 +5324,24 @@ function companionState() {
 }
 function publishState() {
   if (!state.db) return;
-  try { fetch('/api/state', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ dev: state.nick || navigator.platform || 'PC', state: companionState() }) }).catch(() => {}); } catch (e) {}
+  // Precisa usar o mesmo endereco configurado na aba Celular: com '/api/state'
+  // relativo o estado ia para o servidor da propria pagina, e nao para o PC.
+  const base = getRemote();
+  try { fetch(base + '/api/state', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ dev: state.nick || navigator.platform || 'PC', state: companionState() }) }).catch(() => {}); } catch (e) {}
 }
+let companionEvents = null;
+let companionTimer = 0;
 async function probeCompanion() {
   try {
-    const r = await fetch('/__companion__', { cache: 'no-store' });
+    const base = getRemote();
+    const r = await fetch(base + '/__companion__', { cache: 'no-store' });
     if (!r.ok) return;
     await r.json();
     window.__COMPANION__ = true;
     toast('Modo acompanhante ativo — aba Celular conectada.');
-    const es = new EventSource('/api/events');
+    if (companionEvents) { try { companionEvents.close(); } catch (e) {} companionEvents = null; }
+    if (companionTimer) { clearInterval(companionTimer); companionTimer = 0; }
+    const es = new EventSource(base + '/api/events');
     es.onmessage = (ev) => {
       try {
         const m = JSON.parse(ev.data);
@@ -5110,25 +5350,57 @@ async function probeCompanion() {
         companionExec(m.cmd, m.value);
       } catch (e) {}
     };
-    setInterval(publishState, 2500);
+    es.onerror = () => { try { es.close(); } catch (e) {} if (companionEvents === es) companionEvents = null; };
+    companionEvents = es;
+    companionTimer = setInterval(publishState, 2500);
     setTimeout(publishState, 1000);
   } catch (e) {}
 }
+function stopCompanion() {
+  if (companionEvents) { try { companionEvents.close(); } catch (e) {} companionEvents = null; }
+  if (companionTimer) { clearInterval(companionTimer); companionTimer = 0; }
+}
+window.addEventListener('pagehide', () => { stopCompanion(); stopYtTicker(); });
 function phoneSet() {
   let v = ($('phone-addr').value || '').trim().replace(/\/+$/, '');
   if (!v) { toast('Digite o endereço do servidor.'); return; }
   if (!/^https?:\/\//i.test(v)) v = 'http://' + v;
   REMOTE = v;
+  phoneAddrDraftValue = v;
   try { localStorage.setItem('tami-remote', v); } catch (e) {}
   toast('Servidor definido: ' + v);
   $('phone-addr').value = v;
   pollRemote();
 }
+// navigator.clipboard so existe em contexto seguro (https/localhost). Na LAN
+// (http://192.168.x.x:8081) ele e undefined e a chamada estourava. O fallback
+// usa um textarea temporario, que funciona em qualquer contexto.
+function copyToClipboard(text) {
+  const t = String(text || '');
+  try {
+    if (navigator.clipboard && window.isSecureContext) {
+      return navigator.clipboard.writeText(t).then(() => true).catch(() => fallbackCopy(t));
+    }
+  } catch (e) {}
+  return Promise.resolve(fallbackCopy(t));
+}
+function fallbackCopy(t) {
+  try {
+    const ta = document.createElement('textarea');
+    ta.value = t;
+    ta.setAttribute('readonly', '');
+    ta.style.cssText = 'position:fixed;top:0;left:0;opacity:0;pointer-events:none';
+    document.body.appendChild(ta);
+    ta.select();
+    ta.setSelectionRange(0, ta.value.length);
+    const ok = document.execCommand('copy');
+    document.body.removeChild(ta);
+    return !!ok;
+  } catch (e) { return false; }
+}
 function phoneCopyLink() {
   const pub = (state.phone.server && state.phone.server.publicUrl) || getRemote();
-  try {
-    navigator.clipboard.writeText(pub).then(() => toast(L('roomLinkCopied'))).catch(() => {});
-  } catch (e) {}
+  copyToClipboard(pub).then((ok) => toast(ok ? L('roomLinkCopied') : pub));
 }
 function phoneShareLink() {
   const pub = (state.phone.server && (state.phone.server.publicUrl || state.phone.server.url)) || getRemote();
@@ -5136,7 +5408,7 @@ function phoneShareLink() {
     if (navigator.share) {
       navigator.share({ title: 'Servidor TAMI', text: 'Servidor TAMI: ' + pub, url: pub }).catch(() => {});
     } else {
-      navigator.clipboard.writeText(pub).then(() => toast(L('roomLinkCopied'))).catch(() => {});
+      copyToClipboard(pub).then((ok) => toast(ok ? L('roomLinkCopied') : pub));
     }
   } catch (e) {}
 }
@@ -5221,6 +5493,11 @@ function renderPhone() {
   const cv = $('phone-view');
   if (!cv) return;
   const wasQ = document.activeElement && document.activeElement.id === 'phone-q';
+  const addrEl = $('phone-addr');
+  // O polling de 3s redesenha a aba inteira. Sem guardar o rascunho do
+  // endereco, tudo que o usuario digitava era apagado a cada rodada.
+  if (addrEl && document.activeElement !== addrEl) phoneAddrDraftValue = addrEl.value;
+  const wasAddr = document.activeElement && document.activeElement.id === 'phone-addr';
   const p = state.phone;
   const s = p.state || {};
   const cur = s.current || null;
@@ -5232,7 +5509,7 @@ function renderPhone() {
   let html = `<div class="phone-card">
     <div class="phone-status">${phoneStatusLine()}</div>
     <div style="display:flex;gap:6px;margin:10px 2px 6px">
-      <input id="phone-addr" value="${esc(getRemote())}" placeholder="http://seu-pc:8081" style="flex:1;min-width:0;padding:8px 10px;border:1px solid var(--border,#333);border-radius:10px;background:var(--bg2,#16161d);color:var(--text,#eee);font-size:13px">
+      <input id="phone-addr" value="${esc(phoneAddrDraft())}" placeholder="http://seu-pc:8081" style="flex:1;min-width:0;padding:8px 10px;border:1px solid var(--border,#333);border-radius:10px;background:var(--bg2,#16161d);color:var(--text,#eee);font-size:13px">
       <button class="btn" onclick="phoneSet()" style="flex:0">${esc(L('phoneGo'))}</button>
     </div>
     <div style="font-size:11px;color:var(--text2,#999);margin:-2px 2px 6px">Endereço do PC com o servidor acompanhante — ex.: <b>192.168.1.10:8081</b> ou um link público</div>
@@ -5362,8 +5639,14 @@ function renderPhone() {
   if (qe) {
     qe.value = phoneSearch;
     qe.oninput = () => { phoneSearch = qe.value; renderPhone(); };
-    qe.onpointerup = (e) => { e.stopPropagation(); };
+    qe.onpointerup = (e) => e.stopPropagation();
     if (wasQ) qe.focus();
+  }
+  const ae = $('phone-addr');
+  if (ae) {
+    ae.onpointerup = (e) => e.stopPropagation();
+    ae.oninput = () => { phoneAddrDraftValue = ae.value; };
+    if (wasAddr) { try { ae.focus(); ae.setSelectionRange(ae.value.length, ae.value.length); } catch (e) {} }
   }
   const so = $('phone-sort');
   if (so) {
@@ -5379,6 +5662,10 @@ function renderPhone() {
 }
 let phoneSearch = '';
 let phoneSort = 'orig';
+let phoneAddrDraftValue = '';
+function phoneAddrDraft() {
+  return phoneAddrDraftValue || getRemote();
+}
 function phoneApply(list) {
   let l = list;
   if (phoneSearch) {
@@ -5405,7 +5692,7 @@ function playRemoteItem(item) {
   if (!item || !item.url) return;
   try { djExit(); } catch (e) {}
   audio.pause(); video.pause();
-  if (state.videoUrl) { URL.revokeObjectURL(state.videoUrl); state.videoUrl = null; }
+  releaseVideoUrl();
   const it = {
     id: 'rem-' + Math.random().toString(36).slice(2, 10),
     title: item.title || 'Mídia', artist: item.artist || '',
@@ -5462,24 +5749,33 @@ async function roomCmd(payload) {
 function roomReset(closed) {
   roomStopStream();
   ytStop();
-  state.room = { role: 'off', code: '', key: '', nick: '', media: null, playing: false, positionMs: 0, members: [], messages: [], sse: null, timer: 0, poll: 0 };
+  state.room = { role: 'off', code: '', key: '', nick: '', media: null, playing: false, positionMs: 0, members: [], messages: [], sse: null, timer: 0, poll: 0, retry: 0 };
   if ($('room-view')) roomRender();
   if (closed) toast(L('roomClosed'));
 }
-function roomStopStream() {
+// Desliga so o SSE. Os timers (host tick e poll) tem vida propria: se o
+// roomSub limpasse tudo, uma queda de Wi-Fi parava a transmissao da sala.
+function roomStopSse() {
   if (state.room.sse) { try { state.room.sse.close(); } catch (e) {} state.room.sse = null; }
+  if (state.room.retry) { clearTimeout(state.room.retry); state.room.retry = 0; }
+}
+function roomStopStream() {
+  roomStopSse();
   if (state.room.timer) { clearInterval(state.room.timer); state.room.timer = 0; }
   if (state.room.poll) { clearInterval(state.room.poll); state.room.poll = 0; }
   state.room._sentPlaying = undefined; state.room._sentPos = 0;
 }
 function roomSub() {
-  roomStopStream();
+  roomStopSse();
   try {
     const es = new EventSource(getRemote() + '/api/room/' + state.room.code + '/events');
     es.onmessage = (ev) => { try { roomGuestBackend(JSON.parse(ev.data)); } catch (e) {} };
     es.onerror = () => {
       try { es.close(); } catch (e) {}
-      if (state.room.role !== 'off') setTimeout(roomSub, 3000);
+      state.room.sse = null;
+      if (state.room.role !== 'off' && !state.room.retry) {
+        state.room.retry = setTimeout(() => { state.room.retry = 0; roomSub(); }, 3000);
+      }
     };
     state.room.sse = es;
   } catch (e) {}
@@ -5597,7 +5893,7 @@ function applyRoomSync(playing, pos) {
 }
 function loadRoomMedia(m, autoplay) {
   audio.pause(); video.pause();
-  if (state.videoUrl) { URL.revokeObjectURL(state.videoUrl); state.videoUrl = null; }
+  releaseVideoUrl();
   const it = {
     id: 'room-' + Math.random().toString(36).slice(2, 10),
     title: m.title || 'Mídia', artist: m.artist || '', album: '',
@@ -5628,7 +5924,7 @@ function roomCreateApply(nick) {
       });
       if (!res.ok) { toast(L('roomNoConn')); return; }
       const d = await res.json();
-      state.room = { role: 'host', code: d.code, key: d.key, nick, media: null, playing: false, positionMs: 0, members: [{ nick }], messages: [], sse: null, timer: 0, poll: 0 };
+      state.room = { role: 'host', code: d.code, key: d.key, nick, media: null, playing: false, positionMs: 0, members: [{ nick }], messages: [], sse: null, timer: 0, poll: 0, retry: 0 };
       roomSub();
       state.room.poll = setInterval(roomPoll, 2500);
       state.room.timer = setInterval(roomHostTick, 1000);
@@ -5646,7 +5942,7 @@ function roomJoinApply(code, nick) {
       });
       if (!res.ok) { toast(L('roomNotFind')); return; }
       const snap = await res.json();
-      state.room = { role: 'guest', code, key: '', nick, media: snap.media || null, playing: snap.playing, positionMs: snap.positionMs || 0, members: snap.members || [], messages: snap.messages || [], sse: null, timer: 0, poll: 0 };
+      state.room = { role: 'guest', code, key: '', nick, media: snap.media || null, playing: snap.playing, positionMs: snap.positionMs || 0, members: snap.members || [], messages: snap.messages || [], sse: null, timer: 0, poll: 0, retry: 0 };
       if (snap.media && (snap.media.url || snap.media.videoId)) loadRoomMedia(snap.media, false);
       roomSub();
       state.room.poll = setInterval(roomPoll, 2500);
@@ -5709,7 +6005,7 @@ function roomLeave() {
 function roomCopyCode() {
   const pub = state.phone.server && (state.phone.server.publicUrl || state.phone.server.url);
   const invite = roomInviteText();
-  const share = () => navigator.clipboard.writeText(invite).then(() => toast(L('roomCopied'))).catch(() => {});
+  const share = () => copyToClipboard(invite).then((ok) => toast(ok ? L('roomCopied') : invite));
   try {
     if (navigator.share && invite !== state.room.code) {
       navigator.share({ title: 'Sala TAMI ' + state.room.code, text: invite, url: pub || '' }).catch(share);
@@ -5929,6 +6225,12 @@ function roomRender() {
   const cv = $('room-view');
   if (!cv) return;
   const r = state.room;
+  // O roomRender roda ~1x/s. Recriar o input de chat a cada passada fechava o
+  // teclado no meio da digitacao; agora o input so e reconstruido quando a
+  // estrutura muda de verdade.
+  const prevInput = $('rt-input');
+  const prevVal = prevInput ? prevInput.value : '';
+  const keepFocus = document.activeElement && document.activeElement.id === 'rt-input';
   let html = '';
   if (r.role === 'off') {
     html = `<div class="section">🫂 ${esc(L('roomTab'))}</div>
@@ -5981,21 +6283,26 @@ function roomRender() {
     }
     html += `<div class="section">${esc(L('roomChat'))}</div>
       <div class="rt-box"><div id="rt-msgs"></div></div>
-      <div class="rt-row">
+      <div class="rt-row" id="rt-row">
         <input id="rt-input" placeholder="${esc(L('roomMsgPh'))}">
         <button class="btn" onclick="roomSendMsg()">${esc(L('roomSend'))}</button>
       </div>`;
     if (host) html += `<div class="sub-hint">${esc(L('roomFarTip'))}</div>`;
   }
-  const hadInput = !!$('rt-input');
-  const prevVal = hadInput ? $('rt-input').value : '';
-  const keepFocus = document.activeElement && document.activeElement.id === 'rt-input';
+  // Preserva o mesmo no do input em vez de recria-lo: recriar o elemento a
+  // cada roomRender (~1x/s) fechava o teclado e perdia a composicao IME
+  // enquanto o usuario digitava no chat.
+  const oldInput = $('rt-input');
+  if (oldInput && oldInput.parentElement) oldInput.parentElement.removeChild(oldInput);
   cv.innerHTML = html;
   renderChat();
   const ri = $('rt-input');
-  if (ri) {
+  const row = $('rt-row');
+  if (ri && row && oldInput) {
+    row.insertBefore(oldInput, row.firstChild);
     ri.value = prevVal;
     if (keepFocus) { try { ri.focus(); } catch (e) {} }
+  } else if (ri) {
     ri.addEventListener('keydown', (e) => { if (e.key === 'Enter' && !e.isComposing) roomSendMsg(); });
     ri.addEventListener('pointerdown', (e) => { e.stopPropagation(); });
   }
@@ -6003,9 +6310,11 @@ function roomRender() {
 
 // ---------- Boot ----------
 async function reloadAll() {
-  try { state.songs = await getAll('songs'); } catch (e) { state.songs = []; }
-  try { state.videos = await getAll('videos'); } catch (e) { state.videos = []; }
-  try { state.playlists = await getAll('playlists'); } catch (e) { state.playlists = []; }
+  // Se a leitura falhar, mantem o que ja estava na tela: zerar aqui
+  // apagava a biblioteca inteira da visao do usuario sem aviso.
+  try { state.songs = await getAll('songs'); } catch (e) { console.warn('getAll songs', e); }
+  try { state.videos = await getAll('videos'); } catch (e) { console.warn('getAll videos', e); }
+  try { state.playlists = await getAll('playlists'); } catch (e) { console.warn('getAll playlists', e); }
   await syncAnimesPlaylist();
   buildAlbums();
   renderAll();
@@ -6105,7 +6414,17 @@ async function init() {
 function registerTabs() {
   $('fileSongs').onchange = (e) => { if (e.target.files.length) importFiles([...e.target.files], 'song'); e.target.value = ''; };
   $('fileVideos').onchange = (e) => { if (e.target.files.length) importFiles([...e.target.files], 'video'); e.target.value = ''; };
-  $('search').oninput = () => { if (multiSelect) exitMultiSelect(); searchQ = $('search').value.trim().toLowerCase(); renderAll(); if (state.detail) { state.detail = null; selectTab(state.tab); } };
+  $('search').oninput = () => {
+    if (multiSelect) exitMultiSelect();
+    // Sem debounce cada tecla redesenha a tela inteira (listas, albuns,
+    // playlists, videos, ambiente) e o app trava em biblioteca grande.
+    clearTimeout(searchTimer);
+    searchTimer = setTimeout(() => {
+      searchQ = $('search').value.trim().toLowerCase();
+      renderAll();
+      if (state.detail) { state.detail = null; selectTab(state.tab); }
+    }, 180);
+  };
   $('vol').oninput = () => { const v = +$('vol').value; audio.volume = v; video.volume = v; };
   $('p-speed').onclick = cycleSpeed;
   let dragDepth = 0;
@@ -6161,7 +6480,7 @@ function shareApp() {
 function createFab() {
   const fab = document.createElement('button');
   fab.id = 'fab';
-  fab.style.cssText = `position:fixed;z-index:10;right:18px;bottom:132px;width:58px;height:58px;border-radius:50%;border:none;background:var(--primary-dark);color:#fff;font-size:28px;box-shadow:0 8px 24px rgba(124,77,255,.4);cursor:pointer;`;
+  fab.style.cssText = `position:fixed;z-index:10;right:18px;bottom:132px;width:58px;height:58px;border-radius:50%;border:none;background-color:var(--primary-dark);background-image:linear-gradient(rgba(0,0,0,.28),rgba(0,0,0,.28));color:#fff;font-size:28px;box-shadow:0 8px 24px rgba(124,77,255,.4);cursor:pointer;`;
   fab.textContent = '＋';
   fab.onclick = () => {
     const list = $('modal');

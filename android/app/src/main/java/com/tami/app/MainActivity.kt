@@ -256,18 +256,30 @@ class MainActivity : AppCompatActivity() {
             } catch (e: Exception) { return "" }
         }
 
+        // O caminho vem do JavaScript, entao precisa ser validado: sem isso a
+        // pagina podia escrever (ou apagar) qualquer arquivo do app.
+        private fun safeHandoffPath(path: String): File? {
+            return try {
+                val base = File(filesDir, "handoff").canonicalFile
+                val f = File(path).canonicalFile
+                if (f.path.startsWith(base.path + File.separator)) f else null
+            } catch (e: Exception) { null }
+        }
+
         @JavascriptInterface
         fun cacheAppend(path: String, b64: String): Boolean {
-            try {
+            val f = safeHandoffPath(path) ?: return false
+            return try {
                 val bytes = android.util.Base64.decode(b64, android.util.Base64.DEFAULT)
-                java.io.FileOutputStream(path, true).use { it.write(bytes) }
-                return true
-            } catch (e: Exception) { return false }
+                java.io.FileOutputStream(f, true).use { it.write(bytes) }
+                true
+            } catch (e: Exception) { false }
         }
 
         @JavascriptInterface
         fun cacheDelete(path: String) {
-            try { java.io.File(path).delete() } catch (e: Exception) {}
+            val f = safeHandoffPath(path) ?: return
+            try { f.delete() } catch (e: Exception) {}
         }
 
         @JavascriptInterface
@@ -415,7 +427,12 @@ class MainActivity : AppCompatActivity() {
 
         @JavascriptInterface
         fun installUpdate(url: String) {
-            if (!url.startsWith("https://") && !url.startsWith("http://")) return
+            // Somente HTTPS: o APK passa pelo FileProvider e e instalado pelo
+            // usuario, entao permitir HTTP abriria porta para troca do arquivo.
+            if (!url.startsWith("https://")) {
+                runOnUiThread { Toast.makeText(this@MainActivity, "Atualização só por HTTPS.", Toast.LENGTH_SHORT).show() }
+                return
+            }
             runOnUiThread { Toast.makeText(this@MainActivity, "Baixando atualização…", Toast.LENGTH_SHORT).show() }
             Thread {
                 try {
@@ -439,9 +456,14 @@ class MainActivity : AppCompatActivity() {
 
         @JavascriptInterface
         fun openExternal(url: String) {
+            // Abrir qualquer esquema (intent://, file://...) allowe ao app web
+            // acionar outras apps com dados controlados por ele.
+            val uri = try { Uri.parse(url) } catch (e: Exception) { return }
+            val scheme = uri.scheme?.lowercase()
+            if (scheme != "http" && scheme != "https" && scheme != "mailto" && scheme != "tel") return
             runOnUiThread {
                 try {
-                    startActivity(Intent(Intent.ACTION_VIEW, Uri.parse(url)).addFlags(Intent.FLAG_ACTIVITY_NEW_TASK))
+                    startActivity(Intent(Intent.ACTION_VIEW, uri).addFlags(Intent.FLAG_ACTIVITY_NEW_TASK))
                 } catch (e: Exception) {
                     Toast.makeText(this@MainActivity, "Não foi possível abrir o link.", Toast.LENGTH_SHORT).show()
                 }
@@ -922,9 +944,13 @@ class MainActivity : AppCompatActivity() {
         webView.settings.apply {
             javaScriptEnabled = true
             domStorageEnabled = true
-            databaseEnabled = true
             mediaPlaybackRequiresUserGesture = false
-            allowFileAccess = true
+            // O app serve o proprio conteudo via WebViewAssetLoader. O
+            // file:// fica desativado porque nao e usado em lugar nenhum e
+            // daria ao JS acesso ao sistema de arquivos. O content:// precisa
+            // ficar ligado: e por ele que a musica do MediaStore chega ao
+            // player (via shouldInterceptRequest).
+            allowFileAccess = false
             cacheMode = WebSettings.LOAD_DEFAULT
         }
 
@@ -944,6 +970,10 @@ class MainActivity : AppCompatActivity() {
                 return if (url.host == "appassets.androidplatform.net") {
                     false
                 } else {
+                    // Somente http/https sao abertos fora do app. Abrir outros
+                    // esquemas deixava a pagina web acionar appsarbitrias.
+                    val scheme = url.scheme?.lowercase()
+                    if (scheme != "http" && scheme != "https") return true
                     try {
                         startActivity(Intent(Intent.ACTION_VIEW, url).addFlags(Intent.FLAG_ACTIVITY_NEW_TASK))
                     } catch (e: Exception) {
@@ -955,7 +985,15 @@ class MainActivity : AppCompatActivity() {
 
         webView.webChromeClient = object : WebChromeClient() {
             override fun onPermissionRequest(request: PermissionRequest) {
-                request.grant(request.resources)
+                // Conceder tudo o que a pagina pedir e abrir porta para camera e
+                // geolocalizacao sem o usuario saber. A TAMI so usa o microfone.
+                val wanted = request.resources.filter { it == PermissionRequest.RESOURCE_AUDIO_CAPTURE }
+                if (wanted.isEmpty()) { request.deny(); return }
+                try {
+                    request.grant(wanted.toTypedArray())
+                } catch (e: Exception) {
+                    try { request.deny() } catch (e2: Exception) {}
+                }
             }
 
             override fun onShowFileChooser(view: WebView, callback: ValueCallback<Array<Uri>>, params: FileChooserParams): Boolean {

@@ -122,28 +122,62 @@ class TamiPlayerService : Service() {
 
     private var mediaPlayer: MediaPlayer? = null
     private var session: MediaSession? = null
+    private var playerGen = 0
     private var trackUrl: String? = null
     private var trackTitle = "TAMI"
     private var trackArtist = ""
 
     private val mediaCallback = object : MediaSession.Callback() {
-        override fun onPlay() = doToggle()
-        override fun onPause() = doToggle()
+        // onPlay/onPause sao comandos explicitos: usar doToggle() aqui invertia
+        // o estado (o sistema mandava "play" e a musica pausava).
+        override fun onPlay() = doPlay()
+        override fun onPause() = doPause()
         override fun onStop() = stopAll()
         override fun onSkipToNext() = nativeStep(1)
         override fun onSkipToPrevious() = nativeStep(-1)
         override fun onSeekTo(pos: Long) {
             if (mode == MODE_HANDOFF || mode == MODE_CODEC) {
                 try { mediaPlayer?.seekTo(pos.toInt()) } catch (e: Exception) {}
-                liveSession?.let { s ->
-                    MainActivity.nowPlayingPlaying?.let { playing ->
-                        val mp = mediaPlayer
-                        if (mp != null) syncSessionPos(playing, mp.currentPosition.toLong())
-                    }
+                val mp = mediaPlayer
+                if (mp != null) {
+                    val playing = try { mp.isPlaying } catch (e: Exception) { false }
+                    syncSessionPos(playing, try { mp.currentPosition.toLong() } catch (e: Exception) { 0L })
                 }
             }
         }
     }
+
+    // A tela de bloqueio mostrava o app sem nome de faixa: o MediaSession
+    // recebia estado, mas nunca os metadados (titulo/artista).
+    private fun updateSessionMetadata(title: String, artist: String) {
+        try {
+            val s = liveSession ?: return
+            val md = android.media.MediaMetadata.Builder()
+                .putString(android.media.MediaMetadata.METADATA_KEY_TITLE, title)
+                .putString(android.media.MediaMetadata.METADATA_KEY_ARTIST, artist)
+                .putString(android.media.MediaMetadata.METADATA_KEY_ALBUM, "TAMI")
+                .build()
+            s.setMetadata(md)
+        } catch (e: Exception) {}
+    }
+
+    // O PlaybackState era atualizado so em eventos discretos: o tempo da tela
+    // de bloqueio ficava congelado. O ticker mantem a posicao avancando.
+    private val posTicker = object : Runnable {
+        override fun run() {
+            try {
+                if (mode == MODE_HANDOFF || mode == MODE_CODEC) {
+                    val mp = mediaPlayer
+                    if (mp != null) {
+                        val playing = try { mp.isPlaying } catch (e: Exception) { false }
+                        syncSessionPos(playing, try { mp.currentPosition.toLong() } catch (e: Exception) { 0L })
+                    }
+                }
+            } catch (e: Exception) {}
+            handler.postDelayed(this, 1000)
+        }
+    }
+    private val handler = android.os.Handler(android.os.Looper.getMainLooper())
 
     override fun onBind(intent: Intent?): IBinder? = null
 
@@ -157,6 +191,7 @@ class TamiPlayerService : Service() {
             }
             liveService = this
         } catch (e: Exception) {}
+        handler.postDelayed(posTicker, 1000)
     }
 
     override fun onTaskRemoved(rootIntent: Intent?) {
@@ -181,6 +216,7 @@ class TamiPlayerService : Service() {
                 }
                 mode = MODE_HANDOFF
                 goForeground()
+                updateSessionMetadata(trackTitle, trackArtist)
                 stopPlayback()
                 startHandoff(trackUrl!!, pos)
             }
@@ -196,6 +232,7 @@ class TamiPlayerService : Service() {
                 }
                 mode = MODE_CODEC
                 goForeground()
+                updateSessionMetadata(trackTitle, trackArtist)
                 startHandoff(trackUrl!!, pos)
             }
             ACTION_CTRL -> when (intent.getStringExtra(EXTRA_CMD)) {
@@ -235,6 +272,7 @@ class TamiPlayerService : Service() {
             val o = JSONObject(j)
             trackTitle = o.optString("title").ifEmpty { "TAMI" }
             trackArtist = o.optString("artist")
+            updateSessionMetadata(trackTitle, trackArtist)
         } catch (e: Exception) {}
     }
 
@@ -328,6 +366,10 @@ class TamiPlayerService : Service() {
     private fun startHandoff(url: String, pos: Long) {
         try {
             val mp = MediaPlayer()
+            // Token de geracao: os callbacks do prepareAsync podem chegar
+            // depois de o player ter sido trocado. Sem isso, o callback antigo
+            // lia o m.start() e deixava dois players tocando ao mesmo tempo.
+            val gen = ++playerGen
             mp.setAudioAttributes(
                 AudioAttributes.Builder()
                     .setUsage(AudioAttributes.USAGE_MEDIA)
@@ -338,6 +380,10 @@ class TamiPlayerService : Service() {
             val uri = if (url.startsWith("/")) Uri.fromFile(File(url)) else Uri.parse(url)
             mp.setDataSource(this, uri)
             mp.setOnPreparedListener { m ->
+                if (gen != playerGen) {
+                    try { m.release() } catch (e: Exception) {}
+                    return@setOnPreparedListener
+                }
                 try {
                     if (pos > 0) m.seekTo(pos.toInt())
                     m.start()
@@ -349,23 +395,25 @@ class TamiPlayerService : Service() {
                         }
                     }
                     updateNotification()
-                    liveSession?.let { s -> syncSessionPos(true, m.currentPosition.toLong()) }
+                    syncSessionPos(true, m.currentPosition.toLong())
                 } catch (e: Exception) {}
             }
             mp.setOnErrorListener { _, _, _ ->
+                if (gen != playerGen) return@setOnErrorListener true
                 if (mode == MODE_CODEC) MainActivity.relayControl("codecStopped")
                 stopAll()
                 true
             }
             mp.setOnCompletionListener {
+                if (gen != playerGen) return@setOnCompletionListener
                 if (mode == MODE_HANDOFF) stopAll()
                 else if (mode == MODE_CODEC) {
                     MainActivity.relayControl("codecEnd")
                     stopAll()
                 }
             }
-            mp.prepareAsync()
             mediaPlayer = mp
+            mp.prepareAsync()
         } catch (e: Exception) {
             stopAll()
         }
@@ -377,7 +425,7 @@ class TamiPlayerService : Service() {
             if (mp == null) return
             try {
                 if (mp.isPlaying) mp.pause() else mp.start()
-                liveSession?.let { s -> syncSessionPos(mp.isPlaying, mp.currentPosition.toLong()) }
+                syncSessionPos(mp.isPlaying, mp.currentPosition.toLong())
             } catch (e: Exception) {}
             updateNotification()
         } else {
@@ -390,7 +438,7 @@ class TamiPlayerService : Service() {
             val mp = mediaPlayer
             if (mp != null) {
                 try { if (!mp.isPlaying) mp.start() } catch (e: Exception) {}
-                liveSession?.let { s -> syncSessionPos(true, try { mp.currentPosition.toLong() } catch (e: Exception) { 0L }) }
+                syncSessionPos(true, try { mp.currentPosition.toLong() } catch (e: Exception) { 0L })
             }
             updateNotification()
             return
@@ -403,7 +451,7 @@ class TamiPlayerService : Service() {
             val mp = mediaPlayer
             if (mp != null) {
                 try { if (mp.isPlaying) mp.pause() } catch (e: Exception) {}
-                liveSession?.let { s -> syncSessionPos(false, try { mp.currentPosition.toLong() } catch (e: Exception) { 0L }) }
+                syncSessionPos(false, try { mp.currentPosition.toLong() } catch (e: Exception) { 0L })
             }
             updateNotification()
             return
@@ -461,6 +509,7 @@ class TamiPlayerService : Service() {
             trackUrl = url
             trackTitle = o.optString("title").ifEmpty { "TAMI" }
             trackArtist = o.optString("artist")
+            updateSessionMetadata(trackTitle, trackArtist)
             handoffPayload = JSONObject()
                 .put("id", o.optString("id"))
                 .put("url", url)
@@ -479,6 +528,8 @@ class TamiPlayerService : Service() {
     }
 
     private fun stopPlayback() {
+        // Invalida os callbacks pendentes do player que vai ser liberado.
+        playerGen++
         try {
             mediaPlayer?.let { m ->
                 try { if (m.isPlaying) m.stop() } catch (e: Exception) {}
@@ -497,6 +548,7 @@ class TamiPlayerService : Service() {
 
     private fun stopAll() {
         stopPlayback()
+        handler.removeCallbacks(posTicker)
         try { session?.release() } catch (e: Exception) {}
         session = null
         liveSession = null
@@ -508,6 +560,7 @@ class TamiPlayerService : Service() {
 
     override fun onDestroy() {
         super.onDestroy()
+        handler.removeCallbacks(posTicker)
         stopAll()
     }
 }
