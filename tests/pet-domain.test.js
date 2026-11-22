@@ -1,0 +1,197 @@
+import test from 'node:test';
+import assert from 'node:assert/strict';
+import {
+  PET_SCHEMA_VERSION,
+  MAX_OFFLINE_MS,
+  createPet,
+  normalizeSave,
+  applyElapsed,
+  performAction,
+  evaluateEvolution,
+  getCareScore,
+  getDailyQuests,
+  claimQuest,
+  buyItem,
+  useItem,
+  equipItem,
+  completeMinigame,
+  getMinigameCooldown,
+  createMemorySequence,
+  isMemoryInputCorrect
+} from '../pet-domain.js';
+
+const NOW = Date.UTC(2026, 0, 2, 12, 0, 0);
+
+test('cria um pet com necessidades, identidade e progresso válidos', () => {
+  const pet = createPet('Lumi', 'orbit', NOW);
+  assert.equal(pet.name, 'Lumi');
+  assert.equal(pet.speciesId, 'orbit');
+  assert.equal(pet.stageId, 'baby');
+  assert.equal(pet.level, 1);
+  assert.equal(pet.coins, 30);
+  for (const value of Object.values(pet.needs)) {
+    assert.ok(value >= 0 && value <= 100);
+  }
+});
+
+test('aplica o decaimento offline e aumenta a idade', () => {
+  const pet = createPet('TAMI', 'tami', NOW);
+  const result = applyElapsed(pet, 60 * 60 * 1000, NOW + 60 * 60 * 1000);
+  assert.ok(result.pet.needs.hunger < pet.needs.hunger);
+  assert.ok(result.pet.needs.energy < pet.needs.energy);
+  assert.ok(result.pet.needs.hygiene < pet.needs.hygiene);
+  assert.ok(result.pet.needs.happiness < pet.needs.happiness);
+  assert.equal(result.pet.ageMinutes, 60);
+});
+
+test('limita o catch-up offline a 24 horas', () => {
+  const pet = createPet('TAMI', 'tami', NOW);
+  const result = applyElapsed(pet, 48 * 60 * 60 * 1000, NOW + 48 * 60 * 60 * 1000);
+  assert.equal(result.pet.ageMinutes, MAX_OFFLINE_MS / 60000);
+  assert.equal(result.pet.needs.hunger, 0);
+  assert.ok(result.events.some((event) => event.type === 'offlineCapped'));
+});
+
+test('ignora relógios no passado e mantém as necessidades entre 0 e 100', () => {
+  const pet = createPet('TAMI', 'tami', NOW);
+  const result = applyElapsed(pet, -5000, NOW - 5000);
+  assert.deepEqual(result.pet.needs, pet.needs);
+  assert.equal(result.pet.ageMinutes, 0);
+  assert.ok(Object.values(result.pet.needs).every((value) => value >= 0 && value <= 100));
+});
+
+test('cuida do pet, concede recompensas e respeita o cooldown', () => {
+  const pet = createPet('TAMI', 'tami', NOW);
+  const first = performAction(pet, 'feed', NOW);
+  assert.equal(first.ok, true);
+  assert.equal(first.pet.needs.hunger, 100);
+  assert.ok(first.pet.coins > pet.coins);
+  assert.ok(first.pet.xp > pet.xp);
+  assert.equal(first.pet.stats.fed, 1);
+  assert.ok(first.events.some((event) => event.type === 'achievement'));
+  const second = performAction(first.pet, 'feed', NOW + 1000);
+  assert.equal(second.ok, false);
+  assert.equal(second.error, 'cooldown');
+});
+
+test('bloqueia cuidado que exige moedas quando o saldo é insuficiente', () => {
+  const pet = createPet('TAMI', 'tami', NOW);
+  pet.coins = 0;
+  pet.sick = true;
+  const result = performAction(pet, 'medicine', NOW);
+  assert.equal(result.ok, false);
+  assert.equal(result.error, 'coins');
+});
+
+test('calcula nível e pontuação de cuidado', () => {
+  const pet = createPet('TAMI', 'tami', NOW);
+  pet.needs = { hunger: 80, energy: 70, hygiene: 90, happiness: 60, health: 100 };
+  assert.equal(getCareScore(pet), 75);
+  const result = performAction(pet, 'play', NOW);
+  assert.equal(result.pet.xp, 8);
+  assert.equal(result.pet.level, 1);
+});
+
+test('evolui apenas quando nível, XP e qualidade de cuidado atendem aos limites', () => {
+  const pet = createPet('TAMI', 'tami', NOW);
+  pet.xp = 60;
+  pet.level = 3;
+  pet.needs = { hunger: 60, energy: 60, hygiene: 60, happiness: 60, health: 100 };
+  const result = evaluateEvolution(pet, NOW);
+  assert.equal(result.pet.stageId, 'teen');
+  assert.ok(result.events.some((event) => event.type === 'evolved'));
+  const neglected = createPet('TAMI', 'tami', NOW);
+  neglected.xp = 60;
+  neglected.level = 3;
+  neglected.needs = { hunger: 20, energy: 20, hygiene: 20, happiness: 20, health: 40 };
+  assert.equal(evaluateEvolution(neglected, NOW).pet.stageId, 'baby');
+});
+
+test('compra, usa e equipa itens respeitando o inventário', () => {
+  const pet = createPet('TAMI', 'tami', NOW);
+  pet.coins = 100;
+  const bought = buyItem(pet, 'snack', NOW);
+  assert.equal(bought.ok, true);
+  assert.equal(bought.pet.coins, 94);
+  assert.equal(bought.pet.inventory.snack, 1);
+  const used = useItem(bought.pet, 'snack', NOW);
+  assert.equal(used.ok, true);
+  assert.equal(used.pet.inventory.snack, undefined);
+  assert.equal(used.pet.needs.hunger, 100);
+  const wearable = buyItem(pet, 'charm', NOW);
+  const equipped = equipItem(wearable.pet, 'charm');
+  assert.equal(equipped.ok, true);
+  assert.equal(equipped.pet.equipped.charm, true);
+});
+
+test('conclui e resgata uma missão diária somente uma vez', () => {
+  let pet = createPet('TAMI', 'tami', NOW);
+  const first = performAction(pet, 'feed', NOW);
+  pet = first.pet;
+  const second = performAction(pet, 'feed', NOW + 9 * 60 * 1000);
+  pet = second.pet;
+  const quest = getDailyQuests(pet, NOW + 9 * 60 * 1000).find((item) => item.id === 'feed');
+  assert.equal(quest.complete, true);
+  const claimed = claimQuest(pet, 'feed', NOW + 9 * 60 * 1000);
+  assert.equal(claimed.ok, true);
+  assert.equal(claimed.pet.coins, pet.coins + 6);
+  const repeated = claimQuest(claimed.pet, 'feed', NOW + 9 * 60 * 1000);
+  assert.equal(repeated.ok, false);
+  assert.equal(repeated.error, 'claimed');
+});
+
+test('recompensa o minigame e bloqueia novas tentativas durante o cooldown', () => {
+  const pet = createPet('TAMI', 'tami', NOW);
+  const result = completeMinigame(pet, { perfect: true, now: NOW });
+  assert.equal(result.ok, true);
+  assert.equal(result.pet.stats.games, 1);
+  assert.equal(result.pet.stats.perfectGames, 1);
+  assert.equal(result.pet.coins, pet.coins + 8);
+  assert.ok(getMinigameCooldown(result.pet, NOW + 30000) > 0);
+  const repeated = completeMinigame(result.pet, { perfect: true, now: NOW + 30000 });
+  assert.equal(repeated.ok, false);
+  assert.equal(repeated.error, 'cooldown');
+});
+
+test('gera sequências determinísticas e limitadas para o minigame', () => {
+  const sequence = createMemorySequence(4, () => 0.75);
+  assert.equal(sequence.length, 4);
+  assert.deepEqual(sequence, [3, 3, 3, 3]);
+  assert.equal(createMemorySequence(99, () => 0).length, 8);
+});
+
+test('valida cada tecla do minigame contra a sequência correta', () => {
+  const sequence = [0, 1, 2, 3];
+  assert.equal(isMemoryInputCorrect(sequence, [0]), true);
+  assert.equal(isMemoryInputCorrect(sequence, [0, 1]), true);
+  assert.equal(isMemoryInputCorrect(sequence, [0, 2]), false);
+  assert.equal(isMemoryInputCorrect(sequence, [0, 1, 2, 3]), true);
+  assert.equal(isMemoryInputCorrect(sequence, [0, 1, 2, 3, 0]), false);
+});
+
+test('detecta doença e recuperação em ticks de um minuto', () => {
+  const pet = createPet('TAMI', 'tami', NOW);
+  pet.needs.hygiene = 10;
+  pet.needs.hunger = 20;
+  const sick = applyElapsed(pet, 60 * 1000, NOW + 60 * 1000);
+  assert.equal(sick.pet.sick, true);
+  assert.ok(sick.events.some((event) => event.type === 'becameSick'));
+
+  sick.pet.needs.hygiene = 60;
+  sick.pet.needs.hunger = 60;
+  sick.pet.needs.health = 80;
+  const recovered = applyElapsed(sick.pet, 60 * 1000, NOW + 2 * 60 * 1000);
+  assert.equal(recovered.pet.sick, false);
+  assert.equal(recovered.pet.stats.recoveries, 1);
+  assert.ok(recovered.events.some((event) => event.type === 'recovered'));
+});
+
+test('normaliza saves antigos, rejeita schemas futuros e limita campos inválidos', () => {
+  const pet = createPet('TAMI', 'tami', NOW);
+  pet.needs.hunger = 999;
+  pet.coins = -10;
+  const normalized = normalizeSave({ schemaVersion: PET_SCHEMA_VERSION, pet }, NOW);
+  assert.equal(normalized.pet.needs.hunger, 100);
+  assert.equal(normalized.pet.coins, 0);
+  assert.throws(() => normalizeSave({ schemaVersion: PET_SCHEMA_VERSION + 1, pet }, NOW), /unsupported-schema/);
+});

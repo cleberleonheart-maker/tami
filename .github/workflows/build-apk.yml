@@ -9,6 +9,10 @@ on:
       - 'manifest.json'
       - 'sw.js'
       - 'icon.svg'
+      - 'pet.js'
+      - 'pet-domain.js'
+      - 'package.json'
+      - 'tests/**'
       - 'version'
       - '.github/workflows/build-apk.yml'
   workflow_dispatch:
@@ -21,6 +25,15 @@ jobs:
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v5
+
+      - uses: actions/setup-node@v5
+        with:
+          node-version: '22'
+
+      - name: Validar modulos do Pet
+        run: |
+          npm test
+          npm run check
 
       - uses: actions/setup-java@v5
         with:
@@ -48,7 +61,7 @@ jobs:
       - name: Empacotar o PWA nos assets do APK
         run: |
           mkdir -p android/app/src/main/assets
-          cp index.html manifest.json sw.js icon.svg version android/app/src/main/assets/
+          cp index.html manifest.json sw.js icon.svg pet.js pet-domain.js version android/app/src/main/assets/
 
       - name: Compilar APK de release
         working-directory: android

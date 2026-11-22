@@ -539,7 +539,7 @@ function timingSafeEqual(a, b) {
 // repositorio: dava para baixar o .git/config, o keystore de assinatura e o
 // codigo-fonte pela rede. Agora a lista e fechada.
 const PUBLIC_FILES = new Set([
-  'index.html', 'sw.js', 'manifest.json', 'icon.svg', 'version', 'TAMI.apk'
+  'index.html', 'sw.js', 'manifest.json', 'icon.svg', 'pet.js', 'pet-domain.js', 'version', 'TAMI.apk'
 ]);
 
 function serveStatic(req, res, p) {

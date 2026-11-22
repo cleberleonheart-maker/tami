@@ -17,6 +17,8 @@
       "../sw.js",
       "../manifest.json",
       "../icon.svg",
+      "../pet.js",
+      "../pet-domain.js",
       "../version",
       "../TAMI.apk"
     ],

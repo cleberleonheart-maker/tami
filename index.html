@@ -496,6 +496,201 @@ html.light .it-sub, html.light .sub-hint { color: var(--text2) !important; }
 #select-bar .btn { margin-top: 0; padding: 8px 16px; font-size: 14px; }
 #select-bar .btn.ghost { background: transparent; border: 1px solid var(--divider); color: var(--text); }
 #select-bar .btn:disabled { opacity: .4; cursor: not-allowed; }</style>
+<style id="pet-styles">
+.pet-app-shell { min-height: 100%; padding: 0 0 18px; }
+.pet-view-tabs { display: flex; gap: 6px; overflow-x: auto; padding: 8px 10px 10px; position: sticky; top: 0; z-index: 7; background: linear-gradient(var(--bg) 72%, transparent); scrollbar-width: none; }
+.pet-view-tabs::-webkit-scrollbar { display: none; }
+.pet-view-tab { flex: 0 0 auto; border: 1px solid var(--divider); background: var(--surface); color: var(--text2); border-radius: 999px; padding: 8px 13px; font-size: 12.5px; font-weight: 700; cursor: pointer; }
+.pet-view-tab.active { color: #07101c; border-color: transparent; background: var(--primary); box-shadow: var(--glow-soft); }
+.pet-view-content { padding: 0 12px; }
+.pet-kicker { display: block; color: var(--primary); font-size: 10px; font-weight: 800; letter-spacing: 1.5px; text-transform: uppercase; margin-bottom: 6px; }
+.pet-adoption { padding: 26px 8px 28px; }
+.pet-adoption-copy { text-align: center; max-width: 520px; margin: 0 auto 26px; }
+.pet-adoption-copy h2, .pet-page-heading h2, .pet-hero-copy h2 { margin: 0; font-size: 25px; line-height: 1.15; }
+.pet-adoption-copy p, .pet-page-heading p, .pet-hero-copy p { color: var(--text2); font-size: 13.5px; line-height: 1.55; margin: 9px 0 0; }
+.pet-section-title { font-size: 12px; text-transform: uppercase; letter-spacing: 1.2px; color: var(--text2); margin: 0 0 10px; }
+.pet-species-grid { display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 9px; }
+.pet-species-card { position: relative; min-width: 0; overflow: hidden; border: 1px solid var(--divider); border-radius: 17px; background: var(--surface); color: var(--text); padding: 12px 10px 13px; text-align: left; cursor: pointer; transition: border-color .2s, transform .2s, box-shadow .2s; }
+.pet-species-card:hover { transform: translateY(-2px); border-color: var(--primary); }
+.pet-species-card.selected { border-color: var(--primary); box-shadow: 0 0 20px rgba(0,229,255,.18); background: var(--surface-v); }
+.pet-species-preview { display: block; width: 76px; height: 76px; margin: 0 auto 9px; position: relative; }
+.pet-species-head { position: absolute; width: 58px; height: 55px; left: 9px; top: 10px; border-radius: 48%; background: linear-gradient(145deg, var(--pet-main), var(--pet-accent)); box-shadow: inset 0 -8px 12px rgba(0,0,0,.2), 0 0 18px var(--pet-main); }
+.pet-species-head::before, .pet-species-head::after { content: ''; position: absolute; top: 23px; width: 6px; height: 8px; border-radius: 50%; background: #11172c; }
+.pet-species-head::before { left: 15px; } .pet-species-head::after { right: 15px; }
+.pet-species-orbit .pet-species-head { width: 64px; left: 6px; border-radius: 45% 55% 48% 52%; }
+.pet-species-echo .pet-species-head { height: 63px; top: 7px; border-radius: 50% 50% 44% 44%; }
+.pet-species-name { display: block; font-size: 14px; font-weight: 800; }
+.pet-species-trait { display: block; color: var(--text2); font-size: 10.5px; line-height: 1.4; margin-top: 4px; }
+.pet-species-check { position: absolute; top: 9px; right: 9px; width: 16px; height: 16px; border-radius: 50%; border: 2px solid var(--divider); }
+.pet-species-card.selected .pet-species-check { border-color: var(--primary); background: var(--primary); box-shadow: inset 0 0 0 3px var(--surface); }
+.pet-name-label { display: block; font-size: 12px; font-weight: 700; color: var(--text2); margin: 22px 0 7px; }
+.pet-name-input, .pet-rename-row input { width: 100%; border: 1px solid var(--divider); border-radius: 12px; background: var(--surface-v); color: var(--text); padding: 12px 13px; font: inherit; font-size: 15px; outline: none; }
+.pet-name-input:focus, .pet-rename-row input:focus { border-color: var(--primary); box-shadow: 0 0 0 3px rgba(0,229,255,.1); }
+.pet-primary-button { width: 100%; margin-top: 14px; }
+.pet-home-grid { display: grid; gap: 12px; }
+.pet-hero-card, .pet-panel, .pet-page { border: 1px solid var(--divider); border-radius: 19px; background: var(--surface); backdrop-filter: blur(12px) saturate(145%); }
+.pet-hero-card { position: relative; overflow: hidden; padding: 18px 15px 15px; }
+.pet-hero-card::before { content: ''; position: absolute; width: 220px; height: 220px; border-radius: 50%; right: -95px; top: -100px; background: radial-gradient(circle, rgba(255,47,214,.16), transparent 68%); pointer-events: none; }
+.pet-hero-copy { position: relative; z-index: 2; max-width: 62%; }
+.pet-hero-copy h2 { font-size: 27px; }
+.pet-visual { position: relative; display: block; width: 100%; height: 216px; border: 0; padding: 0; background: transparent; color: var(--text); cursor: pointer; overflow: visible; }
+.pet-aura { position: absolute; width: 150px; height: 150px; left: 50%; top: 32px; transform: translateX(-50%); border-radius: 50%; background: radial-gradient(circle, var(--pet-main), transparent 67%); opacity: .2; filter: blur(8px); animation: pet-pulse 2.8s ease-in-out infinite; }
+.pet-shadow { position: absolute; width: 104px; height: 19px; left: 50%; bottom: 13px; transform: translateX(-50%); border-radius: 50%; background: rgba(0,0,0,.34); filter: blur(5px); }
+.pet-character { position: absolute; width: 150px; height: 176px; left: 50%; bottom: 17px; transform: translateX(-50%); animation: pet-float 3.2s ease-in-out infinite; }
+.pet-head { position: absolute; z-index: 3; width: 112px; height: 104px; left: 19px; top: 12px; border-radius: 48%; background: linear-gradient(145deg, var(--pet-main), var(--pet-accent)); box-shadow: inset 0 -10px 18px rgba(0,0,0,.22), inset 0 7px 12px rgba(255,255,255,.3), 0 0 22px var(--pet-main); }
+.pet-species-wide .pet-head { width: 122px; left: 14px; border-radius: 46%; }
+.pet-species-tall .pet-head { height: 116px; top: 5px; border-radius: 50% 50% 45% 45%; }
+.pet-ear { position: absolute; z-index: 2; width: 44px; height: 48px; top: 0; background: var(--pet-accent); filter: brightness(.9); }
+.pet-ear-left { left: 16px; border-radius: 80% 20% 45% 55%; transform: rotate(-24deg); }
+.pet-ear-right { right: 16px; border-radius: 20% 80% 55% 45%; transform: rotate(24deg); }
+.pet-species-orbit .pet-ear { width: 58px; height: 22px; top: 30px; }
+.pet-species-orbit .pet-ear-left { left: 5px; border-radius: 50%; transform: rotate(-8deg); }
+.pet-species-orbit .pet-ear-right { right: 5px; border-radius: 50%; transform: rotate(8deg); }
+.pet-species-echo .pet-ear { width: 15px; height: 64px; top: -27px; border-radius: 50%; }
+.pet-species-echo .pet-ear-left { left: 32px; transform: rotate(-8deg); }
+.pet-species-echo .pet-ear-right { right: 32px; transform: rotate(8deg); }
+.pet-eye { position: absolute; z-index: 5; top: 40px; width: 10px; height: 14px; border-radius: 50%; background: #11172c; animation: pet-blink 4.6s infinite; }
+.pet-eye::after { content: ''; position: absolute; width: 4px; height: 4px; left: 3px; top: 2px; border-radius: 50%; background: white; }
+.pet-eye-left { left: 29px; } .pet-eye-right { right: 29px; animation-delay: .05s; }
+.pet-blush { position: absolute; z-index: 4; top: 59px; width: 17px; height: 9px; border-radius: 50%; background: rgba(255,66,151,.5); filter: blur(1px); }
+.pet-blush-left { left: 14px; } .pet-blush-right { right: 14px; }
+.pet-mouth { position: absolute; z-index: 5; width: 17px; height: 8px; left: 50%; top: 59px; transform: translateX(-50%); border-bottom: 3px solid #11172c; border-radius: 0 0 12px 12px; }
+.pet-mark { position: absolute; z-index: 5; width: 10px; height: 10px; left: 50%; top: 13px; transform: translateX(-50%) rotate(45deg); border-radius: 3px; background: rgba(255,255,255,.72); }
+.pet-body { position: absolute; z-index: 2; width: 94px; height: 78px; left: 28px; bottom: 0; border-radius: 45% 45% 38% 38%; background: linear-gradient(160deg, var(--pet-accent), var(--pet-main)); box-shadow: inset 0 -12px 16px rgba(0,0,0,.2); }
+.pet-arm { position: absolute; z-index: 1; width: 30px; height: 48px; bottom: 8px; border-radius: 50%; background: var(--pet-main); }
+.pet-arm-left { left: 14px; transform: rotate(18deg); } .pet-arm-right { right: 14px; transform: rotate(-18deg); }
+.pet-mood { position: absolute; z-index: 8; right: 20px; top: 26px; max-width: 130px; border: 1px solid var(--divider); border-radius: 999px; background: rgba(11,15,42,.78); color: var(--text); padding: 7px 11px; font-size: 11px; font-weight: 700; backdrop-filter: blur(8px); }
+.pet-visual.is-sick .pet-eye { height: 4px; top: 47px; border-radius: 3px; animation: none; }
+.pet-visual.is-sick .pet-eye::after { display: none; }
+.pet-visual.is-sleeping .pet-character { animation: pet-sleep 4s ease-in-out infinite; }
+.pet-visual.is-sleeping .pet-eye { height: 4px; top: 47px; border-radius: 3px; animation: none; }
+.pet-visual.is-sleeping .pet-eye::after { display: none; }
+.pet-stage-teen .pet-character { transform: translateX(-50%) scale(1.05); }
+.pet-stage-adult .pet-character { transform: translateX(-50%) scale(1.1); }
+.pet-stage-legend .pet-character { transform: translateX(-50%) scale(1.15); filter: drop-shadow(0 0 12px var(--pet-main)); }
+.pet-accessory-headphones::before, .pet-accessory-headphones::after { content: ''; position: absolute; z-index: 8; width: 16px; height: 30px; top: 43px; border-radius: 9px; background: var(--text); }
+.pet-accessory-headphones::before { left: 29px; } .pet-accessory-headphones::after { right: 29px; }
+.pet-accessory-headphones .pet-head { box-shadow: inset 0 -10px 18px rgba(0,0,0,.22), 0 0 22px var(--pet-main); }
+.pet-accessory-crown::before { content: ''; position: absolute; z-index: 9; width: 55px; height: 25px; left: 50%; top: 0; transform: translateX(-50%); background: #ffd166; clip-path: polygon(0 100%, 10% 12%, 30% 58%, 50% 0, 70% 58%, 90% 12%, 100% 100%); filter: drop-shadow(0 0 8px rgba(255,209,102,.6)); }
+.pet-accessory-charm::before { content: ''; position: absolute; z-index: 9; width: 18px; height: 18px; left: 50%; top: 72px; transform: translateX(-50%) rotate(45deg); border-radius: 5px 0 5px 5px; background: var(--secondary); box-shadow: 0 0 10px var(--secondary); }
+.pet-accessory-blanket::after { content: ''; position: absolute; z-index: 4; width: 90px; height: 34px; left: 50%; bottom: 19px; transform: translateX(-50%); border-radius: 12px 12px 22px 22px; background: repeating-linear-gradient(45deg, #7c4dff, #7c4dff 10px, #b388ff 10px, #b388ff 20px); opacity: .9; }
+.pet-stage-description { text-align: center; color: var(--text2); font-size: 12px; margin-top: -4px; }
+.pet-stat-grid { display: grid; grid-template-columns: repeat(4, minmax(0, 1fr)); gap: 7px; margin-top: 14px; }
+.pet-stat { min-width: 0; border: 1px solid var(--divider); border-radius: 11px; background: var(--surface-v); padding: 9px 5px; text-align: center; }
+.pet-stat span { display: block; color: var(--text2); font-size: 9.5px; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.pet-stat strong { display: block; font-size: 16px; margin-top: 3px; }
+.pet-xp-block { margin-top: 12px; }
+.pet-xp-block > div:first-child { display: flex; justify-content: space-between; font-size: 11px; color: var(--text2); margin-bottom: 6px; }
+.pet-xp-block strong { color: var(--text); }
+.pet-next-stage { display: flex; align-items: center; gap: 8px; flex-wrap: wrap; border-top: 1px solid var(--divider); margin-top: 13px; padding-top: 11px; font-size: 11px; color: var(--text2); }
+.pet-next-stage strong { color: var(--primary); }
+.pet-next-stage small { margin-left: auto; }
+.pet-panel { padding: 14px; }
+.pet-panel-title { display: flex; justify-content: space-between; align-items: center; gap: 10px; margin-bottom: 12px; }
+.pet-panel-title h3, .pet-settings-panel h3 { margin: 0; font-size: 15px; }
+.pet-panel-title span { color: var(--text2); font-size: 10.5px; }
+.pet-needs { display: grid; gap: 10px; }
+.pet-need-label { display: flex; justify-content: space-between; align-items: center; font-size: 12px; margin-bottom: 5px; }
+.pet-need-label span { color: var(--text2); } .pet-need-label strong { font-size: 11px; }
+.pet-meter { height: 7px; border-radius: 999px; background: var(--surface-v); overflow: hidden; border: 1px solid rgba(255,255,255,.05); }
+.pet-meter-fill { display: block; height: 100%; border-radius: inherit; transition: width .35s ease; }
+.pet-meter-fill.tone-good { background: linear-gradient(90deg, #00b8d9, #30ffc0); box-shadow: 0 0 9px rgba(48,255,192,.35); }
+.pet-meter-fill.tone-low { background: linear-gradient(90deg, #ff9f43, #ffd166); }
+.pet-meter-fill.tone-critical { background: linear-gradient(90deg, #ff416c, #ff2fd6); box-shadow: 0 0 9px rgba(255,65,108,.38); }
+.pet-action-grid { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 8px; }
+.pet-action-button { min-width: 0; display: flex; align-items: center; gap: 9px; border: 1px solid var(--divider); border-radius: 12px; background: var(--surface-v); color: var(--text); padding: 10px; text-align: left; cursor: pointer; }
+.pet-action-button:disabled { opacity: .48; cursor: not-allowed; }
+.pet-action-button:not(:disabled):active { transform: scale(.97); }
+.pet-action-mark { flex: 0 0 auto; width: 30px; height: 30px; display: grid; place-items: center; border-radius: 9px; color: #07101c; font-size: 12px; font-weight: 900; background: var(--primary); }
+.pet-action-mark.action-clean { background: #30ffc0; } .pet-action-mark.action-play { background: #ff6ec7; } .pet-action-mark.action-rest { background: #b388ff; } .pet-action-mark.action-cuddle { background: #ffd166; } .pet-action-mark.action-sleep { background: #54a0ff; } .pet-action-mark.action-wake { background: #ffd166; } .pet-action-mark.action-medicine { background: #ff6b8a; }
+.pet-action-copy { min-width: 0; display: block; }
+.pet-action-copy strong, .pet-action-copy small { display: block; }
+.pet-action-copy strong { font-size: 12px; }
+.pet-action-copy small { color: var(--text2); font-size: 9.5px; margin-top: 2px; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.pet-page { padding: 17px 14px; }
+.pet-page-heading { display: flex; justify-content: space-between; align-items: flex-start; gap: 12px; margin-bottom: 16px; }
+.pet-page-heading p { max-width: 430px; }
+.pet-wallet, .pet-streak { flex: 0 0 auto; border: 1px solid var(--divider); border-radius: 12px; background: var(--surface-v); padding: 9px 11px; text-align: center; color: var(--text2); font-size: 9.5px; }
+.pet-wallet strong, .pet-streak strong { display: block; color: var(--primary); font-size: 18px; margin-top: 2px; }
+.pet-shop-grid { display: grid; gap: 9px; }
+.pet-shop-item { display: grid; grid-template-columns: 42px minmax(0, 1fr) auto; gap: 10px; align-items: center; border: 1px solid var(--divider); border-radius: 13px; background: var(--surface-v); padding: 11px; }
+.pet-shop-item.owned { border-color: rgba(48,255,192,.28); }
+.pet-item-mark { width: 42px; height: 42px; display: grid; place-items: center; border-radius: 11px; color: #07101c; background: var(--primary); font-size: 11px; font-weight: 900; }
+.pet-item-mark.item-snack { background: #ffd166; } .pet-item-mark.item-tonic { background: #ff6b8a; } .pet-item-mark.item-ball { background: #30ffc0; } .pet-item-mark.item-blanket { background: #b388ff; } .pet-item-mark.item-charm { background: #ff6ec7; } .pet-item-mark.item-headphones { background: #54a0ff; } .pet-item-mark.item-crown { background: #ffd166; }
+.pet-shop-copy { min-width: 0; }
+.pet-shop-copy h4, .pet-quest h4, .pet-achievement h4 { margin: 0; font-size: 13px; }
+.pet-shop-copy p, .pet-achievement p { margin: 3px 0 0; color: var(--text2); font-size: 10.5px; line-height: 1.4; }
+.pet-shop-copy small { display: block; color: var(--text2); font-size: 9.5px; margin-top: 4px; }
+.pet-shop-button { border: 1px solid var(--primary); border-radius: 999px; background: var(--primary-dark); color: #fff; padding: 8px 10px; font-size: 10.5px; font-weight: 700; cursor: pointer; white-space: nowrap; }
+.pet-shop-button:disabled { opacity: .45; cursor: not-allowed; }
+.pet-shop-button.active { background: var(--surface); color: var(--primary); }
+.pet-game-start, .pet-game-active { text-align: center; }
+.pet-game-start > p { color: var(--text2); font-size: 12px; }
+.pet-difficulty-grid { display: grid; grid-template-columns: repeat(3, 1fr); gap: 8px; margin-top: 14px; }
+.pet-difficulty { border: 1px solid var(--divider); border-radius: 13px; background: var(--surface-v); color: var(--text); padding: 14px 6px; cursor: pointer; }
+.pet-difficulty strong, .pet-difficulty small { display: block; }
+.pet-difficulty strong { font-size: 12px; } .pet-difficulty small { color: var(--text2); font-size: 10px; margin-top: 4px; }
+.pet-game-status { display: flex; justify-content: space-between; gap: 12px; margin-bottom: 14px; font-size: 12px; }
+.pet-game-status span { color: var(--text2); }
+.pet-pad-grid { display: grid; grid-template-columns: repeat(2, 1fr); gap: 10px; max-width: 330px; margin: 0 auto 14px; }
+.pet-pad { aspect-ratio: 1.35; border: 0; border-radius: 16px; color: #07101c; font-size: 22px; font-weight: 900; cursor: pointer; transition: transform .12s, filter .12s, opacity .2s; }
+.pet-pad:disabled { cursor: default; opacity: .72; }
+.pet-pad.active { transform: scale(.93); filter: brightness(1.45); box-shadow: 0 0 24px currentColor; }
+.pet-pad-0 { background: #ff416c; } .pet-pad-1 { background: #ffd166; } .pet-pad-2 { background: #30ffc0; } .pet-pad-3 { background: #54a0ff; }
+.pet-game-cooldown { border-top: 1px solid var(--divider); margin-top: 13px; padding-top: 12px; color: var(--text2); font-size: 11px; text-align: center; }
+.pet-reward-note { margin-top: 12px; border-radius: 11px; background: var(--surface-v); color: var(--text2); padding: 10px; font-size: 10.5px; text-align: center; }
+.pet-quest-list { display: grid; gap: 9px; }
+.pet-quest { display: grid; grid-template-columns: minmax(0, 1fr) auto; gap: 10px; align-items: center; border: 1px solid var(--divider); border-radius: 13px; background: var(--surface-v); padding: 11px; }
+.pet-quest.complete { border-color: rgba(48,255,192,.35); }
+.pet-quest-progress { display: flex; align-items: center; gap: 8px; margin-top: 7px; }
+.pet-quest-progress .pet-meter { flex: 1; }
+.pet-quest-progress span { color: var(--text2); font-size: 9.5px; white-space: nowrap; }
+.pet-quest-reward { text-align: right; }
+.pet-quest-reward > span { display: block; color: var(--text2); font-size: 9px; margin-bottom: 5px; }
+.pet-achievement-grid { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 9px; }
+.pet-achievement { display: grid; grid-template-columns: 28px minmax(0, 1fr); gap: 8px; border: 1px solid var(--divider); border-radius: 13px; background: var(--surface-v); padding: 11px; opacity: .58; }
+.pet-achievement.unlocked { opacity: 1; border-color: rgba(48,255,192,.35); }
+.pet-achievement-mark { width: 26px; height: 26px; display: grid; place-items: center; border-radius: 8px; background: var(--surface); color: var(--primary); font-weight: 900; }
+.pet-achievement.unlocked .pet-achievement-mark { background: #30ffc0; color: #07101c; }
+.pet-achievement small { display: block; color: var(--text2); font-size: 9px; margin-top: 6px; }
+.pet-settings-panel h3 { margin-bottom: 11px; }
+.pet-rename-row { display: grid; grid-template-columns: minmax(0, 1fr) auto; gap: 8px; }
+.pet-rename-row input { min-width: 0; }
+.pet-secondary-button, .pet-danger-button { margin: 0; padding: 10px 14px; font-size: 12px; }
+.pet-secondary-button { background-color: var(--surface-v); background-image: none; color: var(--text); border: 1px solid var(--divider); }
+.pet-danger-button { background-color: #8c1538; background-image: linear-gradient(rgba(0,0,0,.2), rgba(0,0,0,.2)); }
+.pet-settings-stats { display: grid; grid-template-columns: repeat(2, 1fr); gap: 8px; margin-top: 16px; }
+.pet-settings-stats div { border: 1px solid var(--divider); border-radius: 11px; background: var(--surface-v); padding: 10px; }
+.pet-settings-stats span, .pet-settings-stats strong { display: block; }
+.pet-settings-stats span { color: var(--text2); font-size: 9.5px; } .pet-settings-stats strong { font-size: 17px; margin-top: 3px; }
+.pet-created { color: var(--text2); font-size: 10.5px; margin-top: 12px; }
+.pet-settings-actions { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 8px; margin-top: 14px; }
+.pet-settings-actions .pet-danger-button { grid-column: 1 / -1; }
+@keyframes pet-float { 0%,100% { transform: translateX(-50%) translateY(0); } 50% { transform: translateX(-50%) translateY(-6px); } }
+@keyframes pet-pulse { 0%,100% { opacity: .15; transform: translateX(-50%) scale(.92); } 50% { opacity: .3; transform: translateX(-50%) scale(1.08); } }
+@keyframes pet-blink { 0%,93%,100% { transform: scaleY(1); } 96% { transform: scaleY(.12); } }
+@keyframes pet-sleep { 0%,100% { transform: translateX(-50%) translateY(0) rotate(-1deg); } 50% { transform: translateX(-50%) translateY(3px) rotate(1deg); } }
+@media (max-width: 430px) {
+  .pet-view-content { padding: 0 9px; }
+  .pet-species-grid { grid-template-columns: 1fr; }
+  .pet-species-card { display: grid; grid-template-columns: 76px minmax(0, 1fr); grid-template-rows: auto auto; column-gap: 10px; align-items: center; }
+  .pet-species-preview { grid-row: 1 / 3; margin: 0; }
+  .pet-species-name { align-self: end; }
+  .pet-species-trait { align-self: start; }
+  .pet-species-check { top: 50%; transform: translateY(-50%); }
+  .pet-hero-copy { max-width: 58%; }
+  .pet-achievement-grid { grid-template-columns: 1fr; }
+  .pet-shop-item { grid-template-columns: 38px minmax(0, 1fr); }
+  .pet-item-mark { width: 38px; height: 38px; }
+  .pet-shop-button { grid-column: 1 / -1; width: 100%; }
+  .pet-action-grid { grid-template-columns: 1fr; }
+}
+@media (prefers-reduced-motion: reduce) {
+  .pet-character, .pet-aura, .pet-eye { animation: none !important; }
+}
+html.light .pet-species-card.selected .pet-species-check { box-shadow: inset 0 0 0 3px var(--surface); }
+html.light .pet-mood { background: rgba(255,255,255,.82); }
+</style>
 </head>
 <body>
 <div id="bg-anim"></div>
@@ -507,14 +702,17 @@ html.light .it-sub, html.light .sub-hint { color: var(--text2) !important; }
     <div id="profile-avatar" onclick="showProfile()">T</div>
   </header>
   <main id="main">
-    <div id="search-wrap"><input type="search" id="search" placeholder="Buscar músicas, artistas…" autocomplete="off"></div>
+    <div id="search-wrap" class="hidden"><input type="search" id="search" placeholder="Buscar músicas, artistas…" autocomplete="off"></div>
     <div id="select-bar">
       <button class="btn ghost" onclick="cancelMultiSelect()">Cancelar</button>
       <div id="select-count">0 selecionadas</div>
       <button class="btn" onclick="selectAllSongs()">Selecionar tudo</button>
       <button class="btn" onclick="deleteSelectedSongs()">Excluir</button>
     </div>
-    <section class="tab active" id="tab-virgin">
+    <section class="tab active" id="tab-pet">
+      <div class="list" id="pet-list"></div>
+    </section>
+    <section class="tab" id="tab-virgin">
       <div class="list" id="virgin-list"></div>
     </section>
     <section class="tab" id="tab-songs">
@@ -558,7 +756,8 @@ html.light .it-sub, html.light .sub-hint { color: var(--text2) !important; }
     <button class="mm primary" id="mini-play" onclick="event.stopPropagation();togglePlay()">▶</button>
   </div>
   <nav id="nav">
-    <button data-tab="virgin" class="active" data-icon="🎧" data-label="TAMI" onclick="selectTab('virgin')"><span class="ic">🎧</span>TAMI</button>
+    <button data-tab="pet" class="active" data-icon="◉" data-label="petTab" onclick="selectTab('pet')"><span class="ic">◉</span>Pet</button>
+    <button data-tab="virgin" data-icon="🎧" data-label="TAMI" onclick="selectTab('virgin')"><span class="ic">🎧</span>TAMI</button>
     <button data-tab="songs" data-icon="♪" data-label="tSongs" onclick="selectTab('songs')"><span class="ic">♪</span>Músicas</button>
     <button data-tab="albums" data-icon="▣" data-label="tAlbums" onclick="selectTab('albums')"><span class="ic">▣</span>Álbuns</button>
     <button data-tab="artists" data-icon="◎" data-label="tArtists" onclick="selectTab('artists')"><span class="ic">◎</span>Artistas</button>
@@ -625,7 +824,7 @@ html.light .it-sub, html.light .sub-hint { color: var(--text2) !important; }
 // ---------- Estado ----------
 const state = {
   songs: [], videos: [], playlists: [],
-  tab: 'songs', detail: null, // {type:'album'|'artist'|'playlist', ...}
+  tab: 'pet', detail: null, // {type:'album'|'artist'|'playlist', ...}
   queue: [], queueIndex: -1, current: null, upNext: [], codec: null, codecPlaying: false,
   shuffle: false, repeat: 0, favs: new Set(), nick: '', theme: 'dark', accent: 'cyan', visStyle: 'hearts',
   djMode: false, djVoice: true, djMic: false, learn: {},
@@ -781,6 +980,7 @@ function ytMount(videoId, positionMs, autoplay) {
 }
 const UNKNOWN = 'Desconhecido';
 let mediaSkipGuard = {};
+let petRuntime = null;
 function mediaError(ev, reason) {
   const el = ev && ev.target ? ev.target : null;
   if (!el) return;
@@ -911,6 +1111,7 @@ const I18N = {
   themeTitle: { pt: 'Tema e cores', en: 'Theme and colors', es: 'Tema y colores' },
   themeDark: { pt: 'Escuro', en: 'Dark', es: 'Oscuro' },
   themeLight: { pt: 'Claro', en: 'Light', es: 'Claro' },
+  petTab: { pt: 'Pet', en: 'Pet', es: 'Mascota' },
   tSongs: { pt: 'Músicas', en: 'Songs', es: 'Canciones' },
   tAlbums: { pt: 'Álbuns', en: 'Albums', es: 'Álbumes' },
   tArtists: { pt: 'Artistas', en: 'Artists', es: 'Artistas' },
@@ -2123,6 +2324,7 @@ function renderAll() {
   renderPlaylists($('playlists-list'));
   renderVideos($('videos-list'));
   renderAmb();
+  renderPet();
   renderVirgin();
   if (state.detail) renderDetail();
 }
@@ -2371,6 +2573,8 @@ function selectTab(tab, updateDetail) {
   if (activeBtn) navEl.scrollLeft = Math.max(0, activeBtn.offsetLeft - (navEl.clientWidth - activeBtn.offsetWidth) / 2);
   document.querySelectorAll('.tab').forEach((t) => t.classList.remove('active'));
   $('tab-' + tab).classList.add('active');
+  $('search-wrap').classList.toggle('hidden', tab === 'pet');
+  if (tab === 'pet') renderPet();
   $('addPlaylistBtn').classList.toggle('hidden', tab !== 'playlists');
   $('back').classList.remove('show');
   updateTitle();
@@ -3215,7 +3419,7 @@ function renderUILabels() {
 }
 function updateTitle() {
   if (state.detail) { $('title').textContent = state.detail.name || ''; return; }
-  const key = { virgin: 'TAMI', songs: 'tSongs', albums: 'tAlbums', artists: 'tArtists', playlists: 'tPlaylists', favs: 'tFavs', videos: 'tVideos', amb: 'tAmb', phone: 'tPhone', room: 'roomTab' }[state.tab];
+  const key = { pet: 'petTab', virgin: 'TAMI', songs: 'tSongs', albums: 'tAlbums', artists: 'tArtists', playlists: 'tPlaylists', favs: 'tFavs', videos: 'tVideos', amb: 'tAmb', phone: 'tPhone', room: 'roomTab' }[state.tab];
   $('title').textContent = key === 'TAMI' ? persona().name : L(key);
 }
 function djAnnounceTrack(s) {
@@ -4234,6 +4438,7 @@ function maybeHandoffToNative() {
 }
 document.addEventListener('visibilitychange', () => {
   if (document.visibilityState === 'visible') {
+    if (petRuntime) petRuntime.tick().catch(() => {});
     checkBackgroundHandoff();
     if (pendingHandoff) {
       pendingHandoff = false;
@@ -4568,6 +4773,15 @@ function syncMini() {
   $('mini-play').textContent = playing ? '⏸' : '▶';
 }
 
+function renderPet() {
+  if (petRuntime) {
+    petRuntime.render($('pet-list'));
+    return;
+  }
+  const list = $('pet-list');
+  if (list && !list.innerHTML) list.innerHTML = '<div class="empty"><div class="big">◉</div>Carregando o pet…</div>';
+}
+
 // ---------- Tela TAMI ----------
 function renderVirgin() {
   const list = $('virgin-list');
@@ -4729,6 +4943,11 @@ function dismissUpdate() {
   closeModal();
 }
 const CHANGELOG = {
+  '1.56': {
+    pt: ['Novo Pet Tamagotchi na aba Pet: adote uma TAMI, Órbita ou Eco e cuide de fome, energia, higiene, felicidade e saúde', 'Cuidados, vínculo, XP, níveis e evolução por quatro fases, com progresso salvo no aparelho mesmo quando o app fica offline', 'Loja com consumíveis e acessórios, missões diárias, conquistas e sequência de cuidados', 'Desafio musical com três dificuldades, recompensas e opção de exportar ou importar o save do pet'],
+    en: ['New Tamagotchi pet in the Pet tab: adopt a TAMI, Orbit or Echo and care for hunger, energy, hygiene, happiness and health', 'Care, bond, XP, levels and evolution through four stages, with progress saved on the device even while the app is offline', 'Shop with consumables and accessories, daily missions, achievements and a care streak', 'Music challenge with three difficulties, rewards and the option to export or import the pet save'],
+    es: ['Nueva mascota Tamagotchi en la pestaña Pet: adopta una TAMI, Órbita o Eco y cuida del hambre, la energía, la higiene, la felicidad y la salud', 'Cuidados, vínculo, XP, niveles y evolución por cuatro fases, con el progreso guardado en el dispositivo incluso sin conexión', 'Tienda con consumibles y accesorios, misiones diarias, logros y racha de cuidados', 'Desafío musical con tres dificultades, recompensas y opción de exportar o importar la partida de la mascota']
+  },
   '1.55': {
     pt: ['Segurança: o servidor do PC aceita um token de acesso (TAMI_TOKEN) — com ele ligado, só quem tem o segredo consegue mandar comandos, ler a biblioteca ou abrir salas', 'Novo campo de token na aba "Celular": cole o segredo uma vez e ele fica salvo no aparelho', 'O token também pode vir no próprio endereço (http://ip:8081?t=SEGREDO) — o app separa e usa sozinho', 'Correção: o token não é aceito por um túnel público (ngrok/Cloudflare) sem a senha, mesmo vindo do próprio PC'],
     en: ['Security: the PC server accepts an access token (TAMI_TOKEN) — with it on, only whoever has the secret can send commands, read the library or open rooms', 'New token field in the "Phone" tab: paste the secret once and it is saved on the device', 'The token can also come in the address itself (http://ip:8081?t=SECRET) — the app splits it and uses it on its own', 'Fix: the token is not accepted through a public tunnel (ngrok/Cloudflare) without the password, even coming from the PC itself'],
@@ -6410,6 +6629,22 @@ async function init() {
   }
   await reloadAll();
   try {
+    const petModule = await import('./pet.js');
+    petRuntime = petModule.createPetRuntime({
+      load: () => getKV('petSave'),
+      save: (value) => putKV('petSave', value),
+      lang: () => state.lang,
+      notify: (message) => toast(message),
+      speak: (message) => djSpeak(message),
+      now: () => Date.now()
+    });
+    await petRuntime.init($('pet-list'));
+  } catch (e) {
+    console.warn('pet init', e);
+    const petList = $('pet-list');
+    if (petList) petList.innerHTML = '<div class="empty"><div class="big">◉</div>Não foi possível abrir o pet agora.</div>';
+  }
+  try {
     const favs = await getKV('favs');
     if (favs) state.favs = new Set(favs);
     const learn = await getKV('learn');
@@ -6484,6 +6719,7 @@ async function init() {
     }).catch(() => {});
   }
   window.__tamiBooted = true;
+  renderPet();
   renderVirgin();
 }
 function registerTabs() {

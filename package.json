@@ -1,0 +1,10 @@
+{
+  "name": "tami",
+  "private": true,
+  "version": "1.56.0",
+  "type": "module",
+  "scripts": {
+    "test": "node --test tests/*.test.js",
+    "check": "node --check pet-domain.js && node --check pet.js && node --check companion/server.js"
+  }
+}
