@@ -363,9 +363,15 @@ class TamiPlayerService : Service() {
 
     fun currentPlayerPosMs(): Long = runCatching { if (mediaPlayer?.isPlaying == true) mediaPlayer!!.currentPosition.toLong() else -1L }.getOrDefault(-1L)
 
+    private fun notifyPlaybackFailure() {
+        val currentMode = mode
+        if (currentMode == MODE_CODEC) MainActivity.relayControl("codecStopped")
+        else if (currentMode == MODE_HANDOFF) MainActivity.relayControl("handoffFailed")
+    }
+
     private fun startHandoff(url: String, pos: Long) {
+        val mp = MediaPlayer()
         try {
-            val mp = MediaPlayer()
             // Token de geracao: os callbacks do prepareAsync podem chegar
             // depois de o player ter sido trocado. Sem isso, o callback antigo
             // lia o m.start() e deixava dois players tocando ao mesmo tempo.
@@ -396,11 +402,14 @@ class TamiPlayerService : Service() {
                     }
                     updateNotification()
                     syncSessionPos(true, m.currentPosition.toLong())
-                } catch (e: Exception) {}
+                } catch (e: Exception) {
+                    notifyPlaybackFailure()
+                    stopAll()
+                }
             }
             mp.setOnErrorListener { _, _, _ ->
                 if (gen != playerGen) return@setOnErrorListener true
-                if (mode == MODE_CODEC) MainActivity.relayControl("codecStopped")
+                notifyPlaybackFailure()
                 stopAll()
                 true
             }
@@ -415,6 +424,8 @@ class TamiPlayerService : Service() {
             mediaPlayer = mp
             mp.prepareAsync()
         } catch (e: Exception) {
+            try { mp.release() } catch (e2: Exception) {}
+            notifyPlaybackFailure()
             stopAll()
         }
     }

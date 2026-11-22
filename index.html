@@ -4040,7 +4040,7 @@ function syncNativeQueue() {
     // nativo pula a música errada. Quem não tem cópia ainda vai com url vazia.
     const q = state.queue.map((x) => ({
       id: String(x.id || ''),
-      url: (x.url && /^(content|file):/.test(x.url)) ? x.url : (x.handoffPath || ''),
+      url: nativeHandoffUrl(x),
       title: x.title || x.name || '',
       artist: x.artist || x.album || ''
     }));
@@ -4323,6 +4323,13 @@ function resumeFromInterruption() {
   if (el.src && el.paused) { try { safePlay(el); } catch (e) {} }
 }
 let lastNativeSync = 0;
+function nativeHandoffUrl(s) {
+  if (!s) return '';
+  const path = String(s.handoffPath || '');
+  if (path) return path;
+  const url = String(s.url || '');
+  return /^(?:content|file|https?):/i.test(url) ? url : '';
+}
 function syncNativeNow(force) {
   try {
     if (!window.TamiNative || !window.TamiNative.updateNowPlaying) return;
@@ -4343,7 +4350,7 @@ function syncNativeNow(force) {
         playing = !el.paused && !el.ended && !!el.src;
       } catch (e) {}
     }
-    const url = (s.url && /^(content|file):/.test(s.url)) ? s.url : (s.handoffPath || '');
+    const url = nativeHandoffUrl(s);
     window.TamiNative.updateNowPlaying(JSON.stringify({
       id: String(s.id || ''), title: s.title || s.name || '', artist: s.artist || s.album || '',
       url, pos, dur, playing
@@ -4374,6 +4381,7 @@ function tamiRemote(cmd) {
   else if (cmd === 'playpause') togglePlay();
   else if (cmd === 'codecEnd') { codecEnded(); }
   else if (cmd === 'codecStopped') { if (state.codec) { state.codec = null; state.codecPlaying = false; stopCodecTick(); renderPlayer(); syncNativeNow(true); } }
+  else if (cmd === 'handoffFailed') { pendingHandoff = false; remotePlayPause(true); }
 }
 function checkBackgroundHandoff() {
   try {
@@ -4427,7 +4435,7 @@ function maybeHandoffToNative() {
     if (!s || s.type === 'video') return;
     const el = audio;
     if (!el || !el.src || el.paused || el.ended) return;
-    const url = (s.url && /^(content|file):/.test(s.url)) ? s.url : (s.handoffPath || '');
+    const url = nativeHandoffUrl(s);
     if (!url) return;
     const pos = Math.floor((el.currentTime || 0) * 1000);
     syncNativeQueue();
@@ -4943,6 +4951,11 @@ function dismissUpdate() {
   closeModal();
 }
 const CHANGELOG = {
+  '1.57': {
+    pt: ['Correção: as músicas do servidor do PC agora continuam tocando no player nativo quando o app vai para segundo plano', 'O player nativo também aceita links HTTP/HTTPS e, se não conseguir abrir a música, devolve o som para o app automaticamente'],
+    en: ['Fix: songs from the PC server now keep playing in the native player when the app moves to the background', 'The native player now also accepts HTTP/HTTPS links and automatically returns playback to the app if it cannot open the song'],
+    es: ['Corrección: las canciones del servidor del PC ahora siguen sonando en el reproductor nativo cuando la app pasa a segundo plano', 'El reproductor nativo también acepta enlaces HTTP/HTTPS y, si no puede abrir la canción, devuelve el sonido a la app automáticamente']
+  },
   '1.56': {
     pt: ['Novo Pet Tamagotchi na aba Pet: adote uma TAMI, Órbita ou Eco e cuide de fome, energia, higiene, felicidade e saúde', 'Cuidados, vínculo, XP, níveis e evolução por quatro fases, com progresso salvo no aparelho mesmo quando o app fica offline', 'Loja com consumíveis e acessórios, missões diárias, conquistas e sequência de cuidados', 'Desafio musical com três dificuldades, recompensas e opção de exportar ou importar o save do pet'],
     en: ['New Tamagotchi pet in the Pet tab: adopt a TAMI, Orbit or Echo and care for hunger, energy, hygiene, happiness and health', 'Care, bond, XP, levels and evolution through four stages, with progress saved on the device even while the app is offline', 'Shop with consumables and accessories, daily missions, achievements and a care streak', 'Music challenge with three difficulties, rewards and the option to export or import the pet save'],
