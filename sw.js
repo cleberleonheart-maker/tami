@@ -1,4 +1,4 @@
-const CACHE = 'tami-web-v4';
+const CACHE = 'tami-web-v5';
 const ASSETS = ['./', './index.html', './manifest.json', './icon.svg', './pet.js', './pet-domain.js'];
 
 self.addEventListener('install', (e) => {

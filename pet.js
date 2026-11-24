@@ -20,6 +20,7 @@ import {
   getMinigameCooldown,
   createMemorySequence,
   isMemoryInputCorrect,
+  failMinigame,
   completeMinigame,
   renamePet,
   normalizeSave,
@@ -107,6 +108,7 @@ const TEXT = {
   notSleeping: ['O pet já está acordado.', 'The pet is already awake.', 'La mascota ya está despierta.'],
   unknownAction: ['Ação indisponível.', 'Action unavailable.', 'Acción no disponible.'],
   actionDone: ['Cuidado realizado!', 'Care action completed!', '¡Cuidado realizado!'],
+  actionCost: ['Custa {cost} moedas.', 'Costs {cost} coins.', 'Cuesta {cost} monedas.'],
   saved: ['Progresso salvo.', 'Progress saved.', 'Progreso guardado.'],
   saveFailed: ['Não foi possível salvar. O progresso continua nesta sessão.', 'Could not save. Progress remains in this session.', 'No se pudo guardar. El progreso sigue en esta sesión.'],
   levelUp: ['Seu pet chegou ao nível {level}.', 'Your pet reached level {level}.', 'Tu mascota llegó al nivel {level}.'],
@@ -117,6 +119,7 @@ const TEXT = {
   recovered: ['Seu pet se recuperou.', 'Your pet recovered.', 'Tu mascota se recuperó.'],
   needCritical: ['A necessidade {name} está muito baixa.', 'The {name} need is very low.', 'La necesidad de {name} está muy baja.'],
   offlineCapped: ['O tempo offline foi limitado a 24 horas.', 'Offline time was capped at 24 hours.', 'El tiempo sin conexión se limitó a 24 horas.'],
+  clockAdjusted: ['O relógio do aparelho foi corrigido e o pet voltou a evoluir normalmente.', 'The device clock was corrected and the pet can progress normally again.', 'Se corrigió el reloj del dispositivo y la mascota puede progresar normalmente otra vez.'],
   importError: ['Não foi possível importar esse save.', 'Could not import that save.', 'No se pudo importar esa partida.'],
   exportDone: ['Save exportado.', 'Save exported.', 'Partida exportada.'],
   resetDone: ['O pet foi removido. Você pode adotar outro.', 'The pet was removed. You can adopt another.', 'La mascota fue eliminada. Puedes adoptar otra.'],
@@ -248,7 +251,6 @@ export function createPetRuntime(options = {}) {
   let game = null;
   let gameTimers = [];
   let resetArmed = false;
-  let saveWarningShown = false;
   let interval = 0;
 
   function lang() {
@@ -260,27 +262,16 @@ export function createPetRuntime(options = {}) {
     return translate(lang(), key, vars);
   }
 
-  function persist(candidate = pet) {
-    return Promise.resolve(save({ schemaVersion: PET_SCHEMA_VERSION, pet: candidate })).then((result) => {
-      if (result === false) {
-        if (!saveWarningShown) {
-          saveWarningShown = true;
-          notify(text('saveFailed'));
-        }
-        return false;
-      }
-      saveWarningShown = false;
-      return true;
-    }).catch(() => {
-      if (!saveWarningShown) {
-        saveWarningShown = true;
-        notify(text('saveFailed'));
-      }
+  async function persist(candidate = pet) {
+    try {
+      const result = await save({ schemaVersion: PET_SCHEMA_VERSION, pet: candidate });
+      return result !== false;
+    } catch (error) {
       return false;
-    });
+    }
   }
 
-  function announceEvents(events) {
+  function collectEventFeedback(events) {
     const messages = [];
     let spoken = '';
     let spokenPriority = 0;
@@ -310,6 +301,8 @@ export function createPetRuntime(options = {}) {
         message = text('needCritical', { name: text(NEED_LABELS[event.need] || 'health').toLowerCase() });
       } else if (event.type === 'offlineCapped') {
         message = text('offlineCapped');
+      } else if (event.type === 'clockAdjusted') {
+        message = text('clockAdjusted');
       }
       if (!message) continue;
       messages.push(message);
@@ -318,8 +311,23 @@ export function createPetRuntime(options = {}) {
         spokenPriority = priority;
       }
     }
-    if (messages.length) notify(messages.join(' • '));
-    if (spoken) speak(spoken);
+    return { messages, spoken };
+  }
+
+  function notifyFeedback(successMessages, events, saved = true) {
+    const feedback = collectEventFeedback(events);
+    const messages = [...(successMessages || []), ...feedback.messages];
+    if (saved === false) messages.unshift(text('saveFailed'));
+    if (messages.length) {
+      try {
+        notify(messages.join(' • '));
+      } catch (error) {}
+    }
+    if (feedback.spoken) {
+      try {
+        speak(feedback.spoken);
+      } catch (error) {}
+    }
   }
 
   function petAvatarHtml() {
@@ -393,6 +401,7 @@ export function createPetRuntime(options = {}) {
       const action = ACTIONS[actionId];
       const availability = getActionAvailability(pet, actionId, timestamp);
       let note = action.description[LANG_INDEX[lang()]];
+      if (action.cost > 0) note += ` · ${text('actionCost', { cost: action.cost })}`;
       if (!availability.allowed && availability.reason === 'cooldown') note = text('cooldown', { time: formatDuration(availability.remaining) });
       if (!availability.allowed && availability.reason === 'coins') note = text('notEnoughCoins');
       if (!availability.allowed && availability.reason === 'notSick') note = text('notSick');
@@ -448,11 +457,14 @@ export function createPetRuntime(options = {}) {
     const items = Object.values(SHOP_ITEMS).map((item) => {
       const owned = pet.inventory[item.id] || 0;
       const availability = getItemAvailability(pet, item.id);
+      const canBuy = owned <= 0 || item.kind === 'consumable';
+      const buyButton = `<button type="button" class="pet-shop-button" data-pet-shop-action="buy" data-pet-item="${item.id}" ${availability.allowed ? '' : 'disabled'}>${escapeHtml(text('buy', { cost: item.cost }))}</button>`;
       let button = '';
       if (owned <= 0) {
-        button = `<button type="button" class="pet-shop-button" data-pet-shop-action="buy" data-pet-item="${item.id}" ${availability.allowed ? '' : 'disabled'}>${escapeHtml(text('buy', { cost: item.cost }))}</button>`;
+        button = buyButton;
       } else if (item.kind === 'consumable') {
-        button = `<button type="button" class="pet-shop-button" data-pet-shop-action="use" data-pet-item="${item.id}">${escapeHtml(text('use'))}</button>`;
+        const useButton = `<button type="button" class="pet-shop-button" data-pet-shop-action="use" data-pet-item="${item.id}">${escapeHtml(text('use'))}</button>`;
+        button = `<div class="pet-shop-actions">${useButton}${buyButton}</div>`;
       } else if (item.kind === 'wearable') {
         const equipped = !!pet.equipped[item.id];
         button = `<button type="button" class="pet-shop-button ${equipped ? 'active' : ''}" data-pet-shop-action="equip" data-pet-item="${item.id}">${escapeHtml(text(equipped ? 'unequip' : 'equip'))}</button>`;
@@ -460,7 +472,7 @@ export function createPetRuntime(options = {}) {
         button = `<button type="button" class="pet-shop-button" disabled>${escapeHtml(text('owned'))}</button>`;
       }
       let note = item.description[LANG_INDEX[lang()]];
-      if (owned <= 0 && !availability.allowed && availability.reason === 'coins') note = text('notEnoughCoins');
+      if (canBuy && !availability.allowed && availability.reason === 'coins') note = text('notEnoughCoins');
       if (owned <= 0 && !availability.allowed && availability.reason === 'stage') {
         const unlockStage = STAGES[item.unlockStage];
         note = text('stageLocked', { stage: unlockStage ? unlockStage.name[LANG_INDEX[lang()]] : item.unlockStage });
@@ -500,7 +512,7 @@ export function createPetRuntime(options = {}) {
       body = `<div class="pet-game-active">
         <div class="pet-game-status"><strong>${escapeHtml(status)}</strong><span>${escapeHtml(progress)}</span></div>
         <div class="pet-pad-grid">${pads}</div>
-        ${game.phase === 'success' || game.phase === 'failed' ? `<button type="button" class="btn pet-secondary-button" data-pet-game-start="normal">${escapeHtml(text('gameStart'))}</button>` : ''}
+        ${game.phase === 'success' || game.phase === 'failed' ? `<button type="button" class="btn pet-secondary-button" data-pet-game-start="${game.difficulty}" ${cooldown > 0 ? 'disabled' : ''}>${escapeHtml(text('gameStart'))}</button>` : ''}
       </div>`;
     }
     const cooldownText = cooldown > 0 ? `<div class="pet-game-cooldown">${escapeHtml(text('gameCooldown', { time: formatDuration(cooldown) }))}</div>` : '';
@@ -670,16 +682,14 @@ export function createPetRuntime(options = {}) {
     attachEvents();
   }
 
-  function adoptPet() {
+  async function adoptPet() {
     const timestamp = now();
-    const fallback = SPECIES[selectedSpecies].name[LANG_INDEX[lang()]];
     pet = createPet(selectedName, selectedSpecies, timestamp);
     selectedName = '';
     view = 'home';
-    persist().then(() => {
-      render();
-      notify(text('actionDone'));
-    });
+    const saved = await persist();
+    render();
+    notifyFeedback([text('actionDone')], [], saved);
   }
 
   async function performCare(actionId) {
@@ -699,15 +709,15 @@ export function createPetRuntime(options = {}) {
     }
     pet = result.pet;
     const afterQuests = getDailyQuests(pet, now());
-    await persist();
-    render();
-    announceEvents(result.events);
-    notify(text('actionDone'));
+    const messages = [text('actionDone')];
     for (const quest of afterQuests) {
       const before = beforeQuests.find((item) => item.id === quest.id);
       if (!before || before.complete || !quest.complete) continue;
-      notify(text('questComplete', { name: quest.description[LANG_INDEX[lang()]] }));
+      messages.push(text('questComplete', { name: quest.description[LANG_INDEX[lang()]] }));
     }
+    const saved = await persist();
+    render();
+    notifyFeedback(messages, result.events, saved);
   }
 
   async function handleShop(action, itemId) {
@@ -729,10 +739,10 @@ export function createPetRuntime(options = {}) {
       return;
     }
     pet = result.pet;
-    await persist();
+    const successKey = action === 'buy' ? 'bought' : action === 'use' ? 'used' : pet.equipped[itemId] ? 'equipped' : 'unequipped';
+    const saved = await persist();
     render();
-    notify(text(action === 'buy' ? 'bought' : action === 'use' ? 'used' : pet.equipped[itemId] ? 'equipped' : 'unequipped'));
-    announceEvents(result.events);
+    notifyFeedback([text(successKey)], result.events, saved);
   }
 
   async function claimDaily(questId) {
@@ -740,9 +750,9 @@ export function createPetRuntime(options = {}) {
     const result = claimQuest(pet, questId, now());
     if (!result.ok) return;
     pet = result.pet;
-    await persist();
+    const saved = await persist();
     render();
-    announceEvents(result.events);
+    notifyFeedback([], result.events, saved);
   }
 
   function clearGameTimers() {
@@ -793,8 +803,12 @@ export function createPetRuntime(options = {}) {
     game.input.push(index);
     flashPad(index);
     if (!isMemoryInputCorrect(game.sequence, game.input)) {
+      const failed = failMinigame(pet, now());
+      pet = failed.pet;
       game.phase = 'failed';
+      const saved = await persist();
       render();
+      notifyFeedback([text('gameFailed')], [], saved);
       return;
     }
     if (game.input.length === game.sequence.length) {
@@ -807,10 +821,9 @@ export function createPetRuntime(options = {}) {
       }
       pet = result.pet;
       game.phase = 'success';
-      await persist();
+      const saved = await persist();
       render();
-      notify(text('gameRewardToast'));
-      announceEvents(result.events);
+      notifyFeedback([text('gameRewardToast')], result.events, saved);
       speak(text('gameRewardToast'));
     } else {
       render();
@@ -825,15 +838,14 @@ export function createPetRuntime(options = {}) {
     speak(message);
   }
 
-  function renameCurrentPet() {
+  async function renameCurrentPet() {
     if (!pet) return;
     const input = root && root.querySelector('#pet-rename-input');
     if (!input) return;
     pet = renamePet(pet, input.value);
-    persist().then(() => {
-      render();
-      notify(text('renamed'));
-    });
+    const saved = await persist();
+    render();
+    notifyFeedback([text('renamed')], [], saved);
   }
 
   function exportSave() {
@@ -871,10 +883,9 @@ export function createPetRuntime(options = {}) {
       const elapsed = now() - pet.lastTickAt;
       const result = applyElapsed(pet, elapsed, now());
       pet = result.pet;
-      await persist();
+      const saved = await persist();
       render();
-      announceEvents(result.events);
-      notify(text('saved'));
+      notifyFeedback([text('saved')], result.events, saved);
     } catch (error) {
       notify(text('importError'));
     }
@@ -891,9 +902,9 @@ export function createPetRuntime(options = {}) {
     game = null;
     view = 'home';
     clearGameTimers();
-    await persist();
+    const saved = await persist();
     render();
-    notify(text('resetDone'));
+    notifyFeedback([text('resetDone')], [], saved);
   }
 
   async function tick() {
@@ -901,9 +912,9 @@ export function createPetRuntime(options = {}) {
     const timestamp = now();
     const result = applyElapsed(pet, timestamp - pet.lastTickAt, timestamp);
     pet = result.pet;
-    await persist();
+    const saved = await persist();
     render();
-    announceEvents(result.events);
+    notifyFeedback([], result.events, saved);
   }
 
   async function init(container) {
@@ -915,8 +926,8 @@ export function createPetRuntime(options = {}) {
       if (pet) {
         const result = applyElapsed(pet, now() - pet.lastTickAt, now());
         pet = result.pet;
-        await persist();
-        announceEvents(result.events);
+        const saved = await persist();
+        notifyFeedback([], result.events, saved);
       }
     } catch (error) {
       pet = null;

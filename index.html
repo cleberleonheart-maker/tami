@@ -622,6 +622,7 @@ html.light .it-sub, html.light .sub-hint { color: var(--text2) !important; }
 .pet-shop-copy p, .pet-achievement p { margin: 3px 0 0; color: var(--text2); font-size: 10.5px; line-height: 1.4; }
 .pet-shop-copy small { display: block; color: var(--text2); font-size: 9.5px; margin-top: 4px; }
 .pet-shop-button { border: 1px solid var(--primary); border-radius: 999px; background: var(--primary-dark); color: #fff; padding: 8px 10px; font-size: 10.5px; font-weight: 700; cursor: pointer; white-space: nowrap; }
+.pet-shop-actions { display: flex; align-items: center; justify-content: flex-end; gap: 6px; }
 .pet-shop-button:disabled { opacity: .45; cursor: not-allowed; }
 .pet-shop-button.active { background: var(--surface); color: var(--primary); }
 .pet-game-start, .pet-game-active { text-align: center; }
@@ -657,6 +658,7 @@ html.light .it-sub, html.light .sub-hint { color: var(--text2) !important; }
 .pet-rename-row { display: grid; grid-template-columns: minmax(0, 1fr) auto; gap: 8px; }
 .pet-rename-row input { min-width: 0; }
 .pet-secondary-button, .pet-danger-button { margin: 0; padding: 10px 14px; font-size: 12px; }
+.pet-secondary-button:disabled { opacity: .45; cursor: not-allowed; }
 .pet-secondary-button { background-color: var(--surface-v); background-image: none; color: var(--text); border: 1px solid var(--divider); }
 .pet-danger-button { background-color: #8c1538; background-image: linear-gradient(rgba(0,0,0,.2), rgba(0,0,0,.2)); }
 .pet-settings-stats { display: grid; grid-template-columns: repeat(2, 1fr); gap: 8px; margin-top: 16px; }
@@ -683,6 +685,8 @@ html.light .it-sub, html.light .sub-hint { color: var(--text2) !important; }
   .pet-shop-item { grid-template-columns: 38px minmax(0, 1fr); }
   .pet-item-mark { width: 38px; height: 38px; }
   .pet-shop-button { grid-column: 1 / -1; width: 100%; }
+  .pet-shop-actions { grid-column: 1 / -1; width: 100%; }
+  .pet-shop-actions .pet-shop-button { grid-column: auto; width: auto; flex: 1; }
   .pet-action-grid { grid-template-columns: 1fr; }
 }
 @media (prefers-reduced-motion: reduce) {
@@ -4951,6 +4955,11 @@ function dismissUpdate() {
   closeModal();
 }
 const CHANGELOG = {
+  '1.58': {
+    pt: ['Correção: o Pet não some mais ao abrir o app; nível e fase agora são reconstruídos corretamente ao carregar o save', 'Correção: se o relógio do aparelho voltar, o Pet continua evoluindo e os tempos de espera dos cuidados e do desafio não ficam travados', 'Correção: o remédio agora debita as 12 moedas, e o preço aparece antes de confirmar o cuidado', 'A loja permite comprar vários lanchinhos e tônicos, com os botões de usar e comprar juntos; erros ao salvar e falhas no desafio musical agora são informados'],
+    en: ['Fix: the pet no longer disappears when the app opens; level and stage are now rebuilt correctly when loading the save', 'Fix: if the device clock moves backwards, the pet can keep evolving and care or challenge cooldowns no longer stay locked', 'Fix: medicine now deducts its 12 coins, and the price is shown before confirming the care action', 'The shop now lets you buy multiple snacks and tonics, with use and buy buttons together; save errors and failed music challenges are now reported'],
+    es: ['Corrección: la mascota ya no desaparece al abrir la app; el nivel y la fase se reconstruyen correctamente al cargar la partida', 'Corrección: si el reloj del dispositivo retrocede, la mascota puede seguir evolucionando y los tiempos de espera de cuidados y desafíos ya no quedan bloqueados', 'Corrección: el medicamento descuenta sus 12 monedas y el precio aparece antes de confirmar el cuidado', 'La tienda permite comprar varios tentempiés y tónicos, con los botones de usar y comprar juntos; ahora se informan los errores al guardar y los fallos del desafío musical']
+  },
   '1.57': {
     pt: ['Correção: as músicas do servidor do PC agora continuam tocando no player nativo quando o app vai para segundo plano', 'O player nativo também aceita links HTTP/HTTPS e, se não conseguir abrir a música, devolve o som para o app automaticamente'],
     en: ['Fix: songs from the PC server now keep playing in the native player when the app moves to the background', 'The native player now also accepts HTTP/HTTPS links and automatically returns playback to the app if it cannot open the song'],

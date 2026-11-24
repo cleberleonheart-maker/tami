@@ -386,6 +386,24 @@ export function getLevelForXp(xp) {
   return level;
 }
 
+function getStageForProgress(level, xp, careScore = 0) {
+  let stageId = 'baby';
+  for (const stage of Object.values(STAGES).sort((a, b) => a.order - b.order)) {
+    if (level < stage.level || xp < stage.xp) break;
+    if (stage.care > careScore) break;
+    stageId = stage.id;
+  }
+  return stageId;
+}
+
+function rebaseClockTimestamps(pet, timestamp) {
+  for (const actionId of Object.keys(ACTIONS)) {
+    const value = finite(pet.lastActionAt && pet.lastActionAt[actionId]);
+    if (value > timestamp) pet.lastActionAt[actionId] = 0;
+  }
+  if (finite(pet.lastGameAt) > timestamp) pet.lastGameAt = 0;
+}
+
 export function getCareScore(pet) {
   if (!pet || !pet.needs) return 0;
   const total = NEED_KEYS.filter((key) => key !== 'health').reduce((sum, key) => sum + clamp(pet.needs[key]), 0);
@@ -480,7 +498,7 @@ export function normalizePet(raw, now = Date.now()) {
   if (source.lastActionAt && typeof source.lastActionAt === 'object') {
     for (const actionId of Object.keys(ACTIONS)) {
       const value = finite(source.lastActionAt[actionId]);
-      if (value > 0) lastActionAt[actionId] = value;
+      if (value > 0) lastActionAt[actionId] = value > timestamp ? 0 : value;
     }
   }
   const achievements = Array.isArray(source.achievements)
@@ -497,7 +515,19 @@ export function normalizePet(raw, now = Date.now()) {
     ? [...new Set(dailySource.claimed.filter((id) => DAILY_QUESTS.some((quest) => quest.id === id)))]
     : [];
   const xp = Math.max(0, finite(source.xp));
-  const stageId = STAGES[source.stageId] ? source.stageId : 'baby';
+  const level = getLevelForXp(xp);
+  const normalizedNeeds = {
+    hunger: clamp(needs.hunger, 0, 100),
+    energy: clamp(needs.energy, 0, 100),
+    hygiene: clamp(needs.hygiene, 0, 100),
+    happiness: clamp(needs.happiness, 0, 100),
+    health: clamp(needs.health, 0, 100)
+  };
+  const progressStageId = getStageForProgress(level, xp, getCareScore({ needs: normalizedNeeds }));
+  const savedStageId = STAGES[source.stageId] ? source.stageId : '';
+  const stageId = savedStageId && stageOrder(savedStageId) >= stageOrder(progressStageId)
+    ? savedStageId
+    : progressStageId;
   return {
     id: String(source.id || `pet-${timestamp.toString(36)}`),
     name: safeName(source.name, SPECIES[speciesId].name[0]),
@@ -505,21 +535,15 @@ export function normalizePet(raw, now = Date.now()) {
     stageId,
     ageMinutes: Math.max(0, finite(source.ageMinutes)),
     xp,
-    level: Math.max(1, integer(source.level, getLevelForXp(xp)), getLevelForXp(xp)),
+    level,
     coins: Math.max(0, integer(source.coins)),
-    needs: {
-      hunger: clamp(needs.hunger, 0, 100),
-      energy: clamp(needs.energy, 0, 100),
-      hygiene: clamp(needs.hygiene, 0, 100),
-      happiness: clamp(needs.happiness, 0, 100),
-      health: clamp(needs.health, 0, 100)
-    },
+    needs: normalizedNeeds,
     bond: clamp(source.bond),
     sick: !!source.sick,
     sleeping: !!source.sleeping,
     lastTickAt: Math.max(0, finite(source.lastTickAt, timestamp)),
     lastActionAt,
-    lastGameAt: Math.max(0, finite(source.lastGameAt)),
+    lastGameAt: finite(source.lastGameAt) > timestamp ? 0 : Math.max(0, finite(source.lastGameAt)),
     stats: {
       fed: integer(stats.fed),
       cleaned: integer(stats.cleaned),
@@ -609,7 +633,15 @@ export function applyElapsed(pet, elapsedMs, now = Date.now()) {
   const events = [];
   const elapsed = finite(elapsedMs);
   const timestamp = finite(now, Date.now());
-  if (elapsed <= 0) return { pet: next, events };
+  if (elapsed <= 0) {
+    if (next.lastTickAt > timestamp) {
+      next.lastTickAt = timestamp;
+      next.updatedAt = timestamp;
+      rebaseClockTimestamps(next, timestamp);
+      events.push({ type: 'clockAdjusted' });
+    }
+    return { pet: next, events };
+  }
   const effective = Math.min(elapsed, MAX_OFFLINE_MS);
   if (elapsed > MAX_OFFLINE_MS) events.push({ type: 'offlineCapped' });
   const previous = { ...next.needs };
@@ -673,7 +705,10 @@ export function getActionAvailability(pet, actionId, now = Date.now()) {
   if (!action) return { allowed: false, reason: 'unknown', remaining: 0 };
   const timestamp = finite(now, Date.now());
   const last = finite(pet.lastActionAt && pet.lastActionAt[actionId]);
-  const remaining = action.cooldown > 0 && last > 0 ? Math.min(action.cooldown, Math.max(0, action.cooldown - (timestamp - last))) : 0;
+  const elapsedSinceAction = timestamp - last;
+  const remaining = action.cooldown > 0 && last > 0 && elapsedSinceAction >= 0
+    ? Math.min(action.cooldown, Math.max(0, action.cooldown - elapsedSinceAction))
+    : 0;
   if (remaining > 0) return { allowed: false, reason: 'cooldown', remaining };
   if (actionId === 'medicine' && !pet.sick) return { allowed: false, reason: 'notSick', remaining: 0 };
   if (actionId === 'sleep' && pet.sleeping) return { allowed: false, reason: 'alreadySleeping', remaining: 0 };
@@ -712,6 +747,7 @@ export function performAction(pet, actionId, now = Date.now()) {
     const counter = action.stat === 'medicined' ? 'medicined' : action.stat;
     next.daily.counters[counter] = integer(next.daily.counters[counter]) + 1;
   }
+  next.coins = Math.max(0, next.coins - action.cost);
   grantCoinsState(next, action.coins);
   grantXpState(next, action.xp, events);
   if (actionId === 'medicine') {
@@ -829,8 +865,9 @@ export function claimQuest(pet, questId, now = Date.now()) {
 
 export function getMinigameCooldown(pet, now = Date.now()) {
   const last = finite(pet.lastGameAt);
-  if (!last) return 0;
-  return Math.max(0, 60 * 1000 - Math.max(0, finite(now) - last));
+  const timestamp = finite(now);
+  if (!last || timestamp < last) return 0;
+  return Math.max(0, 60 * 1000 - (timestamp - last));
 }
 
 export function createMemorySequence(length = 4, random = Math.random) {
@@ -845,6 +882,14 @@ export function isMemoryInputCorrect(sequence, input) {
   const received = Array.isArray(input) ? input : [];
   if (received.length > expected.length) return false;
   return expected.every((value, index) => index >= received.length || value === received[index]);
+}
+
+export function failMinigame(pet, now = Date.now()) {
+  const next = clone(pet);
+  const timestamp = finite(now, Date.now());
+  next.lastGameAt = timestamp;
+  next.updatedAt = timestamp;
+  return { ok: true, pet: next, events: [], error: '' };
 }
 
 export function completeMinigame(pet, options = {}) {

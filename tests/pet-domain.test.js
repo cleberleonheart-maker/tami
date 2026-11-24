@@ -7,6 +7,7 @@ import {
   normalizeSave,
   applyElapsed,
   performAction,
+  getActionAvailability,
   evaluateEvolution,
   getCareScore,
   getDailyQuests,
@@ -15,6 +16,7 @@ import {
   useItem,
   equipItem,
   completeMinigame,
+  failMinigame,
   getMinigameCooldown,
   createMemorySequence,
   isMemoryInputCorrect
@@ -81,6 +83,20 @@ test('bloqueia cuidado que exige moedas quando o saldo é insuficiente', () => {
   const result = performAction(pet, 'medicine', NOW);
   assert.equal(result.ok, false);
   assert.equal(result.error, 'coins');
+  assert.equal(result.pet.coins, 0);
+  assert.equal(result.pet.xp, 0);
+  assert.equal(result.pet.stats.medicined, 0);
+});
+
+test('desconta o custo de um cuidado comprado', () => {
+  const pet = createPet('TAMI', 'tami', NOW);
+  pet.coins = 30;
+  pet.sick = true;
+  const result = performAction(pet, 'medicine', NOW);
+  assert.equal(result.ok, true);
+  assert.equal(result.pet.coins, 18);
+  assert.equal(result.pet.stats.medicined, 1);
+  assert.equal(result.pet.xp, 6);
 });
 
 test('calcula nível e pontuação de cuidado', () => {
@@ -114,9 +130,15 @@ test('compra, usa e equipa itens respeitando o inventário', () => {
   assert.equal(bought.ok, true);
   assert.equal(bought.pet.coins, 94);
   assert.equal(bought.pet.inventory.snack, 1);
-  const used = useItem(bought.pet, 'snack', NOW);
+  const boughtAgain = buyItem(bought.pet, 'snack', NOW);
+  assert.equal(boughtAgain.ok, true);
+  assert.equal(boughtAgain.pet.coins, 88);
+  assert.equal(boughtAgain.pet.inventory.snack, 2);
+  assert.equal(boughtAgain.pet.xp, 0);
+  assert.equal(boughtAgain.pet.stats.fed, 0);
+  const used = useItem(boughtAgain.pet, 'snack', NOW);
   assert.equal(used.ok, true);
-  assert.equal(used.pet.inventory.snack, undefined);
+  assert.equal(used.pet.inventory.snack, 1);
   assert.equal(used.pet.needs.hunger, 100);
   const wearable = buyItem(pet, 'charm', NOW);
   const equipped = equipItem(wearable.pet, 'charm');
@@ -153,6 +175,17 @@ test('recompensa o minigame e bloqueia novas tentativas durante o cooldown', () 
   assert.equal(repeated.error, 'cooldown');
 });
 
+test('registra a falha do minigame sem conceder recompensa', () => {
+  const pet = createPet('TAMI', 'tami', NOW);
+  const result = failMinigame(pet, NOW);
+  assert.equal(result.ok, true);
+  assert.equal(result.pet.lastGameAt, NOW);
+  assert.equal(result.pet.stats.games, 0);
+  assert.equal(result.pet.xp, 0);
+  assert.equal(result.pet.coins, pet.coins);
+  assert.ok(getMinigameCooldown(result.pet, NOW) > 0);
+});
+
 test('gera sequências determinísticas e limitadas para o minigame', () => {
   const sequence = createMemorySequence(4, () => 0.75);
   assert.equal(sequence.length, 4);
@@ -184,6 +217,40 @@ test('detecta doença e recuperação em ticks de um minuto', () => {
   assert.equal(recovered.pet.sick, false);
   assert.equal(recovered.pet.stats.recoveries, 1);
   assert.ok(recovered.events.some((event) => event.type === 'recovered'));
+});
+
+test('reconstrói o progresso ao normalizar sem ignorar o requisito de cuidado', () => {
+  const pet = createPet('TAMI', 'tami', NOW);
+  pet.xp = 60;
+  pet.level = 99;
+  pet.stageId = 'baby';
+  const normalized = normalizeSave({ schemaVersion: PET_SCHEMA_VERSION, pet }, NOW).pet;
+  assert.equal(normalized.level, 3);
+  assert.equal(normalized.stageId, 'teen');
+
+  const neglected = createPet('TAMI', 'tami', NOW);
+  neglected.xp = 60;
+  neglected.needs = { hunger: 20, energy: 20, hygiene: 20, happiness: 20, health: 40 };
+  const normalizedNeglected = normalizeSave({ schemaVersion: PET_SCHEMA_VERSION, pet: neglected }, NOW).pet;
+  assert.equal(normalizedNeglected.stageId, 'baby');
+
+  neglected.stageId = 'teen';
+  const earned = normalizeSave({ schemaVersion: PET_SCHEMA_VERSION, pet: neglected }, NOW).pet;
+  assert.equal(earned.stageId, 'teen');
+});
+
+test('corrige timestamps quando o relógio do aparelho volta', () => {
+  const pet = createPet('TAMI', 'tami', NOW);
+  pet.lastTickAt = NOW + 10000;
+  pet.lastActionAt.feed = NOW + 5000;
+  pet.lastGameAt = NOW + 5000;
+  const result = applyElapsed(pet, -10000, NOW);
+  assert.ok(result.events.some((event) => event.type === 'clockAdjusted'));
+  assert.equal(result.pet.lastTickAt, NOW);
+  assert.equal(result.pet.lastActionAt.feed, 0);
+  assert.equal(result.pet.lastGameAt, 0);
+  assert.equal(getActionAvailability(result.pet, 'feed', NOW).allowed, true);
+  assert.equal(getMinigameCooldown(result.pet, NOW), 0);
 });
 
 test('normaliza saves antigos, rejeita schemas futuros e limita campos inválidos', () => {
