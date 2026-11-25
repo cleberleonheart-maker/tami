@@ -342,7 +342,8 @@ const clamp = (value, min = 0, max = 100) => Math.min(max, Math.max(min, Number(
 const clone = (value) => JSON.parse(JSON.stringify(value));
 const finite = (value, fallback = 0) => Number.isFinite(Number(value)) ? Number(value) : fallback;
 const integer = (value, fallback = 0) => Math.max(0, Math.floor(finite(value, fallback)));
-const stageOrder = (id) => STAGES[id] ? STAGES[id].order : 0;
+const hasOwn = (object, key) => Object.prototype.hasOwnProperty.call(object, key);
+const stageOrder = (id) => hasOwn(STAGES, id) ? STAGES[id].order : 0;
 
 function dayKey(timestamp) {
   const date = new Date(timestamp);
@@ -429,7 +430,7 @@ export function createPet(name, speciesId = 'tami', now = Date.now()) {
     speciesId = 'tami';
   }
   const timestamp = finite(now, Date.now());
-  const safeSpecies = SPECIES[speciesId] ? speciesId : 'tami';
+  const safeSpecies = hasOwn(SPECIES, speciesId) ? speciesId : 'tami';
   const fallbackName = SPECIES[safeSpecies].name[0];
   return {
     id: `pet-${timestamp.toString(36)}`,
@@ -472,7 +473,7 @@ export function createPet(name, speciesId = 'tami', now = Date.now()) {
 export function normalizePet(raw, now = Date.now()) {
   const timestamp = finite(now, Date.now());
   const source = raw && typeof raw === 'object' ? raw : {};
-  const speciesId = SPECIES[source.speciesId] ? source.speciesId : 'tami';
+  const speciesId = hasOwn(SPECIES, source.speciesId) ? source.speciesId : 'tami';
   const needs = source.needs && typeof source.needs === 'object' ? source.needs : {};
   const stats = source.stats && typeof source.stats === 'object' ? source.stats : {};
   const inventory = {};
@@ -524,7 +525,7 @@ export function normalizePet(raw, now = Date.now()) {
     health: clamp(needs.health, 0, 100)
   };
   const progressStageId = getStageForProgress(level, xp, getCareScore({ needs: normalizedNeeds }));
-  const savedStageId = STAGES[source.stageId] ? source.stageId : '';
+  const savedStageId = hasOwn(STAGES, source.stageId) ? source.stageId : '';
   const stageId = savedStageId && stageOrder(savedStageId) >= stageOrder(progressStageId)
     ? savedStageId
     : progressStageId;
@@ -645,7 +646,7 @@ export function applyElapsed(pet, elapsedMs, now = Date.now()) {
   const effective = Math.min(elapsed, MAX_OFFLINE_MS);
   if (elapsed > MAX_OFFLINE_MS) events.push({ type: 'offlineCapped' });
   const previous = { ...next.needs };
-  const species = SPECIES[next.speciesId] || SPECIES.tami;
+  const species = hasOwn(SPECIES, next.speciesId) ? SPECIES[next.speciesId] : SPECIES.tami;
   const energyRate = species.id === 'orbit' ? 2.4 : 3;
   const hungerRate = species.id === 'orbit' ? 4.5 : 4;
   const hygieneRate = species.id === 'echo' ? 2.4 : 3;
@@ -701,7 +702,7 @@ export function evaluateEvolution(pet, now = Date.now()) {
 }
 
 export function getActionAvailability(pet, actionId, now = Date.now()) {
-  const action = ACTIONS[actionId];
+  const action = hasOwn(ACTIONS, actionId) ? ACTIONS[actionId] : null;
   if (!action) return { allowed: false, reason: 'unknown', remaining: 0 };
   const timestamp = finite(now, Date.now());
   const last = finite(pet.lastActionAt && pet.lastActionAt[actionId]);
@@ -718,7 +719,7 @@ export function getActionAvailability(pet, actionId, now = Date.now()) {
 }
 
 export function performAction(pet, actionId, now = Date.now()) {
-  const action = ACTIONS[actionId];
+  const action = hasOwn(ACTIONS, actionId) ? ACTIONS[actionId] : null;
   const availability = getActionAvailability(pet, actionId, now);
   if (!action) return { ok: false, pet: clone(pet), events: [], error: 'unknown' };
   if (!availability.allowed) return { ok: false, pet: clone(pet), events: [], error: availability.reason, remaining: availability.remaining };
@@ -762,7 +763,7 @@ export function performAction(pet, actionId, now = Date.now()) {
 }
 
 export function getItemAvailability(pet, itemId) {
-  const item = SHOP_ITEMS[itemId];
+  const item = hasOwn(SHOP_ITEMS, itemId) ? SHOP_ITEMS[itemId] : null;
   if (!item) return { allowed: false, reason: 'unknown' };
   if (item.unlockStage && stageOrder(pet.stageId) < stageOrder(item.unlockStage)) {
     return { allowed: false, reason: 'stage' };
@@ -772,7 +773,7 @@ export function getItemAvailability(pet, itemId) {
 }
 
 export function buyItem(pet, itemId, now = Date.now()) {
-  const item = SHOP_ITEMS[itemId];
+  const item = hasOwn(SHOP_ITEMS, itemId) ? SHOP_ITEMS[itemId] : null;
   const availability = getItemAvailability(pet, itemId);
   if (!item) return { ok: false, pet: clone(pet), events: [], error: 'unknown' };
   if (!availability.allowed) return { ok: false, pet: clone(pet), events: [], error: availability.reason };
@@ -786,8 +787,9 @@ export function buyItem(pet, itemId, now = Date.now()) {
 }
 
 export function useItem(pet, itemId, now = Date.now()) {
-  const item = SHOP_ITEMS[itemId];
-  if (!item || item.kind !== 'consumable') return { ok: false, pet: clone(pet), events: [], error: 'notConsumable' };
+  const item = hasOwn(SHOP_ITEMS, itemId) ? SHOP_ITEMS[itemId] : null;
+  if (!item) return { ok: false, pet: clone(pet), events: [], error: 'unknown' };
+  if (item.kind !== 'consumable') return { ok: false, pet: clone(pet), events: [], error: 'notConsumable' };
   if (integer(pet.inventory[itemId]) <= 0) return { ok: false, pet: clone(pet), events: [], error: 'notOwned' };
   const next = refreshDailyState(pet, now);
   const events = [];
@@ -819,15 +821,17 @@ export function useItem(pet, itemId, now = Date.now()) {
   return { ok: true, pet: next, events, error: '' };
 }
 
-export function equipItem(pet, itemId) {
-  const item = SHOP_ITEMS[itemId];
-  if (!item || item.kind !== 'wearable') return { ok: false, pet: clone(pet), error: 'notWearable' };
+export function equipItem(pet, itemId, now = Date.now()) {
+  const item = hasOwn(SHOP_ITEMS, itemId) ? SHOP_ITEMS[itemId] : null;
+  if (!item) return { ok: false, pet: clone(pet), error: 'unknown' };
+  if (item.kind !== 'wearable') return { ok: false, pet: clone(pet), error: 'notWearable' };
   if (integer(pet.inventory[itemId]) <= 0) return { ok: false, pet: clone(pet), error: 'notOwned' };
   const next = clone(pet);
   if (next.equipped[itemId]) delete next.equipped[itemId];
   else {
     next.equipped = { [itemId]: true };
   }
+  next.updatedAt = finite(now, Date.now());
   return { ok: true, pet: next, error: '' };
 }
 
@@ -907,7 +911,6 @@ export function completeMinigame(pet, options = {}) {
   next.bond = clamp(next.bond + 2);
   next.coins += 8;
   next.lastGameAt = now;
-  updateStreakState(next, now);
   grantXpState(next, 12, events);
   evaluateEvolutionState(next, events);
   checkAchievementsState(next, events);
@@ -915,9 +918,9 @@ export function completeMinigame(pet, options = {}) {
   return { ok: true, pet: next, events, error: '' };
 }
 
-export function renamePet(pet, name) {
+export function renamePet(pet, name, now = Date.now()) {
   const next = clone(pet);
   next.name = safeName(name, next.name);
-  next.updatedAt = Date.now();
+  next.updatedAt = finite(now, Date.now());
   return next;
 }

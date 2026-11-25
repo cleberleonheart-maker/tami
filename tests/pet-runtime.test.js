@@ -52,6 +52,45 @@ test('corrige o relógio durante a inicialização e informa a correção', asyn
   }
 });
 
+test('mantém a navegação do Pet em uma barra rolável e mostra o custo do remédio', async () => {
+  const pet = createPet('Lumi', 'tami', NOW);
+  const runtime = createPetRuntime({
+    load: async () => ({ schemaVersion: PET_SCHEMA_VERSION, pet }),
+    save: async () => true,
+    now: () => NOW
+  });
+  const root = createRoot();
+  try {
+    await runtime.init(root);
+    assert.match(root.innerHTML, /class="pet-view-tabs"/);
+    assert.match(root.innerHTML, /Custa 12 moedas\./);
+  } finally {
+    runtime.destroy();
+  }
+});
+
+test('avisa quando uma missão é concluída ao usar um item', async () => {
+  const pet = createPet('Lumi', 'tami', NOW);
+  pet.inventory.snack = 1;
+  pet.daily.counters.fed = 1;
+  const notifications = [];
+  const runtime = createPetRuntime({
+    load: async () => ({ schemaVersion: PET_SCHEMA_VERSION, pet }),
+    save: async () => true,
+    notify: (message) => notifications.push(message),
+    now: () => NOW
+  });
+  try {
+    await runtime.init(createRoot());
+    await runtime.buy('use', 'snack');
+    const last = notifications[notifications.length - 1];
+    assert.ok(last.includes('Missão concluída'));
+    assert.ok(last.includes('Alimente seu pet 2 vezes'));
+  } finally {
+    runtime.destroy();
+  }
+});
+
 test('informa falha de salvamento sem esconder o sucesso da ação', async () => {
   const notifications = [];
   const runtime = createPetRuntime({

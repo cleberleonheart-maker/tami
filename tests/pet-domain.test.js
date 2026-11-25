@@ -19,7 +19,8 @@ import {
   failMinigame,
   getMinigameCooldown,
   createMemorySequence,
-  isMemoryInputCorrect
+  isMemoryInputCorrect,
+  renamePet
 } from '../pet-domain.js';
 
 const NOW = Date.UTC(2026, 0, 2, 12, 0, 0);
@@ -34,6 +35,31 @@ test('cria um pet com necessidades, identidade e progresso válidos', () => {
   for (const value of Object.values(pet.needs)) {
     assert.ok(value >= 0 && value <= 100);
   }
+});
+
+test('rejeita identificadores herdados e repara saves corrompidos', () => {
+  for (const speciesId of ['toString', 'constructor', '__proto__']) {
+    const pet = createPet('Lumi', speciesId, NOW);
+    assert.equal(pet.speciesId, 'tami');
+  }
+
+  const raw = JSON.parse('{"speciesId":"__proto__","stageId":"toString"}');
+  const normalized = normalizeSave({ schemaVersion: PET_SCHEMA_VERSION, pet: raw }, NOW).pet;
+  assert.equal(normalized.speciesId, 'tami');
+  assert.equal(normalized.stageId, 'baby');
+
+  const pet = createPet('TAMI', 'tami', NOW);
+  const action = performAction(pet, 'toString', NOW);
+  assert.equal(action.ok, false);
+  assert.equal(action.error, 'unknown');
+  assert.equal(action.pet.coins, pet.coins);
+  assert.equal(action.pet.xp, pet.xp);
+
+  const purchase = buyItem(pet, 'constructor', NOW);
+  assert.equal(purchase.ok, false);
+  assert.equal(purchase.error, 'unknown');
+  assert.equal(purchase.pet.coins, pet.coins);
+  assert.deepEqual(purchase.pet.inventory, pet.inventory);
 });
 
 test('aplica o decaimento offline e aumenta a idade', () => {
@@ -141,9 +167,14 @@ test('compra, usa e equipa itens respeitando o inventário', () => {
   assert.equal(used.pet.inventory.snack, 1);
   assert.equal(used.pet.needs.hunger, 100);
   const wearable = buyItem(pet, 'charm', NOW);
-  const equipped = equipItem(wearable.pet, 'charm');
+  const equipped = equipItem(wearable.pet, 'charm', NOW + 1000);
   assert.equal(equipped.ok, true);
   assert.equal(equipped.pet.equipped.charm, true);
+  assert.equal(equipped.pet.updatedAt, NOW + 1000);
+
+  const renamed = renamePet(wearable.pet, ' Aurora ', NOW + 2000);
+  assert.equal(renamed.name, 'Aurora');
+  assert.equal(renamed.updatedAt, NOW + 2000);
 });
 
 test('conclui e resgata uma missão diária somente uma vez', () => {
@@ -169,6 +200,8 @@ test('recompensa o minigame e bloqueia novas tentativas durante o cooldown', () 
   assert.equal(result.pet.stats.games, 1);
   assert.equal(result.pet.stats.perfectGames, 1);
   assert.equal(result.pet.coins, pet.coins + 8);
+  assert.equal(result.pet.streak.count, 0);
+  assert.equal(result.pet.streak.lastCareDate, '');
   assert.ok(getMinigameCooldown(result.pet, NOW + 30000) > 0);
   const repeated = completeMinigame(result.pet, { perfect: true, now: NOW + 30000 });
   assert.equal(repeated.ok, false);

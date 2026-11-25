@@ -330,6 +330,16 @@ export function createPetRuntime(options = {}) {
     }
   }
 
+  function getQuestCompletionMessages(beforeQuests, afterQuests) {
+    const messages = [];
+    for (const quest of afterQuests) {
+      const before = beforeQuests.find((item) => item.id === quest.id);
+      if (!before || before.complete || !quest.complete) continue;
+      messages.push(text('questComplete', { name: quest.description[LANG_INDEX[lang()]] }));
+    }
+    return messages;
+  }
+
   function petAvatarHtml() {
     const species = SPECIES[pet.speciesId] || SPECIES.tami;
     const mood = getMood(pet);
@@ -402,9 +412,9 @@ export function createPetRuntime(options = {}) {
       const availability = getActionAvailability(pet, actionId, timestamp);
       let note = action.description[LANG_INDEX[lang()]];
       if (action.cost > 0) note += ` · ${text('actionCost', { cost: action.cost })}`;
-      if (!availability.allowed && availability.reason === 'cooldown') note = text('cooldown', { time: formatDuration(availability.remaining) });
-      if (!availability.allowed && availability.reason === 'coins') note = text('notEnoughCoins');
-      if (!availability.allowed && availability.reason === 'notSick') note = text('notSick');
+      if (!availability.allowed && availability.reason === 'cooldown') note += ` · ${text('cooldown', { time: formatDuration(availability.remaining) })}`;
+      if (!availability.allowed && availability.reason === 'coins') note += ` · ${text('notEnoughCoins')}`;
+      if (!availability.allowed && availability.reason === 'notSick') note += ` · ${text('notSick')}`;
       return `<button type="button" class="pet-action-button" data-pet-action="${actionId}" ${availability.allowed ? '' : 'disabled'}>
         <span class="pet-action-mark action-${actionId}">${escapeHtml(action.label[LANG_INDEX[lang()]].slice(0, 1))}</span>
         <span class="pet-action-copy"><strong>${escapeHtml(action.label[LANG_INDEX[lang()]])}</strong><small>${escapeHtml(note)}</small></span>
@@ -599,7 +609,7 @@ export function createPetRuntime(options = {}) {
       : view === 'achievements' ? renderAchievements()
       : view === 'settings' ? renderSettings()
       : renderHome();
-    root.innerHTML = `<div class="pet-app-shell">${navigation}<div class="pet-view-content">${content}</div></div>`;
+    root.innerHTML = `<div class="pet-app-shell"><div class="pet-view-tabs" role="navigation" aria-label="${escapeHtml(text('petTab'))}">${navigation}</div><div class="pet-view-content">${content}</div></div>`;
   }
 
   function attachEvents() {
@@ -709,12 +719,7 @@ export function createPetRuntime(options = {}) {
     }
     pet = result.pet;
     const afterQuests = getDailyQuests(pet, now());
-    const messages = [text('actionDone')];
-    for (const quest of afterQuests) {
-      const before = beforeQuests.find((item) => item.id === quest.id);
-      if (!before || before.complete || !quest.complete) continue;
-      messages.push(text('questComplete', { name: quest.description[LANG_INDEX[lang()]] }));
-    }
+    const messages = [text('actionDone'), ...getQuestCompletionMessages(beforeQuests, afterQuests)];
     const saved = await persist();
     render();
     notifyFeedback(messages, result.events, saved);
@@ -722,10 +727,11 @@ export function createPetRuntime(options = {}) {
 
   async function handleShop(action, itemId) {
     if (!pet) return;
+    const beforeQuests = getDailyQuests(pet, now());
     let result;
     if (action === 'buy') result = buyItem(pet, itemId, now());
     else if (action === 'use') result = useItem(pet, itemId, now());
-    else if (action === 'equip') result = equipItem(pet, itemId);
+    else if (action === 'equip') result = equipItem(pet, itemId, now());
     else return;
     if (!result.ok) {
       const messages = {
@@ -740,9 +746,10 @@ export function createPetRuntime(options = {}) {
     }
     pet = result.pet;
     const successKey = action === 'buy' ? 'bought' : action === 'use' ? 'used' : pet.equipped[itemId] ? 'equipped' : 'unequipped';
+    const messages = [text(successKey), ...getQuestCompletionMessages(beforeQuests, getDailyQuests(pet, now()))];
     const saved = await persist();
     render();
-    notifyFeedback([text(successKey)], result.events, saved);
+    notifyFeedback(messages, result.events, saved);
   }
 
   async function claimDaily(questId) {
@@ -812,6 +819,7 @@ export function createPetRuntime(options = {}) {
       return;
     }
     if (game.input.length === game.sequence.length) {
+      const beforeQuests = getDailyQuests(pet, now());
       const result = completeMinigame(pet, { perfect: true, now: now() });
       if (!result.ok) {
         game.phase = 'failed';
@@ -821,9 +829,10 @@ export function createPetRuntime(options = {}) {
       }
       pet = result.pet;
       game.phase = 'success';
+      const messages = [text('gameRewardToast'), ...getQuestCompletionMessages(beforeQuests, getDailyQuests(pet, now()))];
       const saved = await persist();
       render();
-      notifyFeedback([text('gameRewardToast')], result.events, saved);
+      notifyFeedback(messages, result.events, saved);
       speak(text('gameRewardToast'));
     } else {
       render();
@@ -842,7 +851,7 @@ export function createPetRuntime(options = {}) {
     if (!pet) return;
     const input = root && root.querySelector('#pet-rename-input');
     if (!input) return;
-    pet = renamePet(pet, input.value);
+    pet = renamePet(pet, input.value, now());
     const saved = await persist();
     render();
     notifyFeedback([text('renamed')], [], saved);
